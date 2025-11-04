@@ -45,6 +45,9 @@ class RLDungeonGenerator:
 
             self.dungeon.append(row)
 
+        # Fog-of-war explored grid (all unexplored initially)
+        self.explored = [[False for _ in range(self.width)] for _ in range(self.height)]
+
     def random_split(self, min_row, min_col, max_row, max_col):
         # We want to keep splitting until the sections get down to the threshold
         seg_height = max_row - min_row
@@ -218,6 +221,7 @@ class RLDungeonGenerator:
         self.carve_rooms()
         self.connect_rooms()
         self.spawn_player()
+        self.reveal_current_area()
 
     def is_walkable(self, r, c):
         if r < 0 or c < 0 or r >= self.height or c >= self.width:
@@ -241,6 +245,36 @@ class RLDungeonGenerator:
                     self.player_row = r
                     self.player_col = c
                     return
+
+    def reveal_current_area(self):
+        # Reveal the entire room when inside one; otherwise reveal a small radius (corridor)
+        current_room = None
+        for room in self.rooms:
+            if (self.player_row >= room.row and self.player_row < room.row + room.height and
+                self.player_col >= room.col and self.player_col < room.col + room.width):
+                current_room = room
+                break
+
+        if current_room is not None:
+            # Reveal the room AND a one-tile wall border around it so doors are visible
+            r0 = max(0, current_room.row - 1)
+            c0 = max(0, current_room.col - 1)
+            r1 = min(self.height, current_room.row + current_room.height + 1)
+            c1 = min(self.width, current_room.col + current_room.width + 1)
+            for r in range(r0, r1):
+                for c in range(c0, c1):
+                    self.explored[r][c] = True
+        else:
+            radius = 2
+            rr = self.player_row
+            cc = self.player_col
+            for dr in range(-radius, radius + 1):
+                for dc in range(-radius, radius + 1):
+                    r = rr + dr
+                    c = cc + dc
+                    if 0 <= r < self.height and 0 <= c < self.width:
+                        if dr*dr + dc*dc <= radius*radius:
+                            self.explored[r][c] = True
 
     def print_map(self):
         for r in range(self.height):
@@ -285,11 +319,14 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
         dg.print_map()
         return
 
-    console = tcod.console.Console(dg.width, dg.height, order="F")
+    # Viewport size (camera window). Smaller than full map = zoomed-in view.
+    view_w = min(40, dg.width)
+    view_h = min(25, dg.height)
+    console = tcod.console.Console(view_w, view_h, order="F")
 
     with tcod.context.new(
-        columns=dg.width,
-        rows=dg.height,
+        columns=view_w,
+        rows=view_h,
         tileset=tileset,
         title="RLDungeonGenerator",
         vsync=True,
@@ -297,16 +334,27 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
         while True:
             # Draw current dungeon
             console.clear()
-            for r in range(dg.height):
-                for c in range(dg.width):
-                    ch = dg.dungeon[r][c].get_ch()
+            # Compute camera top-left to center on player, clamped to map
+            cam_y = dg.player_row - view_h // 2
+            cam_x = dg.player_col - view_w // 2
+            if cam_y < 0: cam_y = 0
+            if cam_x < 0: cam_x = 0
+            if cam_y > dg.height - view_h: cam_y = dg.height - view_h
+            if cam_x > dg.width - view_w: cam_x = dg.width - view_w
+
+            for r in range(view_h):
+                wr = cam_y + r
+                for c in range(view_w):
+                    wc = cam_x + c
+                    ch = dg.dungeon[wr][wc].get_ch()
                     if ch == '#':
-                        fg = (130, 130, 130)
-                        bg = (20, 20, 20)
+                        fg = (125, 125, 125)
+                        bg = (10, 10, 10)
                         glyph = ord('#')
                     elif ch == '.':
-                        fg = (200, 200, 200)
-                        bg = (0, 0, 0)
+                        # Brighter, slightly bluish floor with lighter background
+                        fg = (200, 210, 235)
+                        bg = (35, 40, 55)
                         glyph = ord('.')
                     elif ch == '+':
                         fg = (255, 215, 0)
@@ -316,10 +364,17 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                         fg = (255, 255, 255)
                         bg = (0, 0, 0)
                         glyph = ord(ch)
+                    # Apply fog-of-war dimming to unexplored tiles
+                    if not dg.explored[wr][wc]:
+                        fg = (int(fg[0] * 0.15), int(fg[1] * 0.15), int(fg[2] * 0.15))
+                        bg = (0, 0, 0)
                     console.print(c, r, chr(glyph), fg=fg, bg=bg)
 
             # Draw player last so it appears on top
-            console.print(dg.player_col, dg.player_row, '@', fg=(255, 255, 255), bg=(0, 0, 0))
+            pr = dg.player_row - cam_y
+            pc = dg.player_col - cam_x
+            if 0 <= pr < view_h and 0 <= pc < view_w:
+                console.print(pc, pr, '@', fg=(255, 255, 255), bg=(0, 0, 0))
 
             context.present(console)
 
@@ -347,6 +402,7 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                         if dg.is_walkable(nr, nc):
                             dg.player_row = nr
                             dg.player_col = nc
+                            dg.reveal_current_area()
 
 
 def main() -> None:
