@@ -3,6 +3,15 @@ from math import sqrt
 from random import random
 from random import randrange
 from random import choice
+import argparse
+import os
+import sys
+
+try:
+    import tcod
+    import tcod.tileset
+except Exception:
+    tcod = None
 
 class DungeonSqr:
     def __init__(self, sqr):
@@ -26,6 +35,8 @@ class RLDungeonGenerator:
         self.leaves = []
         self.dungeon = []
         self.rooms = []
+        self.player_row = 0
+        self.player_col = 0
 
         for h in range(self.height):
             row = []
@@ -206,6 +217,30 @@ class RLDungeonGenerator:
         self.random_split(1, 1, self.height - 1, self.width - 1)
         self.carve_rooms()
         self.connect_rooms()
+        self.spawn_player()
+
+    def is_walkable(self, r, c):
+        if r < 0 or c < 0 or r >= self.height or c >= self.width:
+            return False
+        ch = self.dungeon[r][c].get_ch()
+        return ch in ('.', '+')
+
+    def spawn_player(self):
+        # Prefer the center of the first room if available, otherwise first walkable tile
+        if len(self.rooms) > 0:
+            room = self.rooms[0]
+            r = room.row + room.height // 2
+            c = room.col + room.width // 2
+            if self.is_walkable(r, c):
+                self.player_row = r
+                self.player_col = c
+                return
+        for r in range(self.height):
+            for c in range(self.width):
+                if self.is_walkable(r, c):
+                    self.player_row = r
+                    self.player_col = c
+                    return
 
     def print_map(self):
         for r in range(self.height):
@@ -214,6 +249,120 @@ class RLDungeonGenerator:
                 row += self.dungeon[r][c].get_ch()
             print(row)
 
-dg = RLDungeonGenerator(75, 40)
-dg.generate_map()
-dg.print_map()
+
+def render_with_tcod(dg: RLDungeonGenerator) -> None:
+    if tcod is None:
+        print("tcod is not installed. Install requirements and try again.")
+        sys.exit(1)
+
+    # Prefer a project-local bitmap tileset first
+    tileset = None
+    png_tileset_path = os.path.join(os.path.dirname(__file__), 'assets', 'tilesets', 'Redjack17.png')
+    if os.path.exists(png_tileset_path):
+        try:
+            # Assumes CP437 16x16 grid tilesheet
+            tileset = tcod.tileset.load_tilesheet(png_tileset_path, 16, 16, tcod.tileset.CHARMAP_CP437)
+        except Exception:
+            tileset = None
+
+    # If PNG load failed, attempt to load a TrueType font from system Consolas
+    if tileset is None:
+        default_ttf_paths = [
+            os.path.join(os.environ.get('WINDIR', 'C:\\Windows'), 'Fonts', 'consola.ttf'),
+            os.path.join(os.environ.get('WINDIR', 'C:\\Windows'), 'Fonts', 'consolab.ttf'),
+        ]
+
+        for path in default_ttf_paths:
+            if os.path.exists(path):
+                try:
+                    tileset = tcod.tileset.load_truetype_font(path, 16, tcod.tileset.CHARMAP_CP437)
+                    break
+                except Exception:
+                    continue
+
+    if tileset is None:
+        print("Could not load a TrueType font from system. Falling back to ASCII output. Run with --ascii to skip this attempt.")
+        dg.print_map()
+        return
+
+    console = tcod.console.Console(dg.width, dg.height, order="F")
+
+    with tcod.context.new(
+        columns=dg.width,
+        rows=dg.height,
+        tileset=tileset,
+        title="RLDungeonGenerator",
+        vsync=True,
+    ) as context:
+        while True:
+            # Draw current dungeon
+            console.clear()
+            for r in range(dg.height):
+                for c in range(dg.width):
+                    ch = dg.dungeon[r][c].get_ch()
+                    if ch == '#':
+                        fg = (130, 130, 130)
+                        bg = (20, 20, 20)
+                        glyph = ord('#')
+                    elif ch == '.':
+                        fg = (200, 200, 200)
+                        bg = (0, 0, 0)
+                        glyph = ord('.')
+                    elif ch == '+':
+                        fg = (255, 215, 0)
+                        bg = (0, 0, 0)
+                        glyph = ord('+')
+                    else:
+                        fg = (255, 255, 255)
+                        bg = (0, 0, 0)
+                        glyph = ord(ch)
+                    console.print(c, r, chr(glyph), fg=fg, bg=bg)
+
+            # Draw player last so it appears on top
+            console.print(dg.player_col, dg.player_row, '@', fg=(255, 255, 255), bg=(0, 0, 0))
+
+            context.present(console)
+
+            for event in tcod.event.wait():
+                if event.type == "QUIT":
+                    return
+                if event.type == "KEYDOWN":
+                    if event.sym == tcod.event.K_ESCAPE:
+                        return
+                    # Movement: arrows and WASD
+                    dr = 0
+                    dc = 0
+                    if event.sym in (tcod.event.K_UP, tcod.event.K_w, tcod.event.K_KP_8):
+                        dr = -1
+                    elif event.sym in (tcod.event.K_DOWN, tcod.event.K_s, tcod.event.K_KP_2):
+                        dr = 1
+                    elif event.sym in (tcod.event.K_LEFT, tcod.event.K_a, tcod.event.K_KP_4):
+                        dc = -1
+                    elif event.sym in (tcod.event.K_RIGHT, tcod.event.K_d, tcod.event.K_KP_6):
+                        dc = 1
+
+                    if dr != 0 or dc != 0:
+                        nr = dg.player_row + dr
+                        nc = dg.player_col + dc
+                        if dg.is_walkable(nr, nc):
+                            dg.player_row = nr
+                            dg.player_col = nc
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="RLDungeonGenerator with optional tcod rendering")
+    parser.add_argument("--width", type=int, default=75, help="Dungeon width in tiles")
+    parser.add_argument("--height", type=int, default=40, help="Dungeon height in tiles")
+    parser.add_argument("--ascii", action="store_true", help="Print ASCII map to console instead of opening a window")
+    args = parser.parse_args()
+
+    dg = RLDungeonGenerator(args.width, args.height)
+    dg.generate_map()
+
+    if args.ascii:
+        dg.print_map()
+    else:
+        render_with_tcod(dg)
+
+if __name__ == "__main__":
+    main()

@@ -68,3 +68,32 @@ Example output to show what the dungeon maps it creates look like:
 ```
 
 This code is released into the Public Domain.
+
+## Running with tcod (graphical tiles)
+
+1. Install dependencies (ideally in a virtual environment):
+
+```
+pip install -r requirements.txt
+```
+
+2. Run with a window using a TrueType font (Consolas on Windows):
+
+```
+python RLDungeonGenerator.py
+```
+
+- Controls: press `Esc` or close the window to exit.
+- Notes: The program attempts to load `C:\\Windows\\Fonts\\consola.ttf`. If not found, it will exit with a helpful message. You can change the font path in `render_with_tcod`.
+
+3. ASCII fallback (prints to console):
+
+```
+python RLDungeonGenerator.py --ascii
+```
+
+You can also set custom map size:
+
+```
+python RLDungeonGenerator.py --width 100 --height 60
+```
