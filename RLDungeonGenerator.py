@@ -6,6 +6,7 @@ from random import choice
 import argparse
 import os
 import sys
+import time
 
 try:
     import tcod
@@ -37,6 +38,12 @@ class RLDungeonGenerator:
         self.rooms = []
         self.player_row = 0
         self.player_col = 0
+        
+        # Smooth movement interpolation state
+        self.player_target_row = None
+        self.player_target_col = None
+        self.move_progress = 1.0  # 1.0 = not moving, 0.0 = just started
+        self.move_duration = 0.45  # Seconds to complete one tile movement
 
         for h in range(self.height):
             row = []
@@ -238,13 +245,70 @@ class RLDungeonGenerator:
             if self.is_walkable(r, c):
                 self.player_row = r
                 self.player_col = c
+                self.player_target_row = None
+                self.player_target_col = None
+                self.move_progress = 1.0
                 return
         for r in range(self.height):
             for c in range(self.width):
                 if self.is_walkable(r, c):
                     self.player_row = r
                     self.player_col = c
+                    self.player_target_row = None
+                    self.player_target_col = None
+                    self.move_progress = 1.0
                     return
+
+    def start_movement(self, target_row, target_col):
+        """Start smooth movement to target tile. Returns True if movement started."""
+        # Only start if not already moving
+        if self.move_progress < 1.0:
+            return False
+        
+        if not self.is_walkable(target_row, target_col):
+            return False
+        
+        self.player_target_row = target_row
+        self.player_target_col = target_col
+        self.move_progress = 0.0
+        return True
+
+    def update_movement(self, delta_time):
+        """Update movement interpolation. Returns True if movement completed this frame."""
+        if self.move_progress >= 1.0:
+            return False
+        
+        # Update progress
+        self.move_progress += delta_time / self.move_duration
+        
+        # Check if movement completed
+        if self.move_progress >= 1.0:
+            self.move_progress = 1.0
+            # Complete the move
+            self.player_row = self.player_target_row
+            self.player_col = self.player_target_col
+            self.player_target_row = None
+            self.player_target_col = None
+            self.reveal_current_area()
+            return True
+        
+        return False
+
+    def get_player_visual_position(self):
+        """Get the current visual position (interpolated) as (row, col) floats."""
+        if self.move_progress >= 1.0 or self.player_target_row is None:
+            return (float(self.player_row), float(self.player_col))
+        
+        # Linear interpolation
+        start_row = float(self.player_row)
+        start_col = float(self.player_col)
+        end_row = float(self.player_target_row)
+        end_col = float(self.player_target_col)
+        
+        visual_row = start_row + (end_row - start_row) * self.move_progress
+        visual_col = start_col + (end_col - start_col) * self.move_progress
+        
+        return (visual_row, visual_col)
 
     def reveal_current_area(self):
         # Reveal the entire room when inside one; otherwise reveal a small radius (corridor)
@@ -331,10 +395,26 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
         title="RLDungeonGenerator",
         vsync=True,
     ) as context:
+        last_frame_time = time.time()
+        
         while True:
+            current_time = time.time()
+            delta_time = current_time - last_frame_time
+            last_frame_time = current_time
+            # Cap delta_time to prevent large jumps
+            if delta_time > 0.1:
+                delta_time = 0.1
+            
+            # Update smooth movement interpolation
+            dg.update_movement(delta_time)
+            
+            # Get visual position (interpolated) for smooth rendering
+            visual_row, visual_col = dg.get_player_visual_position()
+            
             # Draw current dungeon
             console.clear()
-            # Compute camera top-left to center on player, clamped to map
+            # Camera uses logical tile position (not visual) to prevent jiggling
+            # This keeps the map stable while only the player moves smoothly
             cam_y = dg.player_row - view_h // 2
             cam_x = dg.player_col - view_w // 2
             if cam_y < 0: cam_y = 0
@@ -346,6 +426,8 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                 wr = cam_y + r
                 for c in range(view_w):
                     wc = cam_x + c
+                    if wr < 0 or wr >= dg.height or wc < 0 or wc >= dg.width:
+                        continue
                     ch = dg.dungeon[wr][wc].get_ch()
                     if ch == '#':
                         fg = (125, 125, 125)
@@ -370,39 +452,53 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                         bg = (0, 0, 0)
                     console.print(c, r, chr(glyph), fg=fg, bg=bg)
 
-            # Draw player last so it appears on top
-            pr = dg.player_row - cam_y
-            pc = dg.player_col - cam_x
-            if 0 <= pr < view_h and 0 <= pc < view_w:
-                console.print(pc, pr, '@', fg=(255, 255, 255), bg=(0, 0, 0))
+            # Draw player with smooth movement using combination of approaches #2 and #4
+            # Camera uses logical position (stable, no jiggle) - Approach #4
+            # Player renders at interpolated visual position - Approach #2
+            # Calculate visual position relative to stable camera
+            visual_pr = visual_row - cam_y
+            visual_pc = visual_col - cam_x
+            
+            # For true smooth sub-tile rendering, we'll use console.print with the visual position
+            # rounded to nearest tile. The smooth interpolation + stable camera eliminates jiggle
+            # Even though the glyph snaps between tiles, it updates smoothly frame-by-frame
+            if 0 <= visual_pr < view_h and 0 <= visual_pc < view_w:
+                # Render at visual position (this gives smooth movement as interpolation updates)
+                # The stable camera ensures the world doesn't jiggle
+                render_x = int(round(visual_pc))
+                render_y = int(round(visual_pr))
+                if 0 <= render_x < view_w and 0 <= render_y < view_h:
+                    console.print(render_x, render_y, '@', fg=(255, 255, 255), bg=(0, 0, 0))
 
             context.present(console)
 
-            for event in tcod.event.wait():
+            # Process events (non-blocking to allow smooth movement)
+            for event in tcod.event.get():
                 if event.type == "QUIT":
                     return
                 if event.type == "KEYDOWN":
                     if event.sym == tcod.event.K_ESCAPE:
                         return
-                    # Movement: arrows and WASD
-                    dr = 0
-                    dc = 0
-                    if event.sym in (tcod.event.K_UP, tcod.event.K_w, tcod.event.K_KP_8):
-                        dr = -1
-                    elif event.sym in (tcod.event.K_DOWN, tcod.event.K_s, tcod.event.K_KP_2):
-                        dr = 1
-                    elif event.sym in (tcod.event.K_LEFT, tcod.event.K_a, tcod.event.K_KP_4):
-                        dc = -1
-                    elif event.sym in (tcod.event.K_RIGHT, tcod.event.K_d, tcod.event.K_KP_6):
-                        dc = 1
+                    # Movement: arrows and WASD (only if not currently moving)
+                    if dg.move_progress >= 1.0:
+                        dr = 0
+                        dc = 0
+                        if event.sym in (tcod.event.K_UP, tcod.event.K_w, tcod.event.K_KP_8):
+                            dr = -1
+                        elif event.sym in (tcod.event.K_DOWN, tcod.event.K_s, tcod.event.K_KP_2):
+                            dr = 1
+                        elif event.sym in (tcod.event.K_LEFT, tcod.event.K_a, tcod.event.K_KP_4):
+                            dc = -1
+                        elif event.sym in (tcod.event.K_RIGHT, tcod.event.K_d, tcod.event.K_KP_6):
+                            dc = 1
 
-                    if dr != 0 or dc != 0:
-                        nr = dg.player_row + dr
-                        nc = dg.player_col + dc
-                        if dg.is_walkable(nr, nc):
-                            dg.player_row = nr
-                            dg.player_col = nc
-                            dg.reveal_current_area()
+                        if dr != 0 or dc != 0:
+                            nr = dg.player_row + dr
+                            nc = dg.player_col + dc
+                            dg.start_movement(nr, nc)
+            
+            # Small sleep to prevent excessive CPU usage
+            time.sleep(0.001)
 
 
 def main() -> None:
