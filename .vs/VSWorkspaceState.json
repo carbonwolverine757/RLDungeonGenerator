@@ -1,6 +1,8 @@
 {
   "ExpandedNodes": [
-    ""
+    "",
+    "\\env"
   ],
+  "SelectedNode": "\\RLDungeonGenerator.py",
   "PreviewInSolutionExplorer": false
 }

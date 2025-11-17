@@ -7,12 +7,23 @@ import argparse
 import os
 import sys
 import time
+import traceback
 
 try:
     import tcod
     import tcod.tileset
-except Exception:
+    import tcod.image
+    _tcod_import_error = None
+except Exception as e:
     tcod = None
+    import traceback as _tb
+    _tcod_import_error = _tb.format_exc()
+
+# numpy is optional only required for pixel rendering path
+try:
+    import numpy as np
+except Exception:
+    np = None
 
 class DungeonSqr:
     def __init__(self, sqr):
@@ -278,6 +289,25 @@ class RLDungeonGenerator:
                 self.player_y = ny
         self._update_tile_position()
 
+    def move_by_pixels(self, dx, dy, pixels=1):
+        """
+        Nudge the player by a given number of pixels in integer direction (dx,dy should be -1/0/1).
+        Movement is attempted axis-by-axis with collision checks.
+        """
+        if pixels == 0:
+            return
+        # Apply horizontal nudge
+        if dx != 0:
+            nx = self.player_x + dx * pixels
+            if self._can_move_to(nx, self.player_y):
+                self.player_x = nx
+        # Apply vertical nudge
+        if dy != 0:
+            ny = self.player_y + dy * pixels
+            if self._can_move_to(self.player_x, ny):
+                self.player_y = ny
+        self._update_tile_position()
+
     def _update_tile_position(self):
         # Use float division to preserve sub-tile positions when converting to tile indices
         new_col = int(self.player_x / self.tile_size)
@@ -342,8 +372,16 @@ class RLDungeonGenerator:
 
 def render_with_tcod(dg: RLDungeonGenerator) -> None:
     if tcod is None:
-        print("tcod is not installed. Install requirements and try again.")
-        sys.exit(1)
+        # Provide detailed diagnostic instead of exiting so debugger / logs show why import failed
+        info = (
+            f"tcod is not installed or failed to import.\n"
+            f"Python executable: {sys.executable}\n"
+            f"sys.version: {sys.version}\n"
+            f"sys.path: {sys.path}\n"
+            f"Import traceback:\n{_tcod_import_error}\n"
+        )
+        print(info)
+        raise ImportError(info)
 
     # Prefer a project-local bitmap tileset first
     tileset = None
@@ -375,9 +413,21 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
         dg.print_map()
         return
 
+    # Choose pixel-render path only if numpy is available and tileset has a bitmap
+    use_pixel_render = False
+    if np is not None:
+        # Tileset loaded from a PNG has .bitmap attribute in tcod; TrueType does not
+        if hasattr(tileset, 'bitmap'):
+            use_pixel_render = True
+
     # Viewport size (camera window). Smaller than full map = zoomed-in view.
     view_w = min(40, dg.width)
     view_h = min(25, dg.height)
+
+    # If we can do pixel rendering, compute pixel viewport size
+    pixel_view_w = view_w * dg.tile_size
+    pixel_view_h = view_h * dg.tile_size
+
     console = tcod.console.Console(view_w, view_h, order="F")
     movement_key_map = {
         tcod.event.K_UP: (0.0, -1.0),
@@ -393,6 +443,7 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
         tcod.event.K_d: (1.0, 0.0),
         tcod.event.K_KP_6: (1.0, 0.0),
     }
+    # Track held directions for frame-based single-pixel movement
     held_directions = []
 
     with tcod.context.new(
@@ -403,7 +454,27 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
         vsync=True,
     ) as context:
         last_frame_time = time.time()
-        
+
+        # Pre-extract tile bitmaps if pixel rendering
+        tile_bitmaps = None
+        if use_pixel_render:
+            # tileset.bitmap is a PIL.Image in newer tcod; convert to numpy array
+            try:
+                bmp = tileset.bitmap.convert('RGBA')
+                tile_w = dg.tile_size
+                tile_h = dg.tile_size
+                cols = bmp.width // tile_w
+                rows = bmp.height // tile_h
+                tile_bitmaps = []
+                for ty in range(rows):
+                    for tx in range(cols):
+                        box = (tx * tile_w, ty * tile_h, (tx + 1) * tile_w, (ty + 1) * tile_h)
+                        tile = bmp.crop(box)
+                        tile_bitmaps.append(np.array(tile))
+            except Exception:
+                use_pixel_render = False
+                tile_bitmaps = None
+
         while True:
             current_time = time.time()
             delta_time = current_time - last_frame_time
@@ -411,93 +482,168 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
             # Cap delta_time to prevent large jumps
             if delta_time > 0.1:
                 delta_time = 0.1
-            
-            # Determine desired movement direction from input
-            input_dx = 0.0
-            input_dy = 0.0
-            for direction in held_directions:
-                input_dx += direction[0]
-                input_dy += direction[1]
-            dg.update_movement(delta_time, (input_dx, input_dy))
-            
-            # Draw current dungeon
-            console.clear()
-            # Camera uses logical tile position (not visual) to prevent jiggling
-            # This keeps the map stable while only the player moves smoothly
-            cam_y = int(dg.player_y / dg.tile_size) - view_h // 2
-            cam_x = int(dg.player_x / dg.tile_size) - view_w // 2
-            if cam_y < 0: cam_y = 0
-            if cam_x < 0: cam_x = 0
-            if cam_y > dg.height - view_h: cam_y = dg.height - view_h
-            if cam_x > dg.width - view_w: cam_x = dg.width - view_w
 
-            for r in range(view_h):
-                wr = cam_y + r
-                for c in range(view_w):
-                    wc = cam_x + c
-                    if wr < 0 or wr >= dg.height or wc < 0 or wc >= dg.width:
-                        continue
-                    ch = dg.dungeon[wr][wc].get_ch()
-                    if ch == '#':
-                        fg = (125, 125, 125)
-                        bg = (10, 10, 10)
-                        glyph = ord('#')
-                    elif ch == '.':
-                        # Brighter, slightly bluish floor with lighter background
-                        fg = (200, 210, 235)
-                        bg = (35, 40, 55)
-                        glyph = ord('.')
-                    elif ch == '+':
-                        fg = (255, 215, 0)
-                        bg = (0, 0, 0)
-                        glyph = ord('+')
-                    else:
-                        fg = (255, 255, 255)
-                        bg = (0, 0, 0)
-                        glyph = ord(ch)
-                    # Apply fog-of-war dimming to unexplored tiles
-                    if not dg.explored[wr][wc]:
-                        fg = (int(fg[0] * 0.15), int(fg[1] * 0.15), int(fg[2] * 0.15))
-                        bg = (0, 0, 0)
-                    console.print(c, r, chr(glyph), fg=fg, bg=bg)
+            dg.update_movement(delta_time, (0.0, 0.0))
+            # Frame-based held-key single-pixel movement: if any directions are held,
+            # compute a signed dx/dy and nudge the player by 1 pixel this frame.
+            if held_directions:
+                sum_dx = sum(d[0] for d in held_directions)
+                sum_dy = sum(d[1] for d in held_directions)
+                # convert to -1/0/1 per axis
+                def sign(v):
+                    return 1 if v > 0 else (-1 if v < 0 else 0)
+                mdx = sign(sum_dx)
+                mdy = sign(sum_dy)
+                if mdx != 0 or mdy != 0:
+                    dg.move_by_pixels(int(mdx), int(mdy), pixels=1)
 
-            # Draw the player as a sprite-like glyph on top of non-wall tiles.
-            # Position is derived from pixel coords to allow sub-tile movement feel.
-            pr = int(round(dg.player_y / dg.tile_size)) - cam_y
-            pc = int(round(dg.player_x / dg.tile_size)) - cam_x
-            if 0 <= pr < view_h and 0 <= pc < view_w:
-                console.print(pc, pr, '@', fg=(255, 255, 255))
-            context.present(console)
+            if use_pixel_render and tile_bitmaps is not None:
+                # Build pixel buffer
+                buf = np.zeros((pixel_view_h, pixel_view_w, 4), dtype=np.uint8)
 
-            # Process events (non-blocking to allow smooth movement)
+                # Camera top-left in tiles
+                cam_ty = int(dg.player_y / dg.tile_size) - view_h // 2
+                cam_tx = int(dg.player_x / dg.tile_size) - view_w // 2
+                cam_px = cam_tx * dg.tile_size
+                cam_py = cam_ty * dg.tile_size
+
+                # Blit map tiles into buffer
+                for ty in range(view_h):
+                    for tx in range(view_w):
+                        wr = cam_ty + ty
+                        wc = cam_tx + tx
+                        if wr < 0 or wr >= dg.height or wc < 0 or wc >= dg.width:
+                            continue
+                        ch = dg.dungeon[wr][wc].get_ch()
+                        if ch == '#':
+                            idx = ord('#')
+                        elif ch == '.':
+                            idx = ord('.')
+                        elif ch == '+':
+                            idx = ord('+')
+                        else:
+                            idx = ord(ch)
+                        # Map CP437 indices to tilesheet index - assumes tilesheet arranged by codepoint
+                        if idx < len(tile_bitmaps):
+                            tile_img = tile_bitmaps[idx]
+                            y0 = ty * dg.tile_size
+                            x0 = tx * dg.tile_size
+                            # Simple alpha blit
+                            alpha = tile_img[:, :, 3:4] / 255.0
+                            buf[y0:y0+dg.tile_size, x0:x0+dg.tile_size, :3] = (
+                                buf[y0:y0+dg.tile_size, x0:x0+dg.tile_size, :3] * (1 - alpha) +
+                                tile_img[:, :, :3] * alpha
+                            ).astype(np.uint8)
+                            buf[y0:y0+dg.tile_size, x0:x0+dg.tile_size, 3] = 255
+
+                # Draw player as a white square (or use a small sprite if available)
+                player_px = int(dg.player_x - cam_px)
+                player_py = int(dg.player_y - cam_py)
+                pr = player_py - dg.tile_size // 2
+                pc = player_px - dg.tile_size // 2
+                # small 10x10 square centered on player position
+                ps = max(2, dg.tile_size // 2)
+                y0 = pr - ps//2
+                x0 = pc - ps//2
+                y1 = y0 + ps
+                x1 = x0 + ps
+                y0c = max(0, y0); x0c = max(0, x0)
+                y1c = min(pixel_view_h, y1); x1c = min(pixel_view_w, x1)
+                if y1c > y0c and x1c > x0c:
+                    buf[y0c:y1c, x0c:x1c, :3] = 255
+                    buf[y0c:y1c, x0c:x1c, 3] = 255
+
+                # Convert buffer to tcod image and present
+                try:
+                    img = tcod.image.Image(buffer=buf)
+                    context.present(img)
+                except Exception:
+                    # Fallback to console rendering if image present fails
+                    use_pixel_render = False
+
+            else:
+                # Tile-based console rendering
+                console.clear()
+                cam_y = int(dg.player_y / dg.tile_size) - view_h // 2
+                cam_x = int(dg.player_x / dg.tile_size) - view_w // 2
+                if cam_y < 0: cam_y = 0
+                if cam_x < 0: cam_x = 0
+                if cam_y > dg.height - view_h: cam_y = dg.height - view_h
+                if cam_x > dg.width - view_w: cam_x = dg.width - view_w
+
+                for r in range(view_h):
+                    wr = cam_y + r
+                    for c in range(view_w):
+                        wc = cam_x + c
+                        if wr < 0 or wr >= dg.height or wc < 0 or wc >= dg.width:
+                            continue
+                        ch = dg.dungeon[wr][wc].get_ch()
+                        if ch == '#':
+                            fg = (125, 125, 125)
+                            bg = (10, 10, 10)
+                            glyph = ord('#')
+                        elif ch == '.':
+                            fg = (200, 210, 235)
+                            bg = (35, 40, 55)
+                            glyph = ord('.')
+                        elif ch == '+':
+                            fg = (255, 215, 0)
+                            bg = (0, 0, 0)
+                            glyph = ord('+')
+                        else:
+                            fg = (255, 255, 255)
+                            bg = (0, 0, 0)
+                            glyph = ord(ch)
+                        if not dg.explored[wr][wc]:
+                            fg = (int(fg[0] * 0.15), int(fg[1] * 0.15), int(fg[2] * 0.15))
+                            bg = (0, 0, 0)
+                        console.print(c, r, chr(glyph), fg=fg, bg=bg)
+
+                # Draw the player at sub-tile fractional offset by deciding visual cell and also draw an extra pixel "dot"
+                # Compute exact pixel offset inside the cell for visual effect
+                exact_px = dg.player_x / dg.tile_size - int(dg.player_x / dg.tile_size)
+                exact_py = dg.player_y / dg.tile_size - int(dg.player_y / dg.tile_size)
+                # Use rounding so glyph moves when crossing half-cell; draw small dot to indicate sub-cell position
+                pr = int(round(dg.player_y / dg.tile_size)) - cam_y
+                pc = int(round(dg.player_x / dg.tile_size)) - cam_x
+                if 0 <= pr < view_h and 0 <= pc < view_w:
+                    console.print(pc, pr, '@', fg=(255, 255, 255))
+                    # Draw a small indicator pixel by printing '.' with bright color at one of the four neighbors to show offset
+                    ox = 0
+                    oy = 0
+                    if exact_px > 0.66:
+                        ox = 1
+                    elif exact_px < 0.33:
+                        ox = -1
+                    if exact_py > 0.66:
+                        oy = 1
+                    elif exact_py < 0.33:
+                        oy = -1
+                    ipr = pr + oy
+                    ipc = pc + ox
+                    if 0 <= ipr < view_h and 0 <= ipc < view_w:
+                        console.print(ipc, ipr, '.', fg=(255, 0, 0))
+                context.present(console)
+
+            # Process events (non-blocking)
             for event in tcod.event.get():
                 if event.type == "QUIT":
                     return
                 if event.type == "KEYDOWN":
                     if event.sym == tcod.event.K_ESCAPE:
                         return
-                    # Track held movement keys for continuous travel
+                    # Add to held directions for frame-based movement
                     direction = movement_key_map.get(event.sym)
                     if direction is not None:
-                        if direction in held_directions:
-                            held_directions.remove(direction)
-                        held_directions.insert(0, direction)
+                        # keep unique entries
+                        if direction not in held_directions:
+                            held_directions.append(direction)
                 if event.type == "KEYUP":
+                    # Remove from held directions
                     direction = movement_key_map.get(event.sym)
                     if direction is not None and direction in held_directions:
                         held_directions.remove(direction)
 
-            # Remove directions that are blocked by walls
-            for direction in list(held_directions):
-                check_dx = direction[0]
-                check_dy = direction[1]
-                if check_dx == 0 and check_dy == 0:
-                    continue
-                test_x = dg.player_x + check_dx * dg.player_radius
-                test_y = dg.player_y + check_dy * dg.player_radius
-                if not dg._can_move_to(test_x, test_y):
-                    held_directions.remove(direction)
-            
             # Small sleep to prevent excessive CPU usage
             time.sleep(0.001)
 
@@ -512,10 +658,17 @@ def main() -> None:
     dg = RLDungeonGenerator(args.width, args.height)
     dg.generate_map()
 
-    if args.ascii:
-        dg.print_map()
-    else:
-        render_with_tcod(dg)
+    try:
+        if args.ascii:
+            dg.print_map()
+        else:
+            render_with_tcod(dg)
+    except Exception:
+        traceback.print_exc()
+        try:
+            input("Press Enter to exit...")
+        except Exception:
+            pass
 
 if __name__ == "__main__":
     main()
