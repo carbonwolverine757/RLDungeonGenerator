@@ -1,0 +1,108 @@
+* Add weapon item (wooden sword)
+* Add key for attack/use
+* Add damage numbers
+* Add monsters and damage dealing
+* Add health bar
+* Add more weapons
+* Add armor mechanic
+* Add armor
+    * Armor as follows :
+        * Rag (Light)
+        * Leather (Light)
+        * Troll Hide (Light, Sneak Bonus)
+        * Bronze (Heavy)
+        * Root (Light, Damage res, Archery Bonus)
+        * Iron (Heavy)
+        * Fenris (Light, Dmg res, Speed Bonus)
+        * Wolf (Heavy)
+        * Vilebone (Light, Damage Bonus, Stamina Reduction)
+        * Padded (Heavy)
+        * Eitrweave (Mage, Eitr Regen Bonus)
+        * Carapace (Heavy)
+        * Embla (Mage, Eitr Regen Bonus)
+        * Ask (Light, Speed Bonus, Stamina Reduction)
+        * Flametal (Heavy, Dmg res)
+    * Trinkets :
+        * Heart of the Forest (50, Health Regen Bonus)
+        * Bronze Pendant (50, Stamina Regen Bonus)
+        * Iron Broach (65, Armor Bonus, Recover Health)
+        * Nimble Anklet (65, Speed Bonus, Recover Stamina)
+        * Wolf Sight (65, Archery Bonus, Spear Bonus, Pierce Damage Bonus)
+        * Crystal Heart (75, Physical Damage Res)
+        * Evasion Mantle (70, Dodge Bonus, Parry Bonus, Block Stamina Reduction)
+        * Bracelets of the Brave (75, Club Bonus, Blunt Damage Bonus, Recover Health)
+        * Resounding Shackle (75, Slash Damage Bonus, Revcover Stamina)
+        * Pulsating Earings (80, Eitr Regen Bonus)
+        * Brimstone (100, Recover Health, Recover Stamina)
+* Add crafting
+* Add loot
+    * Add moar loot
+        * Pickable items on the ground
+        * Chests
+        * Creature drops
+        * Other
+* Add stamina bar
+* Add food
+* Add more foood
+* Add shields
+* Add parrying and staggering
+* Add dodging
+* Add levels
+    *Each level is in a certain biome. Biomes each have different loot, enemies, crafting recipes, and terrain. If a level is completed by finding the loot and exploring the dungeon fully, then the character progresses to the next level. If the character dies on a level, they are reverted to the start of that level. On game start, either a game that is in progress is selected, or a new game is started.
+    *Levels are as follows :
+        * Meadows
+        * Eikthyr Bossfight
+        * Black Forest
+        * Burial Chambers
+        * Troll Cave
+        * Black Forest
+        * Smoldering Tomb (Brenna)
+        * The Elder Bossfight
+        * Ocean (exploration)
+        * Swamps
+        * Sunken Crypts
+        * Swamps
+        * Bonemass Bossfight
+        * Ocean 2
+        * Mountains
+        * Ice Caves
+        * Mountains
+        * Howling Caverns (Geirrhafa)
+        * Moder Bossfight
+        * Ocean 3
+        * Plains
+        * Fuling Village
+        * Plains
+        * Sealed Tower (Zil and Thungr)
+        * Yagluth Bossfight
+        * Ocean 4
+        * Mistlands Coast
+        * Mistlands
+        * Dvergr Outpost
+        * Mistlands
+        * Giant Remains
+        * Infested Mines (Dvergr Tower)
+        * Infested Mines (Cliffside)
+        * Mistlands
+        * The Queen Bossfight
+        * Ocean 5
+        * Ashlands Waters
+        * Ashlands Coast
+        * Ashlands
+        * Putrid Hole
+        * Ashlands
+        * Ashlands (Inland)
+        * Charred Fortress
+        * Ashlands
+        * Putrid Hole
+        * Putrid Hole
+        * Ashlands
+        * Charred Fortress
+        * Ashlands
+        * First Mysterious Location
+        * Putrid Hole
+        * Second Mysterious Location
+        * Ashlands
+        * Tomb of Lord Reto (Lord Reto)
+        * Ashlands
+        * Fader Bossfight
