@@ -1,4 +1,4 @@
-# This code is released into the Public Domain.
+﻿# This code is released into the Public Domain.
 from math import sqrt
 from random import random
 from random import randrange
@@ -47,6 +47,15 @@ class RLDungeonGenerator:
 
         # Fog-of-war explored grid (all unexplored initially)
         self.explored = [[False for _ in range(self.width)] for _ in range(self.height)]
+
+        # Player stats
+        self.player_health = 25
+        self.player_max_health = 25
+        self.player_stamina = 50
+        self.player_max_stamina = 50
+        
+        # Hotbar (8 item slots, currently empty)
+        self.hotbar = [None] * 8
 
     def random_split(self, min_row, min_col, max_row, max_col):
         # We want to keep splitting until the sections get down to the threshold
@@ -375,6 +384,35 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
             pc = dg.player_col - cam_x
             if 0 <= pr < view_h and 0 <= pc < view_w:
                 console.print(pc, pr, '@', fg=(255, 255, 255), bg=(0, 0, 0))
+
+            # Draw HUD: Hotbar in top-left (8 slots)
+            for i in range(8):
+                console.print(i, 0, str(i + 1), fg=(200, 200, 200), bg=(50, 50, 50))
+
+            # Draw Health Bar in bottom-left (vertical red bar)
+            health_pct = max(0, dg.player_health / dg.player_max_health)
+            health_height = max(1, int(health_pct * 5))  # 5 chars tall max
+            for i in range(5):
+                if i < health_height:
+                    console.print(0, view_h - 1 - i, '█', fg=(255, 0, 0), bg=(50, 0, 0))
+                else:
+                    console.print(0, view_h - 1 - i, '░', fg=(100, 0, 0), bg=(50, 0, 0))
+            # Health text label
+            health_text = f"HP:{dg.player_health}/{dg.player_max_health}"
+            console.print(1, view_h - 1, health_text[:6], fg=(255, 100, 100), bg=(0, 0, 0))
+
+            # Draw Stamina Bar (horizontal yellow bar, a bit above bottom)
+            stamina_y = view_h - 3
+            stamina_pct = max(0, dg.player_stamina / dg.player_max_stamina)
+            stamina_width = max(1, int(stamina_pct * (view_w - 10)))
+            for i in range(view_w - 10):
+                if i < stamina_width:
+                    console.print(i, stamina_y, '▬', fg=(255, 255, 0), bg=(100, 100, 0))
+                else:
+                    console.print(i, stamina_y, '▬', fg=(100, 100, 0), bg=(100, 100, 0))
+            # Stamina text label
+            stamina_text = f"STA:{dg.player_stamina}/{dg.player_max_stamina}"
+            console.print(view_w - 9, stamina_y, stamina_text[:9], fg=(255, 255, 100), bg=(0, 0, 0))
 
             context.present(console)
 
