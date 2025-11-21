@@ -389,30 +389,81 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
             for i in range(8):
                 console.print(i, 0, str(i + 1), fg=(200, 200, 200), bg=(50, 50, 50))
 
-            # Draw Health Bar in bottom-left (vertical red bar)
-            health_pct = max(0, dg.player_health / dg.player_max_health)
-            health_height = max(1, int(health_pct * 5))  # 5 chars tall max
-            for i in range(5):
-                if i < health_height:
-                    console.print(0, view_h - 1 - i, '█', fg=(255, 0, 0), bg=(50, 0, 0))
+            # --- Health bar (vertical) ---
+            # Short vertical bar (2 tiles tall) overlaid on dungeon tiles
+            health_pct = max(0.0, min(1.0, dg.player_health / dg.player_max_health))
+            bar_height = 2  # much shorter
+            # Allow sub-tile precision by scaling to 4 steps per cell (for a smoother look)
+            steps = bar_height * 4
+            filled_steps = int(round(health_pct * steps))
+            bar_x = 0
+            bar_top = max(0, view_h - bar_height)
+            # Draw from top to bottom; decide per-cell which fraction to draw (use block glyphs)
+            for i in range(bar_height):
+                y = bar_top + i
+                # compute how many steps are filled in this cell (0..4)
+                cell_index = bar_height - 1 - i
+                cell_filled = max(0, min(4, filled_steps - cell_index * 4))
+                # choose glyph: use full block for fully filled, lower shades for partial
+                if cell_filled >= 4:
+                    ch = '█'
+                    fg = (255, 0, 0)
+                elif cell_filled >= 3:
+                    ch = '▓'
+                    fg = (220, 30, 30)
+                elif cell_filled >= 2:
+                    ch = '▒'
+                    fg = (200, 60, 60)
+                elif cell_filled >= 1:
+                    ch = '░'
+                    fg = (150, 40, 40)
                 else:
-                    console.print(0, view_h - 1 - i, '░', fg=(100, 0, 0), bg=(50, 0, 0))
-            # Health text label
-            health_text = f"HP:{dg.player_health}/{dg.player_max_health}"
-            console.print(1, view_h - 1, health_text[:6], fg=(255, 100, 100), bg=(0, 0, 0))
+                    ch = '░'
+                    fg = (80, 20, 20)
+                console.print(bar_x, y, ch, fg=fg, bg=None)
+            # Overlay health number to the right of the vertical bar
+            health_str = str(dg.player_health)
+            health_num_x = bar_x + 1
+            health_num_y = bar_top + bar_height // 2
+            if health_num_x + len(health_str) > view_w:
+                health_num_x = max(0, view_w - len(health_str))
+            console.print(health_num_x, health_num_y, health_str, fg=(255, 200, 200), bg=None)
 
-            # Draw Stamina Bar (horizontal yellow bar, a bit above bottom)
-            stamina_y = view_h - 3
-            stamina_pct = max(0, dg.player_stamina / dg.player_max_stamina)
-            stamina_width = max(1, int(stamina_pct * (view_w - 10)))
-            for i in range(view_w - 10):
-                if i < stamina_width:
-                    console.print(i, stamina_y, '▬', fg=(255, 255, 0), bg=(100, 100, 0))
+            # --- Stamina bar (horizontal) ---
+            # Short horizontal bar (2 tiles wide) overlaid on dungeon tiles, centered
+            stamina_pct = max(0.0, min(1.0, dg.player_stamina / dg.player_max_stamina))
+            bar_w = 2  # much shorter
+            steps_w = bar_w * 4
+            filled_steps_w = int(round(stamina_pct * steps_w))
+            start_x = max(0, (view_w - bar_w) // 2)
+            stamina_y = max(0, bar_top - 1)
+            for i in range(bar_w):
+                x = start_x + i
+                # compute how many steps are filled in this cell (0..4)
+                cell_filled = max(0, min(4, filled_steps_w - i * 4))
+                if cell_filled >= 4:
+                    ch = '█'
+                    fg = (255, 215, 0)
+                elif cell_filled >= 3:
+                    ch = '▓'
+                    fg = (240, 200, 30)
+                elif cell_filled >= 2:
+                    ch = '▒'
+                    fg = (220, 180, 20)
+                elif cell_filled >= 1:
+                    ch = '░'
+                    fg = (180, 140, 10)
                 else:
-                    console.print(i, stamina_y, '▬', fg=(100, 100, 0), bg=(100, 100, 0))
-            # Stamina text label
-            stamina_text = f"STA:{dg.player_stamina}/{dg.player_max_stamina}"
-            console.print(view_w - 9, stamina_y, stamina_text[:9], fg=(255, 255, 100), bg=(0, 0, 0))
+                    ch = '░'
+                    fg = (100, 80, 0)
+                console.print(x, stamina_y, ch, fg=fg, bg=None)
+            # Overlay stamina number immediately to the right of the short bar
+            stamina_str = str(dg.player_stamina)
+            stamina_num_x = start_x + bar_w
+            stamina_num_y = stamina_y
+            if stamina_num_x + len(stamina_str) > view_w:
+                stamina_num_x = max(0, view_w - len(stamina_str))
+            console.print(stamina_num_x, stamina_num_y, stamina_str, fg=(255, 255, 200), bg=None)
 
             context.present(console)
 

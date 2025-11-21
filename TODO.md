@@ -9,19 +9,28 @@
     * Armor as follows :
         * Rag (Light)
         * Leather (Light)
+        * Leather Cape
         * Troll Hide (Light, Sneak Bonus)
+        * Troll Hide Cape
         * Bronze (Heavy)
         * Root (Light, Damage res, Archery Bonus)
         * Iron (Heavy)
         * Fenris (Light, Dmg res, Speed Bonus)
+        * Fenris Cape (Speed Bonus)
         * Wolf (Heavy)
+        * Wolf Fur Cape (Frost Res)
         * Vilebone (Light, Damage Bonus, Stamina Reduction)
+        * Lox Hide Cape (Frost Res)
         * Padded (Heavy)
+        * Linen Cape 
         * Eitrweave (Mage, Eitr Regen Bonus)
+        * Feather Cape (Frost Res, No Fall Damage)
         * Carapace (Heavy)
         * Embla (Mage, Eitr Regen Bonus)
         * Ask (Light, Speed Bonus, Stamina Reduction)
+        * Asksvin Cape (Speed Bonus, Stamina Reduction))
         * Flametal (Heavy, Dmg res)
+        * Ashen Cape (Armor)
     * Trinkets :
         * Heart of the Forest (50, Health Regen Bonus)
         * Bronze Pendant (50, Stamina Regen Bonus)
@@ -34,6 +43,7 @@
         * Resounding Shackle (75, Slash Damage Bonus, Revcover Stamina)
         * Pulsating Earings (80, Eitr Regen Bonus)
         * Brimstone (100, Recover Health, Recover Stamina)
+        * Jormundling (85, Recover Eitr, Magic Bonus)
 * Add crafting
 * Add loot
     * Add moar loot
