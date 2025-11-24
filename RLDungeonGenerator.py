@@ -56,6 +56,51 @@ class RLDungeonGenerator:
         
         # Hotbar (8 item slots, currently empty)
         self.hotbar = [None] * 8
+        # Add a wooden sword in the first hotbar slot
+        self.hotbar[0] = {"type": "weapon", "name": "Wooden Sword", "damage": 5}
+        # Currently equipped hotbar slot (None = unequipped)
+        # Start with the wooden sword equipped in the first slot for easier testing
+        self.equipped_slot = 0
+        # Facing direction as a vector (dr, dc) normalized to {-1, 0, 1}
+        self.facing = (0, 1)
+        # Last swing tile for one-frame visual feedback
+        self.last_swing = None
+        # Last known mouse tile in world coords (row, col)
+        self.mouse_tile = None
+
+    def swing_weapon(self):
+        """Swing the currently equipped weapon in the facing direction."""
+        if self.equipped_slot is None:
+            return
+        item = self.hotbar[self.equipped_slot]
+        if item is None or item.get("type") != "weapon":
+            return
+        
+        # Normalize facing to unit vector
+        def sign(x):
+            return 0 if x == 0 else (1 if x > 0 else -1)
+        dr = sign(self.facing[0])
+        dc = sign(self.facing[1])
+        if dr == 0 and dc == 0:
+            return
+        
+        # Check tile 1 step in facing direction
+        tr = self.player_row + dr
+        tc = self.player_col + dc
+        if tr < 0 or tc < 0 or tr >= self.height or tc >= self.width:
+            return
+        
+        ch = self.dungeon[tr][tc].get_ch()
+        # If it's a door, open it. If tile is non-walkable (e.g. wall), register hit.
+        if ch == '+':
+            self.dungeon[tr][tc] = DungeonSqr('.')
+            self.explored[tr][tc] = True
+        # For any non-walkable tile (not '.' or '+'), consider it hit
+        if ch not in ('.', '+'):
+            # debug feedback omitted in release
+            pass
+        # store last swing for one-frame highlight in renderer
+        self.last_swing = (tr, tc)
 
     def random_split(self, min_row, min_col, max_row, max_col):
         # We want to keep splitting until the sections get down to the threshold
@@ -377,7 +422,16 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                     if not dg.explored[wr][wc]:
                         fg = (int(fg[0] * 0.15), int(fg[1] * 0.15), int(fg[2] * 0.15))
                         bg = (0, 0, 0)
-                    console.print(c, r, chr(glyph), fg=fg, bg=bg)
+                    # Determine tile background; highlight mouse tile
+                    tile_bg = bg
+                    if getattr(dg, 'mouse_tile', None) == (wr, wc):
+                        # subtle highlight color that keeps glyph readable
+                        tile_bg = (40, 40, 100)
+                    # If this tile was the last swing, draw a brief highlight marker
+                    if getattr(dg, 'last_swing', None) == (wr, wc):
+                        console.print(c, r, '*', fg=(255, 100, 50), bg=None)
+                    else:
+                        console.print(c, r, chr(glyph), fg=fg, bg=tile_bg)
 
             # Draw player last so it appears on top
             pr = dg.player_row - cam_y
@@ -387,7 +441,21 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
 
             # Draw HUD: Hotbar in top-left (8 slots)
             for i in range(8):
-                console.print(i, 0, str(i + 1), fg=(200, 200, 200), bg=(50, 50, 50))
+                x = i
+                y = 0
+                bg = (50, 50, 50)
+                item = dg.hotbar[i] if i < len(dg.hotbar) else None
+                if item is None:
+                    # empty slot: show slot number
+                    console.print(x, y, str(i + 1), fg=(200, 200, 200), bg=bg)
+                else:
+                    # Use a simple icon for weapons: '/' for wooden sword
+                    icon = '/'
+                    # When equipped, use brighter background to indicate selection
+                    if dg.equipped_slot == i:
+                        console.print(x, y, icon, fg=(255, 230, 150), bg=(140, 90, 20))
+                    else:
+                        console.print(x, y, icon, fg=(200, 200, 200), bg=bg)
 
             # --- Health bar (vertical) ---
             # Short vertical bar (2 tiles tall) overlaid on dungeon tiles
@@ -466,6 +534,8 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
             console.print(stamina_num_x, stamina_num_y, stamina_str, fg=(255, 255, 200), bg=None)
 
             context.present(console)
+            # clear last_swing so highlight only shows for one frame
+            dg.last_swing = None
 
             for event in tcod.event.wait():
                 if event.type == "QUIT":
@@ -493,21 +563,62 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                             dg.player_col = nc
                             dg.reveal_current_area()
 
+                    # Equip/unequip hotbar items (slots 1-8)
+                    key_to_slot = {
+                        tcod.event.K_1: 0, tcod.event.K_2: 1, tcod.event.K_3: 2, tcod.event.K_4: 3,
+                        tcod.event.K_5: 4, tcod.event.K_6: 5, tcod.event.K_7: 6, tcod.event.K_8: 7,
+                    }
+                    if event.sym in key_to_slot:
+                        slot = key_to_slot[event.sym]
+                        if dg.hotbar[slot] is not None:
+                            # Toggle: equip if not equipped, unequip if already equipped
+                            if dg.equipped_slot == slot:
+                                dg.equipped_slot = None
+                            else:
+                                dg.equipped_slot = slot
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="RLDungeonGenerator with optional tcod rendering")
-    parser.add_argument("--width", type=int, default=75, help="Dungeon width in tiles")
-    parser.add_argument("--height", type=int, default=40, help="Dungeon height in tiles")
-    parser.add_argument("--ascii", action="store_true", help="Print ASCII map to console instead of opening a window")
+                elif event.type == "MOUSEMOTION":
+                    # Update facing direction based on mouse position (console tile coords -> world coords)
+                    mx, my = event.tile
+                    world_x = cam_x + mx
+                    world_y = cam_y + my
+                    dg.facing = (world_y - dg.player_row, world_x - dg.player_col)
+                    # store mouse tile in world coords (row, col)
+                    dg.mouse_tile = (world_y, world_x)
+                elif event.type == "MOUSEBUTTONDOWN":
+                    if event.button == 1:  # Left click
+                        # Update facing using click position in case no prior motion event
+                        mx, my = event.tile
+                        world_x = cam_x + mx
+                        world_y = cam_y + my
+                        dg.facing = (world_y - dg.player_row, world_x - dg.player_col)
+                        dg.mouse_tile = (world_y, world_x)
+                        dg.swing_weapon()
+
+def main():
+    parser = argparse.ArgumentParser(description="RL Dungeon Generator")
+    parser.add_argument("--ascii", action="store_true", help="Force ASCII output, ignore graphics settings")
     args = parser.parse_args()
 
-    dg = RLDungeonGenerator(args.width, args.height)
+    # Temporarily disable Python traceback limit for full traceback on errors
+    sys.tracebacklimit = 1000
+
+    w = 80
+    h = 45
+    dg = RLDungeonGenerator(w, h)
     dg.generate_map()
 
     if args.ascii:
         dg.print_map()
     else:
-        render_with_tcod(dg)
+        try:
+            render_with_tcod(dg)
+        except Exception:
+            # Print full traceback to console so the user can see what failed
+            import traceback
+            traceback.print_exc()
+            print("render_with_tcod failed; falling back to ASCII output.")
+            dg.print_map()
 
 if __name__ == "__main__":
     main()

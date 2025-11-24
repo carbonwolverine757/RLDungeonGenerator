@@ -3,7 +3,31 @@
 * Add damage numbers
 * Add monsters and damage dealing
 * Add health bar
-* Add more weapons
+  * Add more weapons
+      * Weapons as follows :
+        * Meadows :
+            * Wooden Sword
+            * Torch
+            * Club
+            * Stone Axe
+            * Flint Axe
+            * Flint Knife
+            * Flint Spear
+            * Crude Bow
+        * Black Forest :
+            * Stagbreaker
+            * Bronze Sword
+            * Bronze Axe
+            * Copper Knife
+            * Bronze Spear
+            * Bronze Mace
+            * Bronze Atgeir
+        * Ocean :
+        * Swamp :
+        * Mountains :
+        * Plains :
+        * Mistlands :
+        * Ashlands :
 * Add armor mechanic
 * Add armor
     * Armor as follows :
@@ -55,6 +79,23 @@
 * Add food
 * Add more foood
 * Add shields
+    * Shields :
+        * Wooden Shield
+        * Wooden Tower Shield
+        * Bronze Buckler
+        * Bone Tower Shield
+        * Iron Buckler
+        * Banded Shield
+        * Iron Tower Shield
+        * Silver Shield
+        * Serpent Scale Buckler
+        * Serpent Scale Shield
+        * Black Metal Shield
+        * Black Metal Tower Shield
+        * Carapace Buckler
+        * Carapace Shield
+        * Flametal Shield
+        * Flametal Tower Shield
 * Add parrying and staggering
 * Add dodging
 * Add levels
