@@ -96,7 +96,7 @@ class RLDungeonGenerator:
             self.dungeon[tr][tc] = DungeonSqr('.')
             self.explored[tr][tc] = True
         # For any non-walkable tile (not '.' or '+'), consider it hit
-        if ch not in ('.', '+'):
+        if ch not in ('.', '+'): 
             # debug feedback omitted in release
             pass
         # store last swing for one-frame highlight in renderer
@@ -401,6 +401,14 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                 for c in range(view_w):
                     wc = cam_x + c
                     ch = dg.dungeon[wr][wc].get_ch()
+                    # Determine tile background; highlight mouse tile
+                    # Note: mouse_tile is (row, col) in world coordinates, wr/wc are also (row, col)
+                    tile_bg = (0, 0, 0)  # default bg
+                    if getattr(dg, 'mouse_tile', None) is not None:
+                        mouse_row, mouse_col = dg.mouse_tile
+                        if mouse_row == wr and mouse_col == wc:
+                            tile_bg = (40, 40, 100)  # highlight color
+
                     if ch == '#':
                         fg = (125, 125, 125)
                         bg = (10, 10, 10)
@@ -422,11 +430,6 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                     if not dg.explored[wr][wc]:
                         fg = (int(fg[0] * 0.15), int(fg[1] * 0.15), int(fg[2] * 0.15))
                         bg = (0, 0, 0)
-                    # Determine tile background; highlight mouse tile
-                    tile_bg = bg
-                    if getattr(dg, 'mouse_tile', None) == (wr, wc):
-                        # subtle highlight color that keeps glyph readable
-                        tile_bg = (40, 40, 100)
                     # If this tile was the last swing, draw a brief highlight marker
                     if getattr(dg, 'last_swing', None) == (wr, wc):
                         console.print(c, r, '*', fg=(255, 100, 50), bg=None)
@@ -538,6 +541,18 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
             dg.last_swing = None
 
             for event in tcod.event.wait():
+                # Try to convert the event through the context so tile coordinates are initialized when available.
+                mouse_coords = None
+                try:
+                    conv = context.convert_event(event)
+                except Exception:
+                    conv = None
+                # If convert_event returned an event with a tile attribute, use it; otherwise fall back to raw event.tile if present
+                if conv is not None and getattr(conv, 'tile', None) is not None:
+                    mouse_coords = conv.tile
+                else:
+                    mouse_coords = getattr(event, 'tile', None)
+
                 if event.type == "QUIT":
                     return
                 if event.type == "KEYDOWN":
@@ -579,16 +594,20 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
 
                 elif event.type == "MOUSEMOTION":
                     # Update facing direction based on mouse position (console tile coords -> world coords)
-                    mx, my = event.tile
+                    if mouse_coords is None:
+                        continue
+                    mx, my = mouse_coords
                     world_x = cam_x + mx
                     world_y = cam_y + my
                     dg.facing = (world_y - dg.player_row, world_x - dg.player_col)
                     # store mouse tile in world coords (row, col)
                     dg.mouse_tile = (world_y, world_x)
                 elif event.type == "MOUSEBUTTONDOWN":
-                    if event.button == 1:  # Left click
+                     if event.button == 1:  # Left click
+                        if mouse_coords is None:
+                            continue
                         # Update facing using click position in case no prior motion event
-                        mx, my = event.tile
+                        mx, my = mouse_coords
                         world_x = cam_x + mx
                         world_y = cam_y + my
                         dg.facing = (world_y - dg.player_row, world_x - dg.player_col)

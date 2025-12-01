@@ -14,6 +14,7 @@
             * Flint Knife
             * Flint Spear
             * Crude Bow
+            * **Antler Spear**
         * Black Forest :
             * Stagbreaker
             * Bronze Sword
@@ -22,8 +23,19 @@
             * Bronze Spear
             * Bronze Mace
             * Bronze Atgeir
+            * **Rancid Mace**
+            * **Troll Log**
+            * **Surtling Bomb**
         * Ocean :
+            * Abyssal Razor
+            * Abyssal Harpoon
         * Swamp :
+            * Iron Sword
+            * Iron Mace
+            * Ancient Bark Spear
+            * Iron Atgeir
+            * Iron Knife
+            * Iron Axe
         * Mountains :
         * Plains :
         * Mistlands :
