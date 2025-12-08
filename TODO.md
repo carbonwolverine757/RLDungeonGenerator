@@ -36,6 +36,10 @@
             * Iron Atgeir
             * Iron Knife
             * Iron Axe
+            * Battleaxe
+            * Iron Sledge
+            * Ooze Bomb
+            * 
         * Mountains :
         * Plains :
         * Mistlands :

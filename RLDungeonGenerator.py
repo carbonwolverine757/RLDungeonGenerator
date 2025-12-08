@@ -38,6 +38,9 @@ class RLDungeonGenerator:
         self.player_row = 0
         self.player_col = 0
 
+        # Monsters: list of dicts {row, col, health}
+        self.monsters = []
+
         for h in range(self.height):
             row = []
             for w in range(self.width):
@@ -91,6 +94,23 @@ class RLDungeonGenerator:
             return
         
         ch = self.dungeon[tr][tc].get_ch()
+        # If there is a monster at the target tile, apply damage
+        for i, m in enumerate(list(self.monsters)):
+            if m['row'] == tr and m['col'] == tc:
+                m['health'] -= 5
+                # store last swing for one-frame highlight in renderer
+                self.last_swing = (tr, tc)
+                if m['health'] <= 0:
+                    # remove monster and leave a coin on the ground
+                    try:
+                        self.monsters.pop(i)
+                    except Exception:
+                        # fallback: remove by identity
+                        if m in self.monsters:
+                            self.monsters.remove(m)
+                    self.dungeon[tr][tc] = DungeonSqr('o')
+                    self.explored[tr][tc] = True
+                return
         # If it's a door, open it. If tile is non-walkable (e.g. wall), register hit.
         if ch == '+':
             self.dungeon[tr][tc] = DungeonSqr('.')
@@ -275,7 +295,31 @@ class RLDungeonGenerator:
         self.carve_rooms()
         self.connect_rooms()
         self.spawn_player()
+        # Scatter monsters after player is placed so we don't spawn on the player
+        self.spawn_monsters(20, 20)
         self.reveal_current_area()
+
+    def spawn_monsters(self, count=20, health=20):
+        """Place up to `count` monsters on random floor tiles ('.'), each with given health."""
+        floor_tiles = []
+        for r in range(self.height):
+            for c in range(self.width):
+                if self.dungeon[r][c].get_ch() == '.':
+                    # avoid player's tile
+                    if r == self.player_row and c == self.player_col:
+                        continue
+                    floor_tiles.append((r, c))
+
+        if not floor_tiles:
+            return
+
+        if count > len(floor_tiles):
+            count = len(floor_tiles)
+
+        for _ in range(count):
+            pos = choice(floor_tiles)
+            floor_tiles.remove(pos)
+            self.monsters.append({"row": pos[0], "col": pos[1], "health": health})
 
     def is_walkable(self, r, c):
         if r < 0 or c < 0 or r >= self.height or c >= self.width:
@@ -331,10 +375,17 @@ class RLDungeonGenerator:
                             self.explored[r][c] = True
 
     def print_map(self):
+        # Print ASCII map with monsters and player overlaid
+        monster_positions = {(m['row'], m['col']) for m in getattr(self, 'monsters', [])}
         for r in range(self.height):
             row = ''
             for c in range(self.width):
-                row += self.dungeon[r][c].get_ch()
+                if (r, c) == (self.player_row, self.player_col):
+                    row += '@'
+                elif (r, c) in monster_positions:
+                    row += 'M'
+                else:
+                    row += self.dungeon[r][c].get_ch()
             print(row)
 
 
@@ -437,6 +488,15 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                         console.print(c, r, chr(glyph), fg=fg, bg=tile_bg)
 
             # Draw player last so it appears on top
+            # Draw monsters (if their tile has been explored)
+            for m in getattr(dg, 'monsters', []):
+                mr = m['row'] - cam_y
+                mc = m['col'] - cam_x
+                if 0 <= mr < view_h and 0 <= mc < view_w:
+                    # only draw monsters on explored tiles for now
+                    if dg.explored[m['row']][m['col']]:
+                        console.print(mc, mr, 'M', fg=(180, 30, 30), bg=None)
+
             pr = dg.player_row - cam_y
             pc = dg.player_col - cam_x
             if 0 <= pr < view_h and 0 <= pc < view_w:
@@ -452,8 +512,8 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                     # empty slot: show slot number
                     console.print(x, y, str(i + 1), fg=(200, 200, 200), bg=bg)
                 else:
-                    # Use a simple icon for weapons: '/' for wooden sword
-                    icon = '/'
+                    # Use a simple icon for weapons: '\\' represents a Wooden Sword
+                    icon = '\\'
                     # When equipped, use brighter background to indicate selection
                     if dg.equipped_slot == i:
                         console.print(x, y, icon, fg=(255, 230, 150), bg=(140, 90, 20))
