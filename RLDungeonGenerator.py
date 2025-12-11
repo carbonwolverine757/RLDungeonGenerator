@@ -58,9 +58,9 @@ class RLDungeonGenerator:
         self.player_max_stamina = 50
         
         # Hotbar (8 item slots, currently empty)
-        self.hotbar = [None] * 8
+        #self.hotbar = [None] * 8
         # Add a wooden sword in the first hotbar slot
-        self.hotbar[0] = {"type": "weapon", "name": "Wooden Sword", "damage": 5}
+        #self.hotbar[0] = {"type": "weapon", "name": "Wooden Sword", "damage": 5}
         # Currently equipped hotbar slot (None = unequipped)
         # Start with the wooden sword equipped in the first slot for easier testing
         self.equipped_slot = 0
@@ -71,11 +71,16 @@ class RLDungeonGenerator:
         # Last known mouse tile in world coords (row, col)
         self.mouse_tile = None
 
+        # Inventory: 4 rows x 8 cols. Top row (row 0) is the hotbar.
+        self.inventory = [[None for _ in range(8)] for _ in range(4)]
+        # Add a wooden sword in the first hotbar slot
+        self.inventory[0][0] = {"type": "weapon", "name": "Wooden Sword", "damage": 5}
+
     def swing_weapon(self):
         """Swing the currently equipped weapon in the facing direction."""
         if self.equipped_slot is None:
             return
-        item = self.hotbar[self.equipped_slot]
+        item = self.inventory[0][self.equipped_slot]
         if item is None or item.get("type") != "weapon":
             return
         
@@ -320,12 +325,60 @@ class RLDungeonGenerator:
             pos = choice(floor_tiles)
             floor_tiles.remove(pos)
             self.monsters.append({"row": pos[0], "col": pos[1], "health": health})
+    
+    def add_item_to_inventory(self, item_type, count=1):
+        """Add items to inventory. Coins stack in a single slot if present; otherwise put into first available slot (rows 1..3 first, then hotbar)."""
+        if item_type == 'coin':
+            # try to find existing coin stack
+            for r in range(4):
+                for c in range(8):
+                    slot = self.inventory[r][c]
+                    if slot is not None and slot.get('type') == 'coin':
+                        slot['count'] += count
+                        return True
+            # find first empty slot: prefer rows 1..3, then hotbar (0)
+            for r in range(1, 4):
+                for c in range(8):
+                    if self.inventory[r][c] is None:
+                        self.inventory[r][c] = {'type': 'coin', 'count': count, 'name': 'Coin'}
+                        return True
+            for c in range(8):
+                if self.inventory[0][c] is None:
+                    self.inventory[0][c] = {'type': 'coin', 'count': count, 'name': 'Coin'}
+                    return True
+            # inventory full
+            return False
+        # future item types
+        return False
+
+    def pickup_coins(self):
+        """Pick up coins on the player's tile and adjacent tiles. Converts coin tile to floor and adds to inventory."""
+        picked = 0
+        for dr in (-1, 0, 1):
+            for dc in (-1, 0, 1):
+                r = self.player_row + dr
+                c = self.player_col + dc
+                if 0 <= r < self.height and 0 <= c < self.width:
+                    if self.dungeon[r][c].get_ch() == 'o':
+                        # pick up
+                        self.dungeon[r][c] = DungeonSqr('.')
+                        self.explored[r][c] = True
+                        self.add_item_to_inventory('coin', 1)
+                        picked += 1
+        return picked
 
     def is_walkable(self, r, c):
         if r < 0 or c < 0 or r >= self.height or c >= self.width:
             return False
         ch = self.dungeon[r][c].get_ch()
-        return ch in ('.', '+')
+        # Walkable if floor, door, or coin
+        if ch not in ('.', '+', 'o'):
+            return False
+        # Check if there's a monster on this tile
+        for m in self.monsters:
+            if m['row'] == r and m['col'] == c:
+                return False
+        return True
 
     def spawn_player(self):
         # Prefer the center of the first room if available, otherwise first walkable tile
@@ -502,18 +555,24 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
             if 0 <= pr < view_h and 0 <= pc < view_w:
                 console.print(pc, pr, '@', fg=(255, 255, 255), bg=(0, 0, 0))
 
-            # Draw HUD: Hotbar in top-left (8 slots)
+            # Draw HUD: Hotbar in top-left (8 slots) - inventory row 0
             for i in range(8):
                 x = i
                 y = 0
                 bg = (50, 50, 50)
-                item = dg.hotbar[i] if i < len(dg.hotbar) else None
+                item = dg.inventory[0][i] if i < len(dg.inventory[0]) else None
                 if item is None:
                     # empty slot: show slot number
                     console.print(x, y, str(i + 1), fg=(200, 200, 200), bg=bg)
                 else:
-                    # Use a simple icon for weapons: '\\' represents a Wooden Sword
-                    icon = '\\'
+                    # Draw simple icons per type
+                    if item.get('type') == 'weapon':
+                        icon = '/'
+                    elif item.get('type') == 'coin':
+                        # show a small coin glyph and count if >1
+                        icon = 'o' if item.get('count', 1) == 1 else str(min(9, item.get('count', 1)))
+                    else:
+                        icon = '?'
                     # When equipped, use brighter background to indicate selection
                     if dg.equipped_slot == i:
                         console.print(x, y, icon, fg=(255, 230, 150), bg=(140, 90, 20))
@@ -637,6 +696,8 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                             dg.player_row = nr
                             dg.player_col = nc
                             dg.reveal_current_area()
+                            # pick up nearby coins after moving
+                            dg.pickup_coins()
 
                     # Equip/unequip hotbar items (slots 1-8)
                     key_to_slot = {
@@ -645,7 +706,7 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                     }
                     if event.sym in key_to_slot:
                         slot = key_to_slot[event.sym]
-                        if dg.hotbar[slot] is not None:
+                        if dg.inventory[0][slot] is not None:
                             # Toggle: equip if not equipped, unequip if already equipped
                             if dg.equipped_slot == slot:
                                 dg.equipped_slot = None

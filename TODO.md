@@ -1,7 +1,8 @@
-* Add weapon item (wooden sword)
+* Walk through coins cannot walk through monsters
 * Add key for attack/use
 * Add damage numbers
 * Add monsters and damage dealing
+    * 
 * Add health bar
   * Add more weapons
       * Weapons as follows :
@@ -39,7 +40,10 @@
             * Battleaxe
             * Iron Sledge
             * Ooze Bomb
-            * 
+            * **Poison Dagger**
+            * **Flail**
+            * **Abomination Arm**
+            * **Bonemass Blade**
         * Mountains :
         * Plains :
         * Mistlands :
