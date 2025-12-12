@@ -2,7 +2,18 @@
 * Add key for attack/use
 * Add damage numbers
 * Add monsters and damage dealing
-    * 
+    * Monsters :
+        * Meadows :
+            * Greyling
+            * Boar
+            * Neck
+        * Black Forest :
+        * Ocean :
+        * Swamp :
+        * Mountains :
+        * Plains :
+        * Mistlands :
+        * Ashlands :
 * Add health bar
   * Add more weapons
       * Weapons as follows :
@@ -45,6 +56,13 @@
             * **Abomination Arm**
             * **Bonemass Blade**
         * Mountains :
+            * Silver Sword
+            * Silver Knife
+            * Frostner
+            * Fang Spear
+            * Crystal Battleaxe
+            * Flesh Rippers
+            * Draugr Fang
         * Plains :
         * Mistlands :
         * Ashlands :

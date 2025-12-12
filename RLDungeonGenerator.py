@@ -6,6 +6,7 @@ from random import choice
 import argparse
 import os
 import sys
+import time
 
 try:
     import tcod
@@ -71,10 +72,19 @@ class RLDungeonGenerator:
         # Last known mouse tile in world coords (row, col)
         self.mouse_tile = None
 
+        # Inventory UI state
+        self.inventory_open = False
+
         # Inventory: 4 rows x 8 cols. Top row (row 0) is the hotbar.
         self.inventory = [[None for _ in range(8)] for _ in range(4)]
         # Add a wooden sword in the first hotbar slot
         self.inventory[0][0] = {"type": "weapon", "name": "Wooden Sword", "damage": 5}
+
+        # Stamina fields: regen and cooldown
+        self.stamina_regen_rate = 1.0  # stamina per second
+        self.stamina_cooldown_seconds = 1.5  # seconds without regen after attack
+        self.stamina_cooldown_until = 0.0
+        self.last_stamina_update = time.time()
 
     def swing_weapon(self):
         """Swing the currently equipped weapon in the facing direction."""
@@ -91,6 +101,13 @@ class RLDungeonGenerator:
         dc = sign(self.facing[1])
         if dr == 0 and dc == 0:
             return
+        # Consume stamina for the attack (3 stamina). If not enough, abort.
+        now = time.time()
+        if getattr(self, 'player_stamina', 0) < 3:
+            return
+        self.player_stamina = max(0, self.player_stamina - 3)
+        # prevent regen for a short time
+        self.stamina_cooldown_until = now + self.stamina_cooldown_seconds
         
         # Check tile 1 step in facing direction
         tr = self.player_row + dr
@@ -301,7 +318,8 @@ class RLDungeonGenerator:
         self.connect_rooms()
         self.spawn_player()
         # Scatter monsters after player is placed so we don't spawn on the player
-        self.spawn_monsters(20, 20)
+        # Double the original spawn count (was 20)
+        self.spawn_monsters(40, 20)
         self.reveal_current_area()
 
     def spawn_monsters(self, count=20, health=20):
@@ -327,27 +345,46 @@ class RLDungeonGenerator:
             self.monsters.append({"row": pos[0], "col": pos[1], "health": health})
     
     def add_item_to_inventory(self, item_type, count=1):
-        """Add items to inventory. Coins stack in a single slot if present; otherwise put into first available slot (rows 1..3 first, then hotbar)."""
+        """Add items to inventory. Coins stack up to 9 per slot; distribute across existing stacks and create new stacks (rows 1..3 preferred, then hotbar).
+        Returns True if at least one item was added, False if no space.
+        """
         if item_type == 'coin':
-            # try to find existing coin stack
+            max_stack = 9
+            remaining = count
+
+            # First, try to fill existing stacks that have space (any row)
             for r in range(4):
                 for c in range(8):
                     slot = self.inventory[r][c]
                     if slot is not None and slot.get('type') == 'coin':
-                        slot['count'] += count
-                        return True
-            # find first empty slot: prefer rows 1..3, then hotbar (0)
+                        space = max_stack - slot.get('count', 0)
+                        if space > 0:
+                            add = min(space, remaining)
+                            slot['count'] = slot.get('count', 0) + add
+                            remaining -= add
+                            if remaining <= 0:
+                                return True
+
+            # Next, place new stacks in empty slots, preferring rows 1..3 then hotbar (row 0)
             for r in range(1, 4):
                 for c in range(8):
-                    if self.inventory[r][c] is None:
-                        self.inventory[r][c] = {'type': 'coin', 'count': count, 'name': 'Coin'}
+                    if remaining <= 0:
                         return True
+                    if self.inventory[r][c] is None:
+                        put = min(max_stack, remaining)
+                        self.inventory[r][c] = {'type': 'coin', 'count': put, 'name': 'Coin'}
+                        remaining -= put
+
             for c in range(8):
-                if self.inventory[0][c] is None:
-                    self.inventory[0][c] = {'type': 'coin', 'count': count, 'name': 'Coin'}
+                if remaining <= 0:
                     return True
-            # inventory full
-            return False
+                if self.inventory[0][c] is None:
+                    put = min(max_stack, remaining)
+                    self.inventory[0][c] = {'type': 'coin', 'count': put, 'name': 'Coin'}
+                    remaining -= put
+
+            # Return True if we added any coins (count > remaining)
+            return remaining < count
         # future item types
         return False
 
@@ -442,6 +479,17 @@ class RLDungeonGenerator:
             print(row)
 
 
+    def update_stamina(self, dt: float, now: float) -> None:
+        """Regenerate stamina over time if cooldown elapsed."""
+        # If in cooldown period after attacking, do not regenerate
+        if now < getattr(self, 'stamina_cooldown_until', 0.0):
+            return
+        # Ensure player_stamina exists
+        if not hasattr(self, 'player_stamina'):
+            self.player_stamina = getattr(self, 'player_max_stamina', 50)
+        # Regenerate stamina
+        self.player_stamina = min(self.player_max_stamina, self.player_stamina + self.stamina_regen_rate * dt)
+
 def render_with_tcod(dg: RLDungeonGenerator) -> None:
     if tcod is None:
         print("tcod is not installed. Install requirements and try again.")
@@ -489,7 +537,13 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
         title="RLDungeonGenerator",
         vsync=True,
     ) as context:
+        prev_time = time.time()
         while True:
+            # update stamina each frame
+            now = time.time()
+            dt = now - prev_time
+            prev_time = now
+            dg.update_stamina(dt, now)
             # Draw current dungeon
             console.clear()
             # Compute camera top-left to center on player, clamped to map
@@ -579,6 +633,27 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                     else:
                         console.print(x, y, icon, fg=(200, 200, 200), bg=bg)
 
+            # Draw full inventory if open (rows 1-3, below hotbar)
+            if dg.inventory_open:
+                for row in range(1, 4):
+                    for col in range(8):
+                        x = col
+                        y = row
+                        bg = (40, 40, 40)
+                        item = dg.inventory[row][col]
+                        if item is None:
+                            # empty slot: show a dot
+                            console.print(x, y, '.', fg=(100, 100, 100), bg=bg)
+                        else:
+                            # Draw item icon
+                            if item.get('type') == 'weapon':
+                                icon = '/'
+                            elif item.get('type') == 'coin':
+                                icon = 'o' if item.get('count', 1) == 1 else str(min(9, item.get('count', 1)))
+                            else:
+                                icon = '?'
+                            console.print(x, y, icon, fg=(200, 200, 200), bg=bg)
+
             # --- Health bar (vertical) ---
             # Short vertical bar (2 tiles tall) overlaid on dungeon tiles
             health_pct = max(0.0, min(1.0, dg.player_health / dg.player_max_health))
@@ -621,34 +696,27 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
 
             # --- Stamina bar (horizontal) ---
             # Short horizontal bar (2 tiles wide) overlaid on dungeon tiles, centered
-            stamina_pct = max(0.0, min(1.0, dg.player_stamina / dg.player_max_stamina))
-            bar_w = 2  # much shorter
-            steps_w = bar_w * 4
-            filled_steps_w = int(round(stamina_pct * steps_w))
+            stamina_val = max(0.0, min(dg.player_max_stamina, dg.player_stamina))
+            stamina_pct = stamina_val / dg.player_max_stamina
+            bar_w = 2
             start_x = max(0, (view_w - bar_w) // 2)
             stamina_y = max(0, bar_top - 1)
+            # Choose icons based on overall fraction: full, half, or low
+            if stamina_pct >= 1.0:
+                icons = [('█', (255, 215, 0)), ('█', (255, 215, 0))]
+            elif stamina_pct >= 0.5:
+                # one icon full, one icon medium
+                icons = [('█', (255, 215, 0)), ('▒', (220, 180, 20))]
+            else:
+                # both icons low
+                icons = [('░', (180, 140, 10)), ('░', (100, 80, 0))]
+
             for i in range(bar_w):
                 x = start_x + i
-                # compute how many steps are filled in this cell (0..4)
-                cell_filled = max(0, min(4, filled_steps_w - i * 4))
-                if cell_filled >= 4:
-                    ch = '█'
-                    fg = (255, 215, 0)
-                elif cell_filled >= 3:
-                    ch = '▓'
-                    fg = (240, 200, 30)
-                elif cell_filled >= 2:
-                    ch = '▒'
-                    fg = (220, 180, 20)
-                elif cell_filled >= 1:
-                    ch = '░'
-                    fg = (180, 140, 10)
-                else:
-                    ch = '░'
-                    fg = (100, 80, 0)
+                ch, fg = icons[i]
                 console.print(x, stamina_y, ch, fg=fg, bg=None)
-            # Overlay stamina number immediately to the right of the short bar
-            stamina_str = str(dg.player_stamina)
+            # Overlay stamina number (integer)
+            stamina_str = str(int(max(0, round(dg.player_stamina))))
             stamina_num_x = start_x + bar_w
             stamina_num_y = stamina_y
             if stamina_num_x + len(stamina_str) > view_w:
@@ -677,6 +745,9 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                 if event.type == "KEYDOWN":
                     if event.sym == tcod.event.K_ESCAPE:
                         return
+                    # Toggle inventory with Tab
+                    if event.sym == tcod.event.K_TAB:
+                        dg.inventory_open = not dg.inventory_open
                     # Movement: arrows and WASD
                     dr = 0
                     dc = 0
