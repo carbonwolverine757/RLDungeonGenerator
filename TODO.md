@@ -63,8 +63,29 @@
             * Crystal Battleaxe
             * Flesh Rippers
             * Draugr Fang
+            * **Stone Golem Arm**
+            * **Ice Bomb**
+            * **Moder Claw**
+            * **Frost Blade**
         * Plains :
+            * Black Metal Sword
+            * Black Metal Atgeir
+            * Black Metal Axe
+            * Black Metal Knife
+            * Porcupine
+            * Vilebone Maulclaws
+            * Black Metal Battleaxe
+            * **Fuling Berserker Club**
+            * **Tar Sword**
+            * **Tar Bomb**
+            * **Spirit Hammer**
         * Mistlands :
+            * Skol and Hati
+            * Krom
+            * Demolisher
+            * Carapace Spear
+            * Mistwalker
+            * 
         * Ashlands :
 * Add armor mechanic
 * Add armor

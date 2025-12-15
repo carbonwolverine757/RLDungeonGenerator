@@ -342,8 +342,9 @@ class RLDungeonGenerator:
         for _ in range(count):
             pos = choice(floor_tiles)
             floor_tiles.remove(pos)
-            self.monsters.append({"row": pos[0], "col": pos[1], "health": health})
-    
+            # Initialize monster with state and alerted flag
+            self.monsters.append({"row": pos[0], "col": pos[1], "health": health, "state": 'calm', 'alerted': False})
+
     def add_item_to_inventory(self, item_type, count=1):
         """Add items to inventory. Coins stack up to 9 per slot; distribute across existing stacks and create new stacks (rows 1..3 preferred, then hotbar).
         Returns True if at least one item was added, False if no space.
@@ -490,6 +491,93 @@ class RLDungeonGenerator:
         # Regenerate stamina
         self.player_stamina = min(self.player_max_stamina, self.player_stamina + self.stamina_regen_rate * dt)
 
+    def find_room_containing(self, r, c):
+        for room in self.rooms:
+            if r >= room.row and r < room.row + room.height and c >= room.col and c < room.col + room.width:
+                return room
+        return None
+
+    def bresenham_los(self, r0, c0, r1, c1):
+        # Bresenham line algorithm between (r0,c0) and (r1,c1). Return True if line of sight (no walls '#').
+        dr = abs(r1 - r0)
+        dc = abs(c1 - c0)
+        sr = 1 if r1 > r0 else -1
+        sc = 1 if c1 > c0 else -1
+        err = (dr - dc) if dr > dc else (dc - dr)
+        # We'll step along the line using integer algorithm
+        r = r0
+        c = c0
+        # Step until reaching target (exclude endpoints check optional)
+        while True:
+            if r == r1 and c == c1:
+                return True
+            # advance
+            if dr > dc:
+                # iterate over r
+                r += sr
+                err -= dc
+                if err < 0:
+                    c += sc
+                    err += dr
+            else:
+                # iterate over c
+                c += sc
+                err -= dr
+                if err < 0:
+                    r += sr
+                    err += dc
+            # check blocking tile (treat '#' as blocking)
+            if r == r1 and c == c1:
+                return True
+            if 0 <= r < self.height and 0 <= c < self.width:
+                if self.dungeon[r][c].get_ch() == '#':
+                    return False
+            else:
+                return False
+
+    def update_monster_alerts(self):
+        # Find player's room
+        player_room = None
+        for room in self.rooms:
+            if (self.player_row >= room.row and self.player_row < room.row + room.height and
+                self.player_col >= room.col and self.player_col < room.col + room.width):
+                player_room = room
+                break
+
+        target_rooms = set()
+        if player_room is not None:
+            target_rooms.add(player_room)
+            # include adjacent rooms (shared rows or cols)
+            for room in self.rooms:
+                if room is player_room:
+                    continue
+                adj = self.are_rooms_adjacent(player_room, room)
+                if len(adj[0]) > 0 or len(adj[1]) > 0:
+                    target_rooms.add(room)
+        else:
+            # if player not in a room, consider none
+            return
+
+        alert_range = 8.0
+        for m in self.monsters:
+            # default not alerted
+            m['alerted'] = False
+            # check if monster is in one of target rooms
+            m_room = self.find_room_containing(m['row'], m['col'])
+            if m_room not in target_rooms:
+                continue
+            # line of sight check
+            if not self.bresenham_los(self.player_row, self.player_col, m['row'], m['col']):
+                continue
+            # range check
+            dist = sqrt((self.player_row - m['row'])**2 + (self.player_col - m['col'])**2)
+            if dist <= alert_range:
+                m['alerted'] = True
+                m['state'] = 'alerted'
+            else:
+                m['alerted'] = False
+                m['state'] = 'calm'
+
 def render_with_tcod(dg: RLDungeonGenerator) -> None:
     if tcod is None:
         print("tcod is not installed. Install requirements and try again.")
@@ -596,13 +684,19 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
 
             # Draw player last so it appears on top
             # Draw monsters (if their tile has been explored)
+            # Update monster alerts based on player's room, LOS and range
+            dg.update_monster_alerts()
             for m in getattr(dg, 'monsters', []):
-                mr = m['row'] - cam_y
-                mc = m['col'] - cam_x
-                if 0 <= mr < view_h and 0 <= mc < view_w:
-                    # only draw monsters on explored tiles for now
-                    if dg.explored[m['row']][m['col']]:
-                        console.print(mc, mr, 'M', fg=(180, 30, 30), bg=None)
+                 mr = m['row'] - cam_y
+                 mc = m['col'] - cam_x
+                 if 0 <= mr < view_h and 0 <= mc < view_w:
+                     # only draw monsters on explored tiles for now
+                     if dg.explored[m['row']][m['col']]:
+                         # Change color based on alert state
+                         if m.get('alerted', False):
+                             console.print(mc, mr, 'M', fg=(255, 0, 0), bg=None)  # bright red if alerted
+                         else:
+                             console.print(mc, mr, 'M', fg=(180, 30, 30), bg=None)
 
             pr = dg.player_row - cam_y
             pc = dg.player_col - cam_x
@@ -653,6 +747,46 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                             else:
                                 icon = '?'
                             console.print(x, y, icon, fg=(200, 200, 200), bg=bg)
+
+            # --- Inventory list (upper right) ---
+            # Build collapsed inventory summary by (type, name)
+            summary = {}
+            for row in range(4):
+                for col in range(8):
+                    item = dg.inventory[row][col]
+                    if item is None:
+                        continue
+                    key = (item.get('type'), item.get('name'))
+                    if key not in summary:
+                        summary[key] = {'type': item.get('type'), 'name': item.get('name'), 'count': 0}
+                    if item.get('type') == 'coin':
+                        summary[key]['count'] += item.get('count', 1)
+                    else:
+                        # non-stackable items count as 1 per slot
+                        summary[key]['count'] += 1
+
+            # Draw summary in upper-right, flush to edge. Format: "NNN I"
+            entry_width = 5  # 3 digits + space + icon
+            inv_x = max(0, view_w - entry_width)
+            inv_y = 0
+            inv_index = 0
+            max_inv_rows = view_h  # allow up to full height
+
+            for (itype, iname), data in summary.items():
+                if inv_index >= max_inv_rows:
+                    break
+                count = data['count']
+                if itype == 'weapon':
+                    icon = '/'
+                elif itype == 'coin':
+                    icon = 'o'
+                else:
+                    icon = '?'
+
+                count_str = str(count).rjust(3)
+                inv_str = f"{count_str} {icon}"
+                console.print(inv_x, inv_y + inv_index, inv_str, fg=(200, 200, 200), bg=None)
+                inv_index += 1
 
             # --- Health bar (vertical) ---
             # Short vertical bar (2 tiles tall) overlaid on dungeon tiles
