@@ -585,7 +585,7 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
 
     # Prefer a project-local bitmap tileset first
     tileset = None
-    png_tileset_path = os.path.join(os.path.dirname(__file__), 'assets', 'tilesets', 'Redjack17.png')
+    png_tileset_path = os.path.join(os.path.dirname(__file__), 'assets', 'tilesets', 'Redjack17ex.png')
     if os.path.exists(png_tileset_path):
         try:
             # Assumes CP437 16x16 grid tilesheet
@@ -612,6 +612,16 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
         print("Could not load a TrueType font from system. Falling back to ASCII output. Run with --ascii to skip this attempt.")
         dg.print_map()
         return
+
+    # Print tileset information
+    print(f"Tileset loaded: {tileset}")
+    print(f"Tileset shape: {getattr(tileset, 'shape', 'unknown')}")
+    print(f"Tileset tile_width: {getattr(tileset, 'tile_width', 'unknown')}")
+    print(f"Tileset tile_height: {getattr(tileset, 'tile_height', 'unknown')}")
+    # Compute available tiles if shape is available
+    if hasattr(tileset, 'shape'):
+        total_tiles = tileset.shape[0] * tileset.shape[1] if len(tileset.shape) >= 2 else tileset.shape[0]
+        print(f"Total tiles available (CP437): {total_tiles}")
 
     # Viewport size (camera window). Smaller than full map = zoomed-in view.
     view_w = min(40, dg.width)
@@ -715,7 +725,7 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                 else:
                     # Draw simple icons per type
                     if item.get('type') == 'weapon':
-                        icon = '/'
+                        icon = 'B'
                     elif item.get('type') == 'coin':
                         # show a small coin glyph and count if >1
                         icon = 'o' if item.get('count', 1) == 1 else str(min(9, item.get('count', 1)))
@@ -741,7 +751,7 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                         else:
                             # Draw item icon
                             if item.get('type') == 'weapon':
-                                icon = '/'
+                                icon = 'B'
                             elif item.get('type') == 'coin':
                                 icon = 'o' if item.get('count', 1) == 1 else str(min(9, item.get('count', 1)))
                             else:
@@ -777,7 +787,7 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                     break
                 count = data['count']
                 if itype == 'weapon':
-                    icon = '/'
+                    icon = 'B'
                 elif itype == 'coin':
                     icon = 'o'
                 else:
@@ -939,7 +949,6 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                         dg.facing = (world_y - dg.player_row, world_x - dg.player_col)
                         dg.mouse_tile = (world_y, world_x)
                         dg.swing_weapon()
-
 def main():
     parser = argparse.ArgumentParser(description="RL Dungeon Generator")
     parser.add_argument("--ascii", action="store_true", help="Force ASCII output, ignore graphics settings")
