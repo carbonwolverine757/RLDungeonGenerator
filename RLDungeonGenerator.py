@@ -704,9 +704,9 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                      if dg.explored[m['row']][m['col']]:
                          # Change color based on alert state
                          if m.get('alerted', False):
-                             console.print(mc, mr, 'M', fg=(255, 0, 0), bg=None)  # bright red if alerted
+                             console.print(mc, mr, 'G', fg=(255, 0, 0), bg=None)  # bright red if alerted
                          else:
-                             console.print(mc, mr, 'M', fg=(180, 30, 30), bg=None)
+                             console.print(mc, mr, 'G', fg=(180, 30, 30), bg=None)
 
             pr = dg.player_row - cam_y
             pc = dg.player_col - cam_x
@@ -813,21 +813,21 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                 # compute how many steps are filled in this cell (0..4)
                 cell_index = bar_height - 1 - i
                 cell_filled = max(0, min(4, filled_steps - cell_index * 4))
-                # choose glyph: use full block for fully filled, lower shades for partial
+                # choose glyph: use H for health bar
                 if cell_filled >= 4:
-                    ch = '█'
+                    ch = 'H'
                     fg = (255, 0, 0)
                 elif cell_filled >= 3:
-                    ch = '▓'
+                    ch = 'H'
                     fg = (220, 30, 30)
                 elif cell_filled >= 2:
-                    ch = '▒'
+                    ch = 'H'
                     fg = (200, 60, 60)
                 elif cell_filled >= 1:
-                    ch = '░'
+                    ch = 'H'
                     fg = (150, 40, 40)
                 else:
-                    ch = '░'
+                    ch = 'H'
                     fg = (80, 20, 20)
                 console.print(bar_x, y, ch, fg=fg, bg=None)
             # Overlay health number to the right of the vertical bar
@@ -847,13 +847,13 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
             stamina_y = max(0, bar_top - 1)
             # Choose icons based on overall fraction: full, half, or low
             if stamina_pct >= 1.0:
-                icons = [('█', (255, 215, 0)), ('█', (255, 215, 0))]
+                icons = [('S', (255, 215, 0)), ('S', (255, 215, 0))]
             elif stamina_pct >= 0.5:
                 # one icon full, one icon medium
-                icons = [('█', (255, 215, 0)), ('▒', (220, 180, 20))]
+                icons = [('S', (255, 215, 0)), ('S', (220, 180, 20))]
             else:
                 # both icons low
-                icons = [('░', (180, 140, 10)), ('░', (100, 80, 0))]
+                icons = [('S', (180, 140, 10)), ('S', (100, 80, 0))]
 
             for i in range(bar_w):
                 x = start_x + i
