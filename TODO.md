@@ -26,7 +26,7 @@
             * Flint Knife
             * Flint Spear
             * Crude Bow
-            * **Antler Spear**
+            * ***Antler Spear***
         * Black Forest :
             * Stagbreaker
             * Bronze Sword
@@ -35,6 +35,7 @@
             * Bronze Spear
             * Bronze Mace
             * Bronze Atgeir
+            * Claws of the Bear
             * **Rancid Mace**
             * **Troll Log**
             * **Surtling Bomb**
@@ -54,7 +55,7 @@
             * **Poison Dagger**
             * **Flail**
             * **Abomination Arm**
-            * **Bonemass Blade**
+            * ***Bonemass Blade***
         * Mountains :
             * Silver Sword
             * Silver Knife
@@ -65,8 +66,8 @@
             * Draugr Fang
             * **Stone Golem Arm**
             * **Ice Bomb**
-            * **Moder Claw**
-            * **Frost Blade**
+            * ***Moder Claw***
+            * ***Frost Blade***
         * Plains :
             * Black Metal Sword
             * Black Metal Atgeir
@@ -78,15 +79,37 @@
             * **Fuling Berserker Club**
             * **Tar Sword**
             * **Tar Bomb**
-            * **Spirit Hammer**
+            * ***Spirit Hammer***
         * Mistlands :
             * Skol and Hati
             * Krom
             * Demolisher
             * Carapace Spear
             * Mistwalker
-            * 
+            * Himminafl
+            * Skull Splittur
+            * Arbalest
+            * Spinesnap
+            * Staff of Frost
+            * Staff of Embers
+            * Dead Raiser
+            * Staff of Protection
+            * **Extractor Spear**
+            * **Staff of the Gjall**
+            * **Eitr Blade**
+            * **Eitr Grenade**
+            * **Staff of Eitr**
+            * ***Staff of The Queen***
+            * ***Queen's Arm Greatsword***
         * Ashlands :
+            * Nidhogg
+            * Splitnir
+            * Slayer
+            * Flametal Mace
+            * Berserkir Axes
+            * Ash Fang
+            * Ripper
+            * 
 * Add armor mechanic
 * Add armor
     * Armor as follows :
