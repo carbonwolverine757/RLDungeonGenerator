@@ -76,6 +76,7 @@ LEVEL_TEMPLATES = [
         'door_weight': 2.5,
         'monster_count': 60,
         'monster_health': 40,
+        'generation': 'open_space',  # Specify open space generation
     },
 ]
 
@@ -106,6 +107,9 @@ class RLDungeonGenerator:
 
         # Level progression
         self.current_level = level
+        # Level card timing (show when entering a level)
+        self.level_card_duration = 1.5
+        self.level_card_until = 0.0
         self.set_level_template(level)
 
         # Exit tile (row/col) and character
@@ -157,6 +161,11 @@ class RLDungeonGenerator:
             level = len(LEVEL_TEMPLATES) - 1
         self.level_template = LEVEL_TEMPLATES[level]
         self.current_level = level
+        # Start level card display timer
+        try:
+            self.level_card_until = time.time() + self.level_card_duration
+        except Exception:
+            self.level_card_until = time.time() + 1.5
 
     def swing_weapon(self):
         """Swing the currently equipped weapon in the facing direction."""
@@ -337,6 +346,28 @@ class RLDungeonGenerator:
         while len(groups) > 1:
             self.find_closest_unconnect_groups(groups, room_dict)
 
+    def generate_open_space(self):
+        """Generate a huge open area: floors everywhere and walls only on the outer border.
+        Also create a single large Room representing the interior so room-based logic still works."""
+        # Fill borders with walls and interior with floor
+        for r in range(self.height):
+            for c in range(self.width):
+                if r == 0 or c == 0 or r == self.height - 1 or c == self.width - 1:
+                    self.dungeon[r][c] = DungeonSqr('#')
+                else:
+                    self.dungeon[r][c] = DungeonSqr('.')
+        # Treat the interior as a single room (exclude the border)
+        inner_r = 1
+        inner_c = 1
+        inner_h = max(1, self.height - 2)
+        inner_w = max(1, self.width - 2)
+        self.rooms = [Room(inner_r, inner_c, inner_h, inner_w)]
+        # Place player near center
+        self.player_row = self.height // 2
+        self.player_col = self.width // 2
+        # Reset explored for new map
+        self.explored = [[False for _ in range(self.width)] for _ in range(self.height)]
+
     def generate_map(self):
         # reset and generate
         self.leaves = []
@@ -346,10 +377,17 @@ class RLDungeonGenerator:
         self.exit_col = None
         self.dungeon = [[DungeonSqr('#') for _ in range(self.width)] for _ in range(self.height)]
         self.explored = [[False for _ in range(self.width)] for _ in range(self.height)]
-        self.random_split(1, 1, self.height - 1, self.width - 1)
-        self.carve_rooms()
-        self.connect_rooms()
-        self.spawn_player()
+
+        # If the template specifies a custom generation method, use it
+        generation_method = self.level_template.get('generation')
+        if generation_method == 'open_space':
+            self.generate_open_space()
+        else:
+            self.random_split(1, 1, self.height - 1, self.width - 1)
+            self.carve_rooms()
+            self.connect_rooms()
+            self.spawn_player()
+
         monster_count = self.level_template.get('monster_count', 20)
         monster_health = self.level_template.get('monster_health', 20)
         self.spawn_monsters(monster_count, monster_health)
@@ -672,6 +710,34 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
             prev_time = now
             dg.update_stamina(dt, now)
             console.clear()
+
+            # If level card is active, show black screen with centered level name
+            if getattr(dg, 'level_card_until', 0) > now:
+                # fill console with black background
+                console.clear(bg=(0,0,0))
+                level_name = dg.level_template.get('name', 'Unknown')
+                level_str = f"Level {dg.current_level + 1}: {level_name}"
+                # draw a simple box with text centered
+                box_w = min(view_w - 4, len(level_str) + 4)
+                box_h = 3
+                box_x = max(0, (view_w - box_w) // 2)
+                box_y = max(0, (view_h - box_h) // 2)
+                # draw background for box
+                for by in range(box_y, box_y + box_h):
+                    for bx in range(box_x, box_x + box_w):
+                        console.print(bx, by, ' ', fg=(255,255,255), bg=(0,0,0))
+                text_x = box_x + (box_w - len(level_str)) // 2
+                text_y = box_y + box_h // 2
+                console.print(text_x, text_y, level_str, fg=(255,255,255), bg=(0,0,0))
+                context.present(console)
+                # process a reduced event loop so we can still quit or accept input
+                for event in tcod.event.wait(0.05):
+                    if event.type == 'QUIT':
+                        return
+                    if event.type == 'KEYDOWN' and event.sym == tcod.event.K_ESCAPE:
+                        return
+                continue
+
             cam_y = dg.player_row - view_h // 2
             cam_x = dg.player_col - view_w // 2
             if cam_y < 0: cam_y = 0

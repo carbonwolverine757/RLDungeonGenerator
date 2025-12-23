@@ -7,10 +7,33 @@
             * Greyling
             * Boar
             * Neck
+            * Deer
+            * ***Eikthyr***
         * Black Forest :
+            * Greydwarf
+            * Greydwarf Shaman
+            * Greydwarf Brute
+            * Skeleton
+            * Rancid Remains
+            * Troll
+            * Bear
+            * *Brenna*
+            * ***The Elder***
         * Ocean :
+            * *Serpent*
         * Swamp :
+            * Draugr
+            * Draugr Elite
+            * Leech
+            * Wraith
+            * Abomination
+            * Blob
+            * Oozer
+            * *Kvastur*
+            * ***Bonemass***
         * Mountains :
+            * Wolf
+            * Drake
         * Plains :
         * Mistlands :
         * Ashlands :
@@ -109,7 +132,20 @@
             * Berserkir Axes
             * Ash Fang
             * Ripper
-            * 
+            * Staff of Fracturing
+            * Staff of Wilds
+            * Trollstav
+            * Dundr
+            * **Celestial Staff**
+            * **Staff of Snapping Jaws**
+            * **Explosive Grenade**
+            * **Staff of Caltrops**
+            * **Lava Blade**
+            * **Staff of the Charred**
+            * **Staff of Brimstone**
+            * ***Blade of Lord Reto***
+            * ***Fader Claw***
+            * ***Staff of The Emerald Flame***
 * Add armor mechanic
 * Add armor
     * Armor as follows :
