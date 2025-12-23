@@ -14,6 +14,71 @@ try:
 except Exception:
     tcod = None
 
+# Level template progression
+# Each level defines parameters for dungeon generation
+LEVEL_TEMPLATES = [
+    {
+        'name': 'Caverns',
+        'room_size_min_pct': 60,
+        'room_size_max_pct': 100,
+        'floor_fg': (200, 210, 235),
+        'floor_bg': (20, 20, 40),
+        'wall_fg': (125, 125, 125),
+        'wall_bg': (40, 40, 50),
+        'door_weight': 1.0,
+        'monster_count': 20,
+        'monster_health': 15,
+    },
+    {
+        'name': 'Underground Halls',
+        'room_size_min_pct': 50,
+        'room_size_max_pct': 90,
+        'floor_fg': (180, 180, 200),
+        'floor_bg': (30, 30, 50),
+        'wall_fg': (100, 100, 120),
+        'wall_bg': (50, 50, 70),
+        'door_weight': 1.2,
+        'monster_count': 30,
+        'monster_health': 20,
+    },
+    {
+        'name': 'Dark Dungeons',
+        'room_size_min_pct': 40,
+        'room_size_max_pct': 80,
+        'floor_fg': (160, 160, 180),
+        'floor_bg': (20, 20, 30),
+        'wall_fg': (80, 80, 100),
+        'wall_bg': (30, 30, 40),
+        'door_weight': 1.5,
+        'monster_count': 40,
+        'monster_health': 25,
+    },
+    {
+        'name': 'Obsidian Depths',
+        'room_size_min_pct': 30,
+        'room_size_max_pct': 70,
+        'floor_fg': (140, 140, 160),
+        'floor_bg': (10, 10, 20),
+        'wall_fg': (60, 60, 80),
+        'wall_bg': (20, 20, 30),
+        'door_weight': 2.0,
+        'monster_count': 50,
+        'monster_health': 30,
+    },
+    {
+        'name': 'Abyss',
+        'room_size_min_pct': 20,
+        'room_size_max_pct': 60,
+        'floor_fg': (100, 100, 120),
+        'floor_bg': (5, 5, 15),
+        'wall_fg': (40, 40, 60),
+        'wall_bg': (10, 10, 20),
+        'door_weight': 2.5,
+        'monster_count': 60,
+        'monster_health': 40,
+    },
+]
+
 class DungeonSqr:
     def __init__(self, sqr):
         self.sqr = sqr
@@ -29,7 +94,7 @@ class Room:
         self.width = w
 
 class RLDungeonGenerator:
-    def __init__(self, w, h):
+    def __init__(self, w, h, level=0):
         self.MAX = 15 # Cutoff for when we want to stop dividing sections
         self.width = w
         self.height = h
@@ -38,6 +103,10 @@ class RLDungeonGenerator:
         self.rooms = []
         self.player_row = 0
         self.player_col = 0
+
+        # Level progression
+        self.current_level = level
+        self.set_level_template(level)
 
         # Exit tile (row/col) and character
         self.exit_row = None
@@ -81,6 +150,13 @@ class RLDungeonGenerator:
         self.stamina_cooldown_seconds = 1.5  # seconds without regen after attack
         self.stamina_cooldown_until = 0.0
         self.last_stamina_update = time.time()
+
+    def set_level_template(self, level):
+        """Set the current level template based on level number."""
+        if level >= len(LEVEL_TEMPLATES):
+            level = len(LEVEL_TEMPLATES) - 1
+        self.level_template = LEVEL_TEMPLATES[level]
+        self.current_level = level
 
     def swing_weapon(self):
         """Swing the currently equipped weapon in the facing direction."""
@@ -155,8 +231,10 @@ class RLDungeonGenerator:
             if random() > 0.80: continue
             section_width = leaf[3] - leaf[1]
             section_height = leaf[2] - leaf[0]
-            room_width = round(randrange(60, 100) / 100 * section_width)
-            room_height = round(randrange(60, 100) / 100 * section_height)
+            min_pct = self.level_template.get('room_size_min_pct', 60) / 100
+            max_pct = self.level_template.get('room_size_max_pct', 100) / 100
+            room_width = round(randrange(int(min_pct * 100), int(max_pct * 100) + 1) / 100 * section_width)
+            room_height = round(randrange(int(min_pct * 100), int(max_pct * 100) + 1) / 100 * section_height)
             if section_height > room_height:
                 room_start_row = leaf[0] + randrange(section_height - room_height)
             else:
@@ -272,7 +350,9 @@ class RLDungeonGenerator:
         self.carve_rooms()
         self.connect_rooms()
         self.spawn_player()
-        self.spawn_monsters(40, 20)
+        monster_count = self.level_template.get('monster_count', 20)
+        monster_health = self.level_template.get('monster_health', 20)
+        self.spawn_monsters(monster_count, monster_health)
         self.reveal_current_area()
         self.place_exit()
 
@@ -505,7 +585,12 @@ class RLDungeonGenerator:
 
     def check_exit(self):
         if self.exit_row is not None and self.player_row == self.exit_row and self.player_col == self.exit_col:
-            # regenerate map
+            # Progress to next level
+            next_level = self.current_level + 1
+            if next_level >= len(LEVEL_TEMPLATES):
+                # Loop back to first level or handle endgame
+                next_level = 0
+            self.set_level_template(next_level)
             self.generate_map()
 
     def update_stamina(self, dt, now):
@@ -594,6 +679,13 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
             if cam_y > dg.height - view_h: cam_y = dg.height - view_h
             if cam_x > dg.width - view_w: cam_x = dg.width - view_w
 
+            # Get level template colors
+            template = dg.level_template
+            floor_fg = template.get('floor_fg', (200, 210, 235))
+            floor_bg = template.get('floor_bg', (0, 0, 0))
+            wall_fg = template.get('wall_fg', (125, 125, 125))
+            wall_bg = template.get('wall_bg', (0, 0, 0))
+
             for r in range(view_h):
                 wr = cam_y + r
                 for c in range(view_w):
@@ -605,10 +697,10 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                         if mouse_row == wr and mouse_col == wc:
                             tile_bg = (40, 40, 100)
                     if ch == '#':
-                        fg = (125, 125, 125)
+                        fg = wall_fg
                         glyph = ord('#')
                     elif ch == '.':
-                        fg = (200, 210, 235)
+                        fg = floor_fg
                         glyph = ord('.')
                     elif ch == '+':
                         fg = (255, 215, 0)
@@ -766,6 +858,12 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                 stamina_num_x = max(0, view_w - len(stamina_str))
             console.print(stamina_num_x, stamina_num_y, stamina_str, fg=(255, 255, 200), bg=(0,0,0))
 
+            # Level indicator
+            level_name = dg.level_template.get('name', 'Unknown')
+            level_str = f"Level {dg.current_level + 1}: {level_name}"
+            if len(level_str) <= view_w:
+                console.print(0, view_h - 1, level_str, fg=(200, 200, 255), bg=(0, 0, 0))
+
             context.present(console)
             dg.last_swing = None
 
@@ -843,11 +941,12 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
 def main():
     parser = argparse.ArgumentParser(description="RL Dungeon Generator")
     parser.add_argument("--ascii", action="store_true", help="Force ASCII output, ignore graphics settings")
+    parser.add_argument("--level", type=int, default=0, help="Starting level (0-4)")
     args = parser.parse_args()
     sys.tracebacklimit = 1000
     w = 80
     h = 45
-    dg = RLDungeonGenerator(w, h)
+    dg = RLDungeonGenerator(w, h, level=args.level)
     dg.generate_map()
     if args.ascii:
         dg.print_map()

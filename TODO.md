@@ -184,58 +184,58 @@
     *Each level is in a certain biome. Biomes each have different loot, enemies, crafting recipes, and terrain. If a level is completed by finding the loot and exploring the dungeon fully, then the character progresses to the next level. If the character dies on a level, they are reverted to the start of that level. On game start, either a game that is in progress is selected, or a new game is started.
     *Levels are as follows :
         * Meadows
-        * Eikthyr Bossfight
+        * ***Eikthyr Bossfight***
         * Black Forest
-        * Burial Chambers
-        * Troll Cave
+        * *Burial Chambers*
+        * *Troll Cave*
         * Black Forest
-        * Smoldering Tomb (Brenna)
-        * The Elder Bossfight
+        * **Smoldering Tomb (Brenna)**
+        * ***The Elder Bossfight***
         * Ocean (exploration)
         * Swamps
-        * Sunken Crypts
+        * *Sunken Crypts*
         * Swamps
-        * Bonemass Bossfight
+        * ***Bonemass Bossfight***
         * Ocean 2
         * Mountains
-        * Ice Caves
+        * *Ice Caves*
         * Mountains
-        * Howling Caverns (Geirrhafa)
-        * Moder Bossfight
+        * **Howling Caverns (Geirrhafa)**
+        * ***Moder Bossfight***
         * Ocean 3
         * Plains
-        * Fuling Village
+        * *Fuling Village*
         * Plains
-        * Sealed Tower (Zil and Thungr)
-        * Yagluth Bossfight
+        * **Sealed Tower (Zil and Thungr)**
+        * ***Yagluth Bossfight***
         * Ocean 4
         * Mistlands Coast
         * Mistlands
-        * Dvergr Outpost
+        * *Dvergr Outpost*
         * Mistlands
         * Giant Remains
-        * Infested Mines (Dvergr Tower)
-        * Infested Mines (Cliffside)
+        * *Infested Mines (Dvergr Tower)*
+        * *Infested Mines (Cliffside)*
         * Mistlands
-        * The Queen Bossfight
+        * ***The Queen Bossfight***
         * Ocean 5
         * Ashlands Waters
         * Ashlands Coast
         * Ashlands
-        * Putrid Hole
+        * *Putrid Hole*
         * Ashlands
         * Ashlands (Inland)
-        * Charred Fortress
+        * *Charred Fortress*
         * Ashlands
+        * *Putrid Hole*
+        * *Putrid Hole*
+        * Ashlands
+        * *Charred Fortress*
+        * Ashlands
+        * **First Mysterious Location**
         * Putrid Hole
-        * Putrid Hole
+        * **Second Mysterious Location**
         * Ashlands
-        * Charred Fortress
+        * **Tomb of Lord Reto (Lord Reto)**
         * Ashlands
-        * First Mysterious Location
-        * Putrid Hole
-        * Second Mysterious Location
-        * Ashlands
-        * Tomb of Lord Reto (Lord Reto)
-        * Ashlands
-        * Fader Bossfight
+        * ***Fader Bossfight***
