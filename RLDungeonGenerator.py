@@ -658,28 +658,195 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
         sys.exit(1)
 
     tileset = None
-    png_tileset_path = os.path.join(os.path.dirname(__file__), 'assets', 'tilesets', 'Redjack17ex.png')
-    if os.path.exists(png_tileset_path):
+    # Helper: try different signatures for load_tilesheet
+    def try_load_tilesheet(path, tw, th, charmaps=(), cols=None, rows=None):
+        # Inspect signature to determine parameter semantics
         try:
-            tileset = tcod.tileset.load_tilesheet(png_tileset_path, 16, 16, tcod.tileset.CHARMAP_CP437)
+            import inspect
+            sig = inspect.signature(tcod.tileset.load_tilesheet)
+            params = list(sig.parameters.keys())
         except Exception:
+            params = []
+        # If function expects columns/rows (grid counts), use cols/rows when provided
+        use_counts = False
+        if len(params) >= 3:
+            p1 = params[1].lower()
+            p2 = params[2].lower()
+            if 'col' in p1 or 'count' in p1 or 'cols' in p1 or 'columns' in p1:
+                use_counts = True
+            if 'tile' in p1 or 'width' in p1:
+                use_counts = False
+        # Try explicit charmaps first with appropriate args
+        attempts = []
+        if use_counts:
+            a_args = (path, cols if cols is not None else tw, rows if rows is not None else th)
+        else:
+            a_args = (path, tw, th)
+        for ch in charmaps:
+            if ch is None:
+                continue
+            try:
+                return tcod.tileset.load_tilesheet(*a_args, ch)
+            except Exception:
+                pass
+        # Try the 3-arg form (either tile size or cols/rows)
+        try:
+            return tcod.tileset.load_tilesheet(*a_args)
+        except Exception:
+            pass
+        # Try keyword form if supported
+        for ch in charmaps:
+            try:
+                if use_counts:
+                    return tcod.tileset.load_tilesheet(path, a_args[1], a_args[2], charmap=ch)
+                else:
+                    return tcod.tileset.load_tilesheet(path, a_args[1], a_args[2], charmap=ch)
+            except Exception:
+                pass
+        return None
+
+    # Helper: try different signatures for load_truetype_font
+    def try_load_truetype(path, ts, charmaps=()):
+        for ch in charmaps:
+            if ch is None:
+                continue
+            try:
+                return tcod.tileset.load_truetype_font(path, ts, ch)
+            except Exception:
+                pass
+        # Try without explicit charmap
+        try:
+            return tcod.tileset.load_truetype_font(path, ts)
+        except Exception:
+            pass
+        for ch in charmaps:
+            try:
+                return tcod.tileset.load_truetype_font(path, ts, charmap=ch)
+            except Exception:
+                pass
+        return None
+
+    # Detect available charmap constants in tcod (may be in different modules)
+    charmap_candidates = []
+    try:
+        for src in (getattr(tcod, 'tileset', None), tcod, getattr(tcod, 'constants', None)):
+            if src is None:
+                continue
+            for name in ('CHARMAP_UNICODE', 'CHARMAP_CP437', 'CHARMAP_TCOD', 'CHARMAP_DEFAULT'):
+                if hasattr(src, name):
+                    try:
+                        charmap_candidates.append(getattr(src, name))
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+
+    # Try a dedicated Unicode tileset image first (if provided)
+    unicode_tileset_path = os.path.join(os.path.dirname(__file__), 'assets', 'tilesets', 'unicode_tileset.png')
+    if os.path.exists(unicode_tileset_path):
+        try:
+            # Try to inspect the PNG to determine tile pixel size and grid dimensions
+            tile_w = 16
+            tile_h = 16
+            img_cols = 32
+            img_rows = None
+            try:
+                from PIL import Image
+                img = Image.open(unicode_tileset_path)
+                img_w, img_h = img.size
+                # Prefer the known generator's tile_size=16 if it divides image
+                if img_w % 16 == 0 and img_h % 16 == 0:
+                    tile_w = tile_h = 16
+                    img_cols = img_w // tile_w
+                    img_rows = img_h // tile_h
+                else:
+                    # Fallback: use gcd of dimensions to guess tile size
+                    from math import gcd
+                    guess = gcd(img_w, img_h)
+                    if guess > 0 and guess <= 64:
+                        tile_w = tile_h = guess
+                        img_cols = img_w // tile_w
+                        img_rows = img_h // tile_h
+                    else:
+                        tile_w = tile_h = 16
+                        img_cols = img_w // tile_w if img_w % tile_w == 0 else img_cols
+                        img_rows = img_h // tile_h if img_h % tile_h == 0 else img_rows
+            except Exception:
+                # PIL not available or failed to read; assume generator defaults (16px tiles, 32 cols)
+                tile_w = tile_h = 16
+                img_cols = 32
+                img_rows = None
+
+            # When calling try_load_tilesheet, prefer passing grid counts (cols, rows) which tcod.load_tilesheet expects
+            tileset = try_load_tilesheet(unicode_tileset_path, tile_w, tile_h, charmap_candidates, cols=img_cols, rows=img_rows)
+            if tileset is not None:
+                print(f"Loaded Unicode tileset image: {unicode_tileset_path} (tile {tile_w}x{tile_h}, cols={img_cols}, rows={img_rows})")
+                # Wrap the tileset to override tile_width/tile_height reporting
+                class TilesetWrapper:
+                    def __init__(self, inner, tw, th):
+                        self._inner = inner
+                        self.tile_width = tw
+                        self.tile_height = th
+                    def __getattr__(self, name):
+                        return getattr(self._inner, name)
+
+                tileset = TilesetWrapper(tileset, tile_w, tile_h)
+                print(f"Wrapped tileset: tile_width={tileset.tile_width}, tile_height={tileset.tile_height}")
+        except Exception as e:
+            print(f"Failed to load unicode tileset image: {e}")
             tileset = None
 
+    # Try the project's PNG tileset (keep compatibility with older CP437 mapping)
     if tileset is None:
-        default_ttf_paths = [
+        png_tileset_path = os.path.join(os.path.dirname(__file__), 'assets', 'tilesets', 'Redjack17ex.png')
+        if os.path.exists(png_tileset_path):
+            try:
+                # attempt to detect grid size via PIL
+                try:
+                    from PIL import Image
+                    pimg = Image.open(png_tileset_path)
+                    p_w, p_h = pimg.size
+                    # assume tile size 16 unless divisible differently
+                    if p_w % 16 == 0 and p_h % 16 == 0:
+                        p_cols = p_w // 16
+                        p_rows = p_h // 16
+                    else:
+                        p_cols = None
+                        p_rows = None
+                except Exception:
+                    p_cols = None
+                    p_rows = None
+                tileset = try_load_tilesheet(png_tileset_path, 16, 16, charmap_candidates, cols=p_cols, rows=p_rows)
+                if tileset is not None:
+                    print(f"Loaded tilesheet: {png_tileset_path}")
+            except Exception as e:
+                print(f"Failed to load tilesheet image: {e}")
+                tileset = None
+
+    # Fallback: try a set of common system TrueType fonts (prefer Unicode charmap)
+    if tileset is None:
+        unicode_ttf_paths = [
             os.path.join(os.environ.get('WINDIR', 'C:\\Windows'), 'Fonts', 'consola.ttf'),
             os.path.join(os.environ.get('WINDIR', 'C:\\Windows'), 'Fonts', 'consolab.ttf'),
+            '/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf',
+            '/usr/share/fonts/truetype/noto/NotoSansMono-Regular.ttf',
+            '/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf',
+            '/System/Library/Fonts/Monaco.ttf',
+            '/System/Library/Fonts/Menlo.ttc',
         ]
-        for path in default_ttf_paths:
-            if os.path.exists(path):
+        for path in unicode_ttf_paths:
+            if path and os.path.exists(path):
                 try:
-                    tileset = tcod.tileset.load_truetype_font(path, 16, tcod.tileset.CHARMAP_CP437)
-                    break
+                    tileset = try_load_truetype(path, 16, charmap_candidates)
+                    if tileset is not None:
+                        print(f"Loaded TrueType font as tileset: {path}")
+                        break
                 except Exception:
+                    tileset = None
                     continue
 
     if tileset is None:
-        print("Could not load a TrueType font from system. Falling back to ASCII output. Run with --ascii to skip this attempt.")
+        print("Could not load a tileset or TrueType font from system. Falling back to ASCII output. Run with --ascii to skip this attempt.")
         dg.print_map()
         return
 
@@ -690,10 +857,31 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
     print(f"Tileset tile_height: {getattr(tileset, 'tile_height', 'unknown')}")
     if hasattr(tileset, 'shape'):
         total_tiles = tileset.shape[0] * tileset.shape[1] if len(tileset.shape) >= 2 else tileset.shape[0]
-        print(f"Total tiles available (CP437): {total_tiles}")
+        print(f"Total tiles available (Unicode/CP437): {total_tiles}")
 
-    view_w = min(40, dg.width)
-    view_h = min(25, dg.height)
+    # Determine view size: base defaults but don't exceed dungeon size or tileset grid
+    default_w = 40
+    default_h = 25
+    view_w = min(default_w, dg.width)
+    view_h = min(default_h, dg.height)
+    try:
+        # tileset.shape is typically (rows, cols)
+        shape = getattr(tileset, 'shape', None)
+        if shape:
+            if isinstance(shape, (list, tuple)) and len(shape) >= 2:
+                max_rows, max_cols = int(shape[0]), int(shape[1])
+                # tileset.shape is number of tile rows and cols in the sheet; ensure view doesn't exceed it
+                view_w = min(view_w, max_cols)
+                view_h = min(view_h, max_rows)
+            elif isinstance(shape, int):
+                # some implementations expose a single-dimension shape (total tiles)
+                total = int(shape)
+                max_cols = min(total, default_w)
+                view_w = min(view_w, max_cols)
+    except Exception:
+        # ignore and use defaults
+        pass
+
     console = tcod.console.Console(view_w, view_h, order="F")
 
     with tcod.context.new(
@@ -924,11 +1112,7 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                 stamina_num_x = max(0, view_w - len(stamina_str))
             console.print(stamina_num_x, stamina_num_y, stamina_str, fg=(255, 255, 200), bg=(0,0,0))
 
-            # Level indicator
-            level_name = dg.level_template.get('name', 'Unknown')
-            level_str = f"Level {dg.current_level + 1}: {level_name}"
-            if len(level_str) <= view_w:
-                console.print(0, view_h - 1, level_str, fg=(200, 200, 255), bg=(0, 0, 0))
+            # No level indicator on map — level name shown during fullscreen card only
 
             context.present(console)
             dg.last_swing = None

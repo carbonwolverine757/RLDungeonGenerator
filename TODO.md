@@ -34,9 +34,46 @@
         * Mountains :
             * Wolf
             * Drake
+            * Ulv
+            * Fenring
+            * Cultist
+            * Bat
+            * Stone Golem
+            * *Geirrhafa*
+            * ***Moder***
         * Plains :
+            * Fuling
+            * Fuling Berserker
+            * Fuling Shaman
+            * Lox
+            * Growth
+            * Deathsquito
+            * Vile
+            * *Zil and Thungr*
+            * ***Yagluth***
         * Mistlands :
+            * Hare
+            * Seeker
+            * Seeker Soldier
+            * Tick
+            * Seeker Brood
+            * Gjall
+            * Dvergr Mage
+            * Dvergr Rouge
+            * ***The Queen***
         * Ashlands :
+            * Bonemaw
+            * Volture
+            * Charred Twitcher
+            * Charred Warrior
+            * Charred Marksman
+            * Charred Warlock
+            * Asksvin
+            * Lava Blob
+            * Morgen
+            * Fallen Valkyrie
+            * *Lord Reto*
+            * ***Fader***
 * Add health bar
   * Add more weapons
       * Weapons as follows :
@@ -217,61 +254,62 @@
 * Add parrying and staggering
 * Add dodging
 * Add levels
-    *Each level is in a certain biome. Biomes each have different loot, enemies, crafting recipes, and terrain. If a level is completed by finding the loot and exploring the dungeon fully, then the character progresses to the next level. If the character dies on a level, they are reverted to the start of that level. On game start, either a game that is in progress is selected, or a new game is started.
-    *Levels are as follows :
-        * Meadows
-        * ***Eikthyr Bossfight***
-        * Black Forest
-        * *Burial Chambers*
-        * *Troll Cave*
-        * Black Forest
-        * **Smoldering Tomb (Brenna)**
-        * ***The Elder Bossfight***
-        * Ocean (exploration)
-        * Swamps
-        * *Sunken Crypts*
-        * Swamps
-        * ***Bonemass Bossfight***
-        * Ocean 2
-        * Mountains
-        * *Ice Caves*
-        * Mountains
-        * **Howling Caverns (Geirrhafa)**
-        * ***Moder Bossfight***
-        * Ocean 3
-        * Plains
-        * *Fuling Village*
-        * Plains
-        * **Sealed Tower (Zil and Thungr)**
-        * ***Yagluth Bossfight***
-        * Ocean 4
-        * Mistlands Coast
-        * Mistlands
-        * *Dvergr Outpost*
-        * Mistlands
-        * Giant Remains
-        * *Infested Mines (Dvergr Tower)*
-        * *Infested Mines (Cliffside)*
-        * Mistlands
-        * ***The Queen Bossfight***
-        * Ocean 5
-        * Ashlands Waters
-        * Ashlands Coast
-        * Ashlands
-        * *Putrid Hole*
-        * Ashlands
-        * Ashlands (Inland)
-        * *Charred Fortress*
-        * Ashlands
-        * *Putrid Hole*
-        * *Putrid Hole*
-        * Ashlands
-        * *Charred Fortress*
-        * Ashlands
-        * **First Mysterious Location**
-        * Putrid Hole
-        * **Second Mysterious Location**
-        * Ashlands
-        * **Tomb of Lord Reto (Lord Reto)**
-        * Ashlands
-        * ***Fader Bossfight***
+    * Each level is in a certain biome. Biomes each have different loot, enemies, crafting recipes, and terrain. If a level is completed by finding the loot and exploring the dungeon fully, then the character progresses to the next level. If the character dies on a level, they are reverted to the start of that level. On game start, either a game that is in progress is selected, or a new game is started.
+    * Levels are as follows
+
+        1 Meadows
+        2 ***Eikthyr Bossfight***
+        3 Black Forest
+        4 *Burial Chambers*
+        5 *Troll Cave*
+        6 Black Forest
+        7 **Smoldering Tomb (Brenna)**
+        8 ***The Elder Bossfight***
+        9 Ocean (exploration)
+        10 Swamps
+        11 *Sunken Crypts*
+        12 Swamps
+        13 ***Bonemass Bossfight***
+        14 Ocean 2
+        15 Mountains
+        16 *Ice Caves*
+        17 Mountains
+        18 **Howling Caverns (Geirrhafa)**
+        19 ***Moder Bossfight***
+        20 Ocean 3
+        21 Plains
+        22 *Fuling Village*
+        23 Plains
+        24 **Sealed Tower (Zil and Thungr)**
+        25 ***Yagluth Bossfight***
+        26 Ocean 4
+        27 Mistlands Coast
+        28 Mistlands
+        29 *Dvergr Outpost*
+        30 Mistlands
+        31 Giant Remains
+        32 *Infested Mines (Dvergr Tower)*
+        33 *Infested Mines (Cliffside)*
+        34 Mistlands
+        35 ***The Queen Bossfight***
+        36 Ocean 5
+        37 Ashlands Waters
+        38 Ashlands Coast
+        39 Ashlands
+        40 *Putrid Hole*
+        41 Ashlands
+        42 Ashlands (Inland)
+        43 *Charred Fortress*
+        44 Ashlands
+        45 *Putrid Hole*
+        46 *Putrid Hole*
+        47 Ashlands
+        48 *Charred Fortress*
+        49 Ashlands
+        50 **First Mysterious Location**
+        51 Putrid Hole
+        52 **Second Mysterious Location**
+        53 Ashlands
+        54 **Tomb of Lord Reto (Lord Reto)**
+        55 Ashlands
+        56 ***Fader Bossfight***
