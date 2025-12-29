@@ -15,7 +15,8 @@ def generate_tilesheet(out_path, font_path, tile_size=16, cols=16, codepoints=No
     img = Image.new('RGBA', (img_w, img_h), color=bg + (255,))
     draw = ImageDraw.Draw(img)
     try:
-        font = ImageFont.truetype(font_path, tile_size - 2)
+        # Use full tile_size for the font to allow glyphs to fill cells and align with grid boundaries
+        font = ImageFont.truetype(font_path, tile_size)
     except Exception as e:
         raise RuntimeError(f"Failed to load font {font_path}: {e}")
     for i, cp in enumerate(codepoints):
@@ -24,22 +25,9 @@ def generate_tilesheet(out_path, font_path, tile_size=16, cols=16, codepoints=No
         x = col * tile_size
         y = row * tile_size
         ch = chr(cp)
-        # center text roughly - robust measurement for multiple Pillow versions
-        try:
-            # Preferred: ImageDraw.textbbox (Pillow >= 8.0)
-            bbox = draw.textbbox((0, 0), ch, font=font)
-            w = bbox[2] - bbox[0]
-            h = bbox[3] - bbox[1]
-        except AttributeError:
-            try:
-                # Older / alternative API
-                w, h = font.getsize(ch)
-            except AttributeError:
-                # Fallback: measure rendered mask size
-                mask = font.getmask(ch)
-                w, h = mask.size
-        tx = x + (tile_size - w) // 2
-        ty = y + (tile_size - h) // 2
+        # Render glyphs at top-left of cells (no centering) so they align with tcod's grid slicing
+        tx = x
+        ty = y
         try:
             draw.text((tx, ty), ch, font=font, fill=fg + (255,))
         except Exception:

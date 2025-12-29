@@ -215,6 +215,7 @@
         * Bronze Pendant (50, Stamina Regen Bonus)
         * Iron Broach (65, Armor Bonus, Recover Health)
         * Nimble Anklet (65, Speed Bonus, Recover Stamina)
+        * Fins of Destiny (10, Swim Bonus)
         * Wolf Sight (65, Archery Bonus, Spear Bonus, Pierce Damage Bonus)
         * Crystal Heart (75, Physical Damage Res)
         * Evasion Mantle (70, Dodge Bonus, Parry Bonus, Block Stamina Reduction)
@@ -229,6 +230,21 @@
         * Pickable items on the ground
         * Chests
         * Creature drops
+            * Resin
+            * Neck Tail
+            * Deer Hide
+            * Deer Meat
+            * Leather Scraps
+            * Boar Meat
+            * Feathers
+            * **Hard Antler**
+            * Greydwarf Eye
+            * Ancient Seed
+            * Troll Hide
+            * Bear Hide
+            * Bear Meat
+            * Bear Paw
+            * Bone Fragments
         * Other
 * Add stamina bar
 * Add food

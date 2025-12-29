@@ -950,27 +950,33 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                         mouse_row, mouse_col = dg.mouse_tile
                         if mouse_row == wr and mouse_col == wc:
                             tile_bg = (40, 40, 100)
+                    # Map logical tile characters to non-alphanumeric display glyphs
                     if ch == '#':
                         fg = wall_fg
-                        glyph = ord('#')
+                        disp = '█'  # solid wall
                     elif ch == '.':
                         fg = floor_fg
-                        glyph = ord('.')
+                        disp = '·'  # middot floor
                     elif ch == '+':
                         fg = (255, 215, 0)
-                        glyph = ord('+')
+                        disp = '┼'  # door-esque
                     elif ch == dg.exit_char:
                         fg = (50, 200, 50)
-                        glyph = ord(dg.exit_char)
+                        disp = '▶'  # exit marker
                     else:
+                        # If underlying map contains letters (e.g. older code), render a safe non-alphanumeric fallback
                         fg = (255, 255, 255)
-                        glyph = ord(ch)
+                        # keep displayed char non-alphanumeric if possible
+                        if ch.isalnum():
+                            disp = '•'
+                        else:
+                            disp = ch
                     if not dg.explored[wr][wc]:
                         fg = (int(fg[0] * 0.15), int(fg[1] * 0.15), int(fg[2] * 0.15))
                     if getattr(dg, 'last_swing', None) == (wr, wc):
                         console.print(c, r, '*', fg=(255, 100, 50), bg=None)
                     else:
-                        console.print(c, r, chr(glyph), fg=fg, bg=tile_bg)
+                        console.print(c, r, disp, fg=fg, bg=tile_bg)
 
             dg.update_monster_alerts()
             for m in getattr(dg, 'monsters', []):
@@ -978,15 +984,18 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                  mc = m['col'] - cam_x
                  if 0 <= mr < view_h and 0 <= mc < view_w:
                      if dg.explored[m['row']][m['col']]:
+                         # Use a non-alphanumeric glyph for monsters
+                         gdisp = '☠'
                          if m.get('alerted', False):
-                             console.print(mc, mr, 'G', fg=(255, 0, 0), bg=(0,0,0))
+                             console.print(mc, mr, gdisp, fg=(255, 0, 0), bg=(0,0,0))
                          else:
-                             console.print(mc, mr, 'G', fg=(180, 30, 30), bg=(0,0,0))
+                             console.print(mc, mr, gdisp, fg=(180, 30, 30), bg=(0,0,0))
 
             pr = dg.player_row - cam_y
             pc = dg.player_col - cam_x
             if 0 <= pr < view_h and 0 <= pc < view_w:
-                console.print(pc, pr, '@', fg=(255, 255, 255), bg=(0, 0, 0))
+                # Use a non-alphanumeric glyph for the player
+                console.print(pc, pr, '●', fg=(255, 255, 255), bg=(0, 0, 0))
 
             # HUD hotbar
             for i in range(8):
@@ -995,14 +1004,17 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                 bg = (50, 50, 50)
                 item = dg.inventory[0][i] if i < len(dg.inventory[0]) else None
                 if item is None:
+                    # show slot number (numbers must remain readable)
                     console.print(x, y, str(i + 1), fg=(200, 200, 200), bg=bg)
                 else:
+                    # Use non-alphanumeric icons for items while keeping the slot labeling numeric
                     if item.get('type') == 'weapon':
-                        icon = 'B'
+                        icon = '⚔'
                     elif item.get('type') == 'coin':
-                        icon = 'o' if item.get('count', 1) == 1 else str(min(9, item.get('count', 1)))
+                        # show count next to a small coin marker
+                        icon = '◦' if item.get('count', 1) == 1 else str(min(9, item.get('count', 1)))
                     else:
-                        icon = '?'
+                        icon = '•'
                     if dg.equipped_slot == i:
                         console.print(x, y, icon, fg=(255, 230, 150), bg=(140, 90, 20))
                     else:
@@ -1019,11 +1031,11 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                             console.print(x, y, '.', fg=(100, 100, 100), bg=bg)
                         else:
                             if item.get('type') == 'weapon':
-                                icon = 'B'
+                                icon = '⚔'
                             elif item.get('type') == 'coin':
-                                icon = 'o' if item.get('count', 1) == 1 else str(min(9, item.get('count', 1)))
+                                icon = '◦' if item.get('count', 1) == 1 else str(min(9, item.get('count', 1)))
                             else:
-                                icon = '?'
+                                icon = '•'
                             console.print(x, y, icon, fg=(200, 200, 200), bg=bg)
 
             # Inventory summary
@@ -1050,17 +1062,17 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                     break
                 count = data['count']
                 if itype == 'weapon':
-                    icon = 'B'
+                    icon = '⚔'
                 elif itype == 'coin':
-                    icon = 'o'
+                    icon = '◦'
                 else:
-                    icon = '?'
+                    icon = '•'
                 count_str = str(count).rjust(3)
                 inv_str = f"{count_str} {icon}"
                 console.print(inv_x, inv_y + inv_index, inv_str, fg=(200, 200, 200), bg=None)
                 inv_index += 1
 
-            # Health bar (uses 'H')
+            # Health bar (uses digits instead of alpha 'H')
             health_pct = max(0.0, min(1.0, dg.player_health / dg.player_max_health))
             bar_height = 2
             steps = bar_height * 4
@@ -1071,17 +1083,19 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                 y = bar_top + i
                 cell_index = bar_height - 1 - i
                 cell_filled = max(0, min(4, filled_steps - cell_index * 4))
+                # show a digit for filled amount (0-4)
+                ch = str(cell_filled)
                 if cell_filled >= 4:
-                    ch = 'H'; fg = (255, 0, 0)
+                    fg_col = (255, 0, 0)
                 elif cell_filled >= 3:
-                    ch = 'H'; fg = (220, 30, 30)
+                    fg_col = (220, 30, 30)
                 elif cell_filled >= 2:
-                    ch = 'H'; fg = (200, 60, 60)
+                    fg_col = (200, 60, 60)
                 elif cell_filled >= 1:
-                    ch = 'H'; fg = (150, 40, 40)
+                    fg_col = (150, 40, 40)
                 else:
-                    ch = 'H'; fg = (80, 20, 20)
-                console.print(bar_x, y, ch, fg=fg, bg=(0,0,0))
+                    fg_col = (80, 20, 20)
+                console.print(bar_x, y, ch, fg=fg_col, bg=(0,0,0))
             health_str = str(dg.player_health)
             health_num_x = bar_x + 1
             health_num_y = bar_top + bar_height // 2
@@ -1089,18 +1103,18 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                 health_num_x = max(0, view_w - len(health_str))
             console.print(health_num_x, health_num_y, health_str, fg=(255, 200, 200), bg=(0,0,0))
 
-            # Stamina bar (uses 'S')
+            # Stamina bar (use digits for icons)
             stamina_val = max(0.0, min(dg.player_max_stamina, dg.player_stamina))
             stamina_pct = stamina_val / dg.player_max_stamina
             bar_w = 2
             start_x = max(0, (view_w - bar_w) // 2)
             stamina_y = max(0, bar_top - 1)
             if stamina_pct >= 1.0:
-                icons = [('S', (255, 215, 0)), ('S', (255, 215, 0))]
+                icons = [('9', (255, 215, 0)), ('9', (255, 215, 0))]
             elif stamina_pct >= 0.5:
-                icons = [('S', (255, 215, 0)), ('S', (220, 180, 20))]
+                icons = [('9', (255, 215, 0)), ('5', (220, 180, 20))]
             else:
-                icons = [('S', (180, 140, 10)), ('S', (100, 80, 0))]
+                icons = [('3', (180, 140, 10)), ('1', (100, 80, 0))]
             for i in range(bar_w):
                 x = start_x + i
                 ch, fg = icons[i]
