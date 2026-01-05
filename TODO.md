@@ -245,6 +245,13 @@
             * Bear Meat
             * Bear Paw
             * Bone Fragments
+            * Ectoplasm
+            * **Swamp Key**
+            * Ooze
+            * Entrails
+            * Bloodbag
+            * Guck
+            * Root
         * Other
 * Add stamina bar
 * Add food

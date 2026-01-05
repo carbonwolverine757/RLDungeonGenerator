@@ -882,6 +882,54 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
         # ignore and use defaults
         pass
 
+    # Helper function to get character code from tileset position (1-based row/col)
+    def get_tileset_char(row_1based, col_1based_from_left=None, col_1based_from_right=None):
+        """Get character code from tileset position.
+        row_1based: 1-based row number from top
+        col_1based_from_left: 1-based column from left (if specified)
+        col_1based_from_right: 1-based column from right (if specified)
+        Returns character code (integer) for use with console.print()
+        """
+        # Detect tileset dimensions
+        tileset_cols = 32  # default assumption
+        tileset_rows = 16  # default assumption
+        try:
+            shape = getattr(tileset, 'shape', None)
+            if shape:
+                if isinstance(shape, (list, tuple)) and len(shape) >= 2:
+                    tileset_rows, tileset_cols = int(shape[0]), int(shape[1])
+                elif isinstance(shape, int):
+                    # Single dimension - assume square-ish or use default
+                    pass
+        except Exception:
+            pass
+        
+        # Convert 1-based to 0-based
+        row_0based = row_1based - 1
+        
+        # Determine column
+        if col_1based_from_right is not None:
+            # Convert "from right" to "from left"
+            col_0based = tileset_cols - col_1based_from_right
+        elif col_1based_from_left is not None:
+            col_0based = col_1based_from_left - 1
+        else:
+            raise ValueError("Must specify either col_1based_from_left or col_1based_from_right")
+        
+        # Calculate character code: row * cols + col
+        char_code = row_0based * tileset_cols + col_0based
+        return char_code
+    
+    # Calculate character codes for game entities
+    # Monsters: 4th row from top, 16th column from right
+    monster_char = get_tileset_char(4, col_1based_from_right=16)
+    # Coins: 11th row from top, 15th column from left
+    coin_char = get_tileset_char(11, col_1based_from_left=15)
+    # Attack indicator: 21st row from top, 20th column from left
+    attack_char = get_tileset_char(21, col_1based_from_left=20)
+    # Player: 15th row from top, 4th column from left
+    player_char = get_tileset_char(15, col_1based_from_left=4)
+
     console = tcod.console.Console(view_w, view_h, order="F")
 
     with tcod.context.new(
@@ -950,7 +998,7 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                         mouse_row, mouse_col = dg.mouse_tile
                         if mouse_row == wr and mouse_col == wc:
                             tile_bg = (40, 40, 100)
-                    # Map logical tile characters to non-alphanumeric display glyphs
+                    # Map logical tile characters to display glyphs
                     if ch == '#':
                         fg = wall_fg
                         disp = '█'  # solid wall
@@ -960,6 +1008,9 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                     elif ch == '+':
                         fg = (255, 215, 0)
                         disp = '┼'  # door-esque
+                    elif ch == 'o':
+                        fg = (255, 215, 0)
+                        disp = chr(coin_char)  # coin symbol from tileset
                     elif ch == dg.exit_char:
                         fg = (50, 200, 50)
                         disp = '▶'  # exit marker
@@ -974,7 +1025,7 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                     if not dg.explored[wr][wc]:
                         fg = (int(fg[0] * 0.15), int(fg[1] * 0.15), int(fg[2] * 0.15))
                     if getattr(dg, 'last_swing', None) == (wr, wc):
-                        console.print(c, r, '*', fg=(255, 100, 50), bg=None)
+                        console.print(c, r, chr(attack_char), fg=(255, 100, 50), bg=None)
                     else:
                         console.print(c, r, disp, fg=fg, bg=tile_bg)
 
@@ -984,8 +1035,8 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                  mc = m['col'] - cam_x
                  if 0 <= mr < view_h and 0 <= mc < view_w:
                      if dg.explored[m['row']][m['col']]:
-                         # Use a non-alphanumeric glyph for monsters
-                         gdisp = '☠'
+                         # Use tileset symbol for monsters
+                         gdisp = chr(monster_char)
                          if m.get('alerted', False):
                              console.print(mc, mr, gdisp, fg=(255, 0, 0), bg=(0,0,0))
                          else:
@@ -994,8 +1045,8 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
             pr = dg.player_row - cam_y
             pc = dg.player_col - cam_x
             if 0 <= pr < view_h and 0 <= pc < view_w:
-                # Use a non-alphanumeric glyph for the player
-                console.print(pc, pr, '●', fg=(255, 255, 255), bg=(0, 0, 0))
+                # Use tileset symbol for the player
+                console.print(pc, pr, chr(player_char), fg=(255, 255, 255), bg=(0, 0, 0))
 
             # HUD hotbar
             for i in range(8):
@@ -1007,12 +1058,12 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                     # show slot number (numbers must remain readable)
                     console.print(x, y, str(i + 1), fg=(200, 200, 200), bg=bg)
                 else:
-                    # Use non-alphanumeric icons for items while keeping the slot labeling numeric
+                    # Use tileset symbols for items
                     if item.get('type') == 'weapon':
                         icon = '⚔'
                     elif item.get('type') == 'coin':
-                        # show count next to a small coin marker
-                        icon = '◦' if item.get('count', 1) == 1 else str(min(9, item.get('count', 1)))
+                        # Use coin symbol from tileset, show count if > 1
+                        icon = chr(coin_char) if item.get('count', 1) == 1 else str(min(9, item.get('count', 1)))
                     else:
                         icon = '•'
                     if dg.equipped_slot == i:
@@ -1033,7 +1084,7 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                             if item.get('type') == 'weapon':
                                 icon = '⚔'
                             elif item.get('type') == 'coin':
-                                icon = '◦' if item.get('count', 1) == 1 else str(min(9, item.get('count', 1)))
+                                icon = chr(coin_char) if item.get('count', 1) == 1 else str(min(9, item.get('count', 1)))
                             else:
                                 icon = '•'
                             console.print(x, y, icon, fg=(200, 200, 200), bg=bg)
@@ -1064,7 +1115,7 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                 if itype == 'weapon':
                     icon = '⚔'
                 elif itype == 'coin':
-                    icon = '◦'
+                    icon = chr(coin_char)
                 else:
                     icon = '•'
                 count_str = str(count).rjust(3)
