@@ -241,18 +241,93 @@
             * Greydwarf Eye
             * Ancient Seed
             * Troll Hide
+            * Coins
             * Bear Hide
             * Bear Meat
             * Bear Paw
             * Bone Fragments
             * Ectoplasm
+            * **Hildir's Brass Chest**
             * **Swamp Key**
             * Ooze
             * Entrails
             * Bloodbag
             * Guck
             * Root
+            * Chain
+            * Coal
+            * Surtling Core
+            * **Kvastur**
+            * **Wishbone**
+            * Wolf Pelt
+            * Wolf Fang
+            * Wolf Meat
+            * Freeze Gland
+            * Red Jute
+            * Crystal
+            * **Hildir's Silver Chest**
+            * **Dragon Tear**
+            * Black Metal Scrap
+            * Lox Pelt
+            * Lox Meat
+            * Needle
+            * Tar
+            * Vile Ribcage
+            * Fuling Totem
+            * **Hildir's Bronze Chest**
+            * **Torn Spirit**
+            * Carapace
+            * Seeker Meat
+            * Hare Meat
+            * Scale Hide
+            * Mandible
+            * Bilebag
+            * Bloodclot
+            * Royal Jelly
+            * Black Marble
+            * Soft Tissue
+            * **Hildir's Carapace Chest**
+            * **Majestic Carapace**
+            * Charred Bone
+            * Volture Meat
+            * Volture Egg
+            * Asksvin Tail
+            * Asksvin Hide
+            * Asksvin Bladder
+            * Sulfur
+            * Proustite Powder
+            * Charred Cogwheel
+            * Celestial Feather
+            * Morgan Sinew
+            * Morgan Heart
+            * Bonemaw Meat
+            * Bonemaw Tooth
+            * **Dyrnwyn Hilt Fragment**
+            * **Fader Relic**
         * Other
+        * Trophies
+            * Boar Trophy
+            * Neck Trophy
+            * Deer Trophy
+            * **Eikthyr Trophy**
+            * Greydwarf Trophy
+            * Greydwarf Shaman Trophy
+            * Greydwarf Brute Trophy
+            * Skeleton Trophy
+            * Ghost Trophy
+            * Rancid Remains Trophy
+            * Troll Trophy
+            * Bear Trophy
+            * **Brenna Trophy**
+            * **The Elder Trophy**
+            * Draugr Trophy
+            * Leech Trophy
+            * Surtling Trophy
+            * Draugr Elite Trophy
+            * Abomination Trophy
+            * Wraith Trophy
+            * **Kvastur**
+            * **Bonemass Trophy**
 * Add stamina bar
 * Add food
 * Add more foood
@@ -266,7 +341,6 @@
         * Banded Shield
         * Iron Tower Shield
         * Silver Shield
-        * Serpent Scale Buckler
         * Serpent Scale Shield
         * Black Metal Shield
         * Black Metal Tower Shield

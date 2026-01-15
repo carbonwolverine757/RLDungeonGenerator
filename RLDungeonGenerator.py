@@ -150,8 +150,8 @@ class RLDungeonGenerator:
         self.inventory[0][0] = {"type": "weapon", "name": "Wooden Sword", "damage": 5}
 
         # Stamina fields: regen and cooldown
-        self.stamina_regen_rate = 1.0  # stamina per second
-        self.stamina_cooldown_seconds = 1.5  # seconds without regen after attack
+        self.stamina_regen_rate = 2.0  # stamina per second
+        self.stamina_cooldown_seconds = 1.0  # seconds without regen after attack
         self.stamina_cooldown_until = 0.0
         self.last_stamina_update = time.time()
 
@@ -728,6 +728,9 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
 
     # Detect available charmap constants in tcod (may be in different modules)
     charmap_candidates = []
+    charmap_unicode = None
+    charmap_cp437 = None
+    used_charmap = 'unknown'  # Track which charmap was actually used
     try:
         for src in (getattr(tcod, 'tileset', None), tcod, getattr(tcod, 'constants', None)):
             if src is None:
@@ -735,7 +738,12 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
             for name in ('CHARMAP_UNICODE', 'CHARMAP_CP437', 'CHARMAP_TCOD', 'CHARMAP_DEFAULT'):
                 if hasattr(src, name):
                     try:
-                        charmap_candidates.append(getattr(src, name))
+                        ch = getattr(src, name)
+                        charmap_candidates.append(ch)
+                        if name == 'CHARMAP_UNICODE':
+                            charmap_unicode = ch
+                        elif name == 'CHARMAP_CP437':
+                            charmap_cp437 = ch
                     except Exception:
                         pass
     except Exception:
@@ -778,20 +786,65 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                 img_rows = None
 
             # When calling try_load_tilesheet, prefer passing grid counts (cols, rows) which tcod.load_tilesheet expects
-            tileset = try_load_tilesheet(unicode_tileset_path, tile_w, tile_h, charmap_candidates, cols=img_cols, rows=img_rows)
+            # Prefer a Unicode charmap constant first so codepoints in the image map as intended
+            local_charmaps = list(charmap_candidates)
+            try:
+                # prefer CHARMAP_UNICODE if available in tcod or constants
+                ch_unicode = None
+                for src in (getattr(tcod, 'tileset', None), tcod, getattr(tcod, 'constants', None)):
+                    if src is None:
+                        continue
+                    if hasattr(src, 'CHARMAP_UNICODE'):
+                        ch_unicode = getattr(src, 'CHARMAP_UNICODE')
+                        break
+                if ch_unicode is not None:
+                    # move to front if present
+                    if ch_unicode in local_charmaps:
+                        local_charmaps.remove(ch_unicode)
+                    local_charmaps.insert(0, ch_unicode)
+            except Exception:
+                pass
+            # Try Unicode charmap first explicitly, since our tileset uses Unicode codepoints
+            # CP437 only supports 0-255, but our tileset has Unicode codepoints beyond that range
+            tileset = None
+            if charmap_unicode is not None:
+                try:
+                    tileset = try_load_tilesheet(unicode_tileset_path, tile_w, tile_h, (charmap_unicode,), cols=img_cols, rows=img_rows)
+                    if tileset is not None:
+                        used_charmap = 'unicode'
+                        print(f"Loaded Unicode tileset image: {unicode_tileset_path} (tile {tile_w}x{tile_h}, cols={img_cols}, rows={img_rows}, charmap=unicode)")
+                except Exception as e:
+                    print(f"Failed to load with Unicode charmap: {e}")
+                    tileset = None
+            
+            # If Unicode loading succeeded, wrap it
             if tileset is not None:
-                print(f"Loaded Unicode tileset image: {unicode_tileset_path} (tile {tile_w}x{tile_h}, cols={img_cols}, rows={img_rows})")
-                # Wrap the tileset to override tile_width/tile_height reporting
                 class TilesetWrapper:
-                    def __init__(self, inner, tw, th):
+                    def __init__(self, inner, tw, th, rows=None, cols=None):
                         self._inner = inner
                         self.tile_width = tw
                         self.tile_height = th
+                        # Expose shape as (rows, cols) when available or when provided
+                        try:
+                            if hasattr(inner, 'shape') and getattr(inner, 'shape'):
+                                self.shape = getattr(inner, 'shape')
+                            else:
+                                # use provided rows/cols if available
+                                if rows is not None and cols is not None:
+                                    self.shape = (int(rows), int(cols))
+                                else:
+                                    self.shape = None
+                        except Exception:
+                            self.shape = None
                     def __getattr__(self, name):
                         return getattr(self._inner, name)
 
-                tileset = TilesetWrapper(tileset, tile_w, tile_h)
-                print(f"Wrapped tileset: tile_width={tileset.tile_width}, tile_height={tileset.tile_height}")
+                # Pass img_rows/img_cols to wrapper so shape is accurate
+                tileset = TilesetWrapper(tileset, tile_w, tile_h, rows=img_rows, cols=img_cols)
+                print(f"Wrapped tileset: tile_width={tileset.tile_width}, tile_height={tileset.tile_height}, shape={getattr(tileset, 'shape', None)}")
+            else:
+                # Unicode charmap not available or failed - don't fall back to CP437 for Unicode tileset
+                print(f"WARNING: Could not load {unicode_tileset_path} with CHARMAP_UNICODE. Unicode tileset requires Unicode charmap support in tcod.")
         except Exception as e:
             print(f"Failed to load unicode tileset image: {e}")
             tileset = None
@@ -882,53 +935,215 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
         # ignore and use defaults
         pass
 
-    # Helper function to get character code from tileset position (1-based row/col)
-    def get_tileset_char(row_1based, col_1based_from_left=None, col_1based_from_right=None):
-        """Get character code from tileset position.
-        row_1based: 1-based row number from top
-        col_1based_from_left: 1-based column from left (if specified)
-        col_1based_from_right: 1-based column from right (if specified)
-        Returns character code (integer) for use with console.print()
-        """
-        # Detect tileset dimensions
-        tileset_cols = 32  # default assumption
-        tileset_rows = 16  # default assumption
-        try:
-            shape = getattr(tileset, 'shape', None)
-            if shape:
-                if isinstance(shape, (list, tuple)) and len(shape) >= 2:
-                    tileset_rows, tileset_cols = int(shape[0]), int(shape[1])
-                elif isinstance(shape, int):
-                    # Single dimension - assume square-ish or use default
-                    pass
-        except Exception:
-            pass
-        
-        # Convert 1-based to 0-based
-        row_0based = row_1based - 1
-        
-        # Determine column
-        if col_1based_from_right is not None:
-            # Convert "from right" to "from left"
-            col_0based = tileset_cols - col_1based_from_right
-        elif col_1based_from_left is not None:
-            col_0based = col_1based_from_left - 1
+    # Determine tileset columns/rows (prefer image-detected img_cols/img_rows if available)
+    try:
+        if 'img_cols' in locals() and img_cols is not None:
+            tileset_cols = int(img_cols)
         else:
-            raise ValueError("Must specify either col_1based_from_left or col_1based_from_right")
-        
-        # Calculate character code: row * cols + col
-        char_code = row_0based * tileset_cols + col_0based
-        return char_code
+            _shape = getattr(tileset, 'shape', None)
+            if isinstance(_shape, (list, tuple)) and len(_shape) >= 2:
+                tileset_rows, tileset_cols = int(_shape[0]), int(_shape[1])
+            else:
+                tileset_cols = 32
+        if 'img_rows' in locals() and img_rows is not None:
+            tileset_rows = int(img_rows)
+    except Exception:
+        tileset_cols = 32
+        tileset_rows = None
+
+    base_offset = 32  # generator placed codepoints starting at U+0020
+
+    # Allow small row offset adjustment if tilesheet glyphs are shifted (set to -1 or 1 to tweak)
+    tilesheet_row_offset = 0
+
+    # Build tilesheet codepoints mapping matching generate_unicode_tileset.py
+    tilesheet_codepoints = None
+    try:
+        codepoints = list(range(32, 127))
+        codepoints += list(range(0x2500, 0x2580))
+        codepoints += list(range(0x2580, 0x25A0))
+        codepoints += list(range(0x25A0, 0x25FF))
+        codepoints += list(range(0x2600, 0x26FF))
+        codepoints += list(range(0x2700, 0x27BF))
+        codepoints += [0x2588, 0x00B7, 0x2193]
+        tilesheet_codepoints = codepoints
+    except Exception:
+        tilesheet_codepoints = None
+
+    def get_tile_index(row_1based, col_1based_from_left=None, col_1based_from_right=None):
+        """Return the tile index (0-based) for the tile at (row, col) in the tilesheet.
+        Rows/cols are 1-based. This returns the raw tile index that can be used directly
+        with CP437 or TCOD charmaps where tile index N maps to character at position N.
+        """
+        # convert to 0-based and apply optional offset
+        row0 = (row_1based - 1) + tilesheet_row_offset
+        if col_1based_from_right is not None:
+            col0 = tileset_cols - col_1based_from_right
+        elif col_1based_from_left is not None:
+            col0 = col_1based_from_left - 1
+        else:
+            raise ValueError("Must specify a column")
+        idx0 = row0 * tileset_cols + col0
+        return idx0
     
-    # Calculate character codes for game entities
-    # Monsters: 4th row from top, 16th column from right
-    monster_char = get_tileset_char(4, col_1based_from_right=16)
-    # Coins: 11th row from top, 15th column from left
-    coin_char = get_tileset_char(11, col_1based_from_left=15)
-    # Attack indicator: 21st row from top, 20th column from left
-    attack_char = get_tileset_char(21, col_1based_from_left=20)
-    # Player: 15th row from top, 4th column from left
-    player_char = get_tileset_char(15, col_1based_from_left=4)
+    def get_char_from_tile_index(tile_idx, use_unicode_charmap=False):
+        """Convert a tile index to a character for rendering.
+        If use_unicode_charmap is True, use the codepoint from tilesheet_codepoints.
+        Otherwise, for CP437/TCOD, tile index N maps directly to character at codepoint N (if < 256).
+        For indices >= 256 with CP437/TCOD, fall back to using codepoint from tilesheet_codepoints.
+        """
+        if use_unicode_charmap:
+            # With Unicode charmap, use the codepoint that's actually at this tile index
+            if tilesheet_codepoints is not None and 0 <= tile_idx < len(tilesheet_codepoints):
+                return chr(tilesheet_codepoints[tile_idx])
+            # Fallback: assume codepoint = base_offset + tile_idx
+            try:
+                return chr(base_offset + tile_idx)
+            except:
+                return '?'
+        else:
+            # With CP437/TCOD charmap, tile index N maps to character at codepoint N
+            # But CP437 only supports 0-255, so for indices >= 256, use Unicode approach
+            if tile_idx < 256:
+                try:
+                    return chr(tile_idx)
+                except:
+                    return '?'
+            # For indices >= 256, use the codepoint from tilesheet_codepoints (like Unicode)
+            if tilesheet_codepoints is not None and 0 <= tile_idx < len(tilesheet_codepoints):
+                try:
+                    return chr(tilesheet_codepoints[tile_idx])
+                except:
+                    return '?'
+            # Last resort: use base_offset + index
+            try:
+                return chr(base_offset + tile_idx)
+            except:
+                return '?'
+
+    def tilesheet_char_for_unicode(cp: int) -> str:
+        """Map a Unicode codepoint (logical) to the character code that will display the matching glyph
+        from the tilesheet. If a direct mapping exists in tilesheet_codepoints, return that; otherwise
+        attempt index-based fallback, then finally return the original character.
+        Returns a single-character string.
+        """
+        try:
+            if tilesheet_codepoints is not None:
+                # If the requested codepoint is present in the tilesheet, return it directly
+                if cp in tilesheet_codepoints:
+                    return chr(cp)
+                # Otherwise, try to treat cp as an index offset from base_offset
+                idx0 = cp - base_offset
+                if 0 <= idx0 < len(tilesheet_codepoints):
+                    return chr(tilesheet_codepoints[idx0])
+                # As a last resort, if cp is within image range, map by raw index
+            # Fallback: return original character if nothing else
+            return chr(cp)
+        except Exception:
+            try:
+                return chr(cp)
+            except Exception:
+                return '?'
+
+    # Debugging: print tileset mapping details and computed tile indices for key glyphs
+    try:
+        print("DEBUG: tileset_cols=", tileset_cols, "tileset_rows=", locals().get('tileset_rows', None))
+        print("DEBUG: img_cols=", locals().get('img_cols', None), "img_rows=", locals().get('img_rows', None))
+        print("DEBUG: base_offset=", base_offset, "tilesheet_row_offset=", tilesheet_row_offset)
+        print("DEBUG: used_charmap=", used_charmap)
+        def _dbg_tile(r, c, name):
+            tile_idx = get_tile_index(r, col_1based_from_left=c)
+            if tilesheet_codepoints is not None and 0 <= tile_idx < len(tilesheet_codepoints):
+                cp = tilesheet_codepoints[tile_idx]
+            else:
+                cp = base_offset + tile_idx
+            ch_unicode = get_char_from_tile_index(tile_idx, use_unicode_charmap=True)
+            ch_direct = get_char_from_tile_index(tile_idx, use_unicode_charmap=False)
+            try:
+                ch_display = ch_unicode if use_unicode else ch_direct
+            except:
+                ch_display = '?'
+            print(f"DEBUG: {name} row={r} col={c} -> tile_idx={tile_idx} cp={cp} chr_unicode={ch_unicode} chr_direct={ch_direct} chr_used={ch_display}")
+        # Expected generator placements (example positions)
+        # Check both column 3 and column 5 for diamond suit
+        _dbg_tile(15, 3, 'player_char_col3')
+        _dbg_tile(15, 5, 'player_char_col5')
+        # Also check what codepoint U+2666 maps to
+        if tilesheet_codepoints is not None and 0x2666 in tilesheet_codepoints:
+            idx_2666 = tilesheet_codepoints.index(0x2666)
+            row_2666 = idx_2666 // tileset_cols + 1
+            col_2666 = idx_2666 % tileset_cols + 1
+            print(f"DEBUG: Diamond suit U+2666 at tile_idx={idx_2666}, row={row_2666}, col={col_2666}")
+        _dbg_tile(8, 8, 'floor_char')
+        _dbg_tile(10, 10, 'coin_char')
+        _dbg_tile(4, 2, 'monster_char')
+        _dbg_tile(9, 1, 'exit_char')
+    except Exception as _e:
+        print('DEBUG: failed to print tileset debug info:', _e)
+
+    # Calculate tile indices for game entities using specified positions
+    # Then convert to characters based on the charmap being used
+    # Player character: diamond suit symbol (♦) U+2666
+    # With Unicode charmap, we can use the codepoint directly - tcod will find the tile
+    player_codepoint = 0x2666  # Diamond suit (♦)
+    if tilesheet_codepoints is not None and player_codepoint in tilesheet_codepoints:
+        # Find the tile index where this codepoint is located
+        player_tile_idx = tilesheet_codepoints.index(player_codepoint)
+    else:
+        # Fallback: calculate based on row/col if codepoint not found
+        # Row 15, column 5 based on tilesheet layout
+        player_tile_idx = get_tile_index(15, col_1based_from_left=5)
+    attack_tile_idx = get_tile_index(21, col_1based_from_left=20)
+    monster_tile_idx = get_tile_index(4, col_1based_from_left=2)
+    floor_tile_idx = get_tile_index(8, col_1based_from_left=8)
+    coin_tile_idx = get_tile_index(10, col_1based_from_left=10)
+    exit_tile_idx = get_tile_index(9, col_1based_from_left=1)
+    
+    # Determine if we're using Unicode charmap (tile index -> codepoint from tilesheet_codepoints)
+    # or CP437/TCOD charmap (tile index -> character at codepoint = tile index)
+    use_unicode = (used_charmap == 'unicode')
+    
+    # Convert tile indices to characters for rendering
+    # IMPORTANT: The charmap affects how tcod interprets the tilesheet, but we always need to
+    # pass the actual Unicode codepoint that exists in the tilesheet at that tile index.
+    # With Unicode charmap: codepoint N maps to tile containing codepoint N
+    # With CP437 charmap: codepoint N (0-255) maps to tile index N, but for Unicode codepoints
+    # we still need to pass them - tcod should handle it if the tileset supports it
+    
+    def get_char_from_tile_idx(tile_idx):
+        """Get the character for a tile index by using its codepoint from tilesheet_codepoints."""
+        if tilesheet_codepoints is not None and 0 <= tile_idx < len(tilesheet_codepoints):
+            cp = tilesheet_codepoints[tile_idx]
+            return chr(cp)
+        # Fallback
+        try:
+            return chr(base_offset + tile_idx)
+        except:
+            return '?'
+    
+    # For player, use the diamond suit codepoint (U+2666) directly
+    # NOTE: With CP437 charmap, Unicode codepoints > 255 may not work correctly.
+    # The tileset should be loaded with Unicode charmap for best results.
+    if tilesheet_codepoints is not None and player_codepoint in tilesheet_codepoints:
+        player_char = chr(player_codepoint)  # Use codepoint directly - tcod will find the tile
+        print(f"DEBUG: Player character set to U+{player_codepoint:04X} ({player_char})")
+    else:
+        player_char = get_char_from_tile_idx(player_tile_idx)
+        print(f"DEBUG: Player character from tile index {player_tile_idx}: {player_char} (U+{ord(player_char):04X})")
+    attack_char = get_char_from_tile_idx(attack_tile_idx)
+    monster_char = get_char_from_tile_idx(monster_tile_idx)
+    floor_char = get_char_from_tile_idx(floor_tile_idx)
+    coin_char = get_char_from_tile_idx(coin_tile_idx)
+    exit_char = get_char_from_tile_idx(exit_tile_idx)
+
+    # Print what we computed for debugging
+    print(f"DEBUG: Computed characters:")
+    print(f"  player_char = U+{ord(player_char):04X} ({player_char})")
+    print(f"  attack_char = U+{ord(attack_char):04X} ({attack_char})")
+    print(f"  monster_char = U+{ord(monster_char):04X} ({monster_char})")
+    print(f"  floor_char = U+{ord(floor_char):04X} ({floor_char})")
+    print(f"  coin_char = U+{ord(coin_char):04X} ({coin_char})")
+    print(f"  exit_char = U+{ord(exit_char):04X} ({exit_char})")
 
     console = tcod.console.Console(view_w, view_h, order="F")
 
@@ -1004,16 +1219,16 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                         disp = '█'  # solid wall
                     elif ch == '.':
                         fg = floor_fg
-                        disp = '·'  # middot floor
+                        disp = floor_char  # floor symbol from tileset
                     elif ch == '+':
                         fg = (255, 215, 0)
                         disp = '┼'  # door-esque
                     elif ch == 'o':
                         fg = (255, 215, 0)
-                        disp = chr(coin_char)  # coin symbol from tileset
+                        disp = coin_char  # coin symbol from tileset
                     elif ch == dg.exit_char:
                         fg = (50, 200, 50)
-                        disp = '▶'  # exit marker
+                        disp = exit_char  # exit symbol from tileset
                     else:
                         # If underlying map contains letters (e.g. older code), render a safe non-alphanumeric fallback
                         fg = (255, 255, 255)
@@ -1025,7 +1240,7 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                     if not dg.explored[wr][wc]:
                         fg = (int(fg[0] * 0.15), int(fg[1] * 0.15), int(fg[2] * 0.15))
                     if getattr(dg, 'last_swing', None) == (wr, wc):
-                        console.print(c, r, chr(attack_char), fg=(255, 100, 50), bg=None)
+                        console.print(c, r, attack_char, fg=(255, 100, 50), bg=None)
                     else:
                         console.print(c, r, disp, fg=fg, bg=tile_bg)
 
@@ -1036,7 +1251,7 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                  if 0 <= mr < view_h and 0 <= mc < view_w:
                      if dg.explored[m['row']][m['col']]:
                          # Use tileset symbol for monsters
-                         gdisp = chr(monster_char)
+                         gdisp = monster_char
                          if m.get('alerted', False):
                              console.print(mc, mr, gdisp, fg=(255, 0, 0), bg=(0,0,0))
                          else:
@@ -1046,7 +1261,7 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
             pc = dg.player_col - cam_x
             if 0 <= pr < view_h and 0 <= pc < view_w:
                 # Use tileset symbol for the player
-                console.print(pc, pr, chr(player_char), fg=(255, 255, 255), bg=(0, 0, 0))
+                console.print(pc, pr, player_char, fg=(255, 255, 255), bg=(0, 0, 0))
 
             # HUD hotbar
             for i in range(8):
@@ -1055,15 +1270,27 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                 bg = (50, 50, 50)
                 item = dg.inventory[0][i] if i < len(dg.inventory[0]) else None
                 if item is None:
-                    # show slot number (numbers must remain readable)
-                    console.print(x, y, str(i + 1), fg=(200, 200, 200), bg=bg)
+                    # show slot number using correct tileset mapping
+                    # Digits '0'-'9' are at codepoints 48-57, which in the tileset are at:
+                    # index = codepoint - base_offset, row = index // tileset_cols + 1, col = index % tileset_cols + 1
+                    digit = i + 1  # 1-8
+                    digit_cp = ord('0') + digit  # codepoint for '1'-'8'
+                    digit_idx = digit_cp - base_offset
+                    digit_row = digit_idx // tileset_cols + 1
+                    digit_col = digit_idx % tileset_cols + 1
+                    digit_tile_idx = get_tile_index(digit_row, col_1based_from_left=digit_col)
+                    digit_char = get_char_from_tile_index(digit_tile_idx, use_unicode_charmap=use_unicode)
+                    console.print(x, y, digit_char, fg=(200, 200, 200), bg=bg)
                 else:
                     # Use tileset symbols for items
                     if item.get('type') == 'weapon':
                         icon = '⚔'
                     elif item.get('type') == 'coin':
                         # Use coin symbol from tileset, show count if > 1
-                        icon = chr(coin_char) if item.get('count', 1) == 1 else str(min(9, item.get('count', 1)))
+                        if item.get('count', 1) == 1:
+                            icon = coin_char
+                        else:
+                            icon = tilesheet_char_for_unicode(ord(str(min(9, item.get('count', 1)))[0]))
                     else:
                         icon = '•'
                     if dg.equipped_slot == i:
@@ -1079,12 +1306,16 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                         bg = (40, 40, 40)
                         item = dg.inventory[row][col]
                         if item is None:
-                            console.print(x, y, '.', fg=(100, 100, 100), bg=bg)
+                            # show a tilesheet '.' glyph if available
+                            console.print(x, y, tilesheet_char_for_unicode(ord('.')), fg=(100, 100, 100), bg=bg)
                         else:
                             if item.get('type') == 'weapon':
                                 icon = '⚔'
                             elif item.get('type') == 'coin':
-                                icon = chr(coin_char) if item.get('count', 1) == 1 else str(min(9, item.get('count', 1)))
+                                if item.get('count', 1) == 1:
+                                    icon = coin_char
+                                else:
+                                    icon = tilesheet_char_for_unicode(ord(str(min(9, item.get('count', 1)))[0]))
                             else:
                                 icon = '•'
                             console.print(x, y, icon, fg=(200, 200, 200), bg=bg)
@@ -1115,7 +1346,7 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                 if itype == 'weapon':
                     icon = '⚔'
                 elif itype == 'coin':
-                    icon = chr(coin_char)
+                    icon = coin_char
                 else:
                     icon = '•'
                 count_str = str(count).rjust(3)
@@ -1251,7 +1482,6 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                         dg.swing_weapon()
 
             dg.check_exit()
-
 
 def main():
     parser = argparse.ArgumentParser(description="RL Dungeon Generator")
