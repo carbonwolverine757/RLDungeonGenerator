@@ -150,7 +150,7 @@ class RLDungeonGenerator:
         self.inventory[0][0] = {"type": "weapon", "name": "Wooden Sword", "damage": 5}
 
         # Stamina fields: regen and cooldown
-        self.stamina_regen_rate = 2.0  # stamina per second
+        self.stamina_regen_rate = 10.0  # stamina per second
         self.stamina_cooldown_seconds = 1.0  # seconds without regen after attack
         self.stamina_cooldown_until = 0.0
         self.last_stamina_update = time.time()
