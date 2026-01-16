@@ -7,6 +7,21 @@ import argparse
 import os
 import sys
 import time
+import atexit
+
+# If a debugger is attached (e.g. Visual Studio), pause on exit so console window stays open
+def _pause_on_exit_if_debugger():
+    try:
+        if sys.gettrace() is not None:
+            try:
+                print("\nDebugger detected. Press Enter to exit...")
+                input()
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+atexit.register(_pause_on_exit_if_debugger)
 
 try:
     import tcod
@@ -1484,25 +1499,163 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
             dg.check_exit()
 
 def main():
+    """Main entry point with comprehensive error handling."""
     parser = argparse.ArgumentParser(description="RL Dungeon Generator")
     parser.add_argument("--ascii", action="store_true", help="Force ASCII output, ignore graphics settings")
+    parser.add_argument("--renderer", type=str, default="auto", choices=["auto", "tcod", "bearlib", "ascii"],
+                        help="Choose rendering backend: auto (try tcod first), tcod, bearlib, or ascii")
     parser.add_argument("--level", type=int, default=0, help="Starting level (0-4)")
-    args = parser.parse_args()
+    # Use parse_known_args so unknown args passed by IDE debuggers are ignored
+    args, _ = parser.parse_known_args()
     sys.tracebacklimit = 1000
-    w = 80
-    h = 45
-    dg = RLDungeonGenerator(w, h, level=args.level)
-    dg.generate_map()
-    if args.ascii:
-        dg.print_map()
-    else:
-        try:
-            render_with_tcod(dg)
-        except Exception:
-            import traceback
-            traceback.print_exc()
-            print("render_with_tcod failed; falling back to ASCII output.")
+    
+    try:
+        # Print initialization banner
+        print("=" * 60)
+        print("RLDungeonGenerator - Initializing")
+        print("=" * 60)
+        
+        # Validate level argument
+        if args.level < 0 or args.level > 4:
+            print(f"Warning: Level {args.level} is out of range (0-4), clamping to 0")
+            args.level = 0
+        
+        w = 80
+        h = 45
+        
+        print(f"Creating dungeon generator (size: {w}x{h}, level: {args.level})...")
+        dg = RLDungeonGenerator(w, h, level=args.level)
+        
+        print("Generating map...")
+        dg.generate_map()
+        print(f"Map generated successfully. Level: {dg.level_template.get('name', 'Unknown')}")
+        print()
+        
+        # ASCII mode shortcut
+        if args.ascii:
+            print("ASCII mode requested. Rendering map as text...")
             dg.print_map()
+            print("\nGame ended (ASCII mode).")
+            return
+        
+        renderer = args.renderer
+        
+        # Auto mode: try tcod first, then bearlib, then ascii
+        if renderer == "auto":
+            print("Auto mode: Attempting to detect best available renderer...")
+            print("-" * 60)
+            
+            # Try tcod first
+            tcod_success = False
+            try:
+                print("Attempting tcod renderer...")
+                render_with_tcod(dg)
+                print("Game ended (tcod renderer).")
+                tcod_success = True
+                return
+            except ImportError:
+                print("✗ tcod not available")
+            except Exception as e:
+                print(f"✗ tcod renderer failed: {type(e).__name__}")
+            
+            # Try bearlib second
+            if not tcod_success:
+                print()
+                print("Trying BearLibTerminal...")
+                print("-" * 60)
+                bearlib_success = False
+                try:
+                    from render_bearlib import render_with_bearlib
+                    print("Attempting BearLibTerminal renderer...")
+                    render_with_bearlib(dg)
+                    print("Game ended (BearLibTerminal renderer).")
+                    bearlib_success = True
+                    return
+                except ImportError:
+                    print("✗ BearLibTerminal not available")
+                except Exception as e:
+                    print(f"✗ BearLibTerminal renderer failed: {type(e).__name__}")
+                
+                # Fall back to ASCII
+                if not bearlib_success:
+                    print()
+                    print("No graphics renderer available. Falling back to ASCII...")
+                    print("-" * 60)
+                    dg.print_map()
+                    print("\nGame ended (ASCII fallback).")
+                    return
+        
+        # tcod mode
+        elif renderer == "tcod":
+            print("tcod mode requested...")
+            print("-" * 60)
+            try:
+                render_with_tcod(dg)
+                print("Game ended (tcod renderer).")
+            except ImportError:
+                print("✗ tcod is not installed")
+                print("Install with: pip install tcod")
+                print("\nFalling back to ASCII output...")
+                dg.print_map()
+            except Exception as e:
+                print(f"✗ tcod renderer error: {type(e).__name__}: {str(e)[:100]}")
+                print("Falling back to ASCII output...")
+                dg.print_map()
+        
+        # bearlib mode
+        elif renderer == "bearlib":
+            print("BearLibTerminal mode requested...")
+            print("-" * 60)
+            try:
+                from render_bearlib import render_with_bearlib
+                render_with_bearlib(dg)
+                print("Game ended (BearLibTerminal renderer).")
+            except ImportError:
+                print("✗ BearLibTerminal is not installed")
+                print("Install with: pip install bearlib-terminal")
+                print("\nFalling back to ASCII output...")
+                dg.print_map()
+            except Exception as e:
+                print(f"✗ BearLibTerminal error: {type(e).__name__}: {str(e)[:100]}")
+                print("Falling back to ASCII output...")
+                dg.print_map()
+        
+        # ascii mode (explicit)
+        elif renderer == "ascii":
+            print("ASCII mode requested...")
+            print("-" * 60)
+            try:
+                dg.print_map()
+                print("\nGame ended (ASCII mode).")
+            except Exception as e:
+                print(f"✗ Error during ASCII rendering: {type(e).__name__}: {str(e)[:100]}")
+        
+        print()
+        print("=" * 60)
+        print("RLDungeonGenerator terminated normally")
+        print("=" * 60)
+    
+    except KeyboardInterrupt:
+        print("\n\nGame interrupted by user (Ctrl+C)")
+        sys.exit(0)
+    except Exception as e:
+        print(f"\n{'='*60}")
+        print("FATAL ERROR - Initialization Failed")
+        print(f"{'='*60}")
+        print(f"Error Type: {type(e).__name__}")
+        print(f"Error Message: {e}")
+        print()
+        print("Troubleshooting:")
+        print("  1. Verify installation: python check_deps.py")
+        print("  2. Install dependencies: pip install -r requirements.txt")
+        print("  3. Check Python version: python --version (need 3.7+)")
+        print()
+        import traceback
+        print("Technical details:")
+        print("-" * 60)
+        traceback.print_exc()
+        sys.exit(1)
 
-if __name__ == "__main__":
+# Ensure main() is called when the script is executed directly
+if __name__ == '__main__':
     main()

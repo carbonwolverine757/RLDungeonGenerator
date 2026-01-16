@@ -306,28 +306,53 @@
             * **Fader Relic**
         * Other
         * Trophies
-            * Boar Trophy
-            * Neck Trophy
-            * Deer Trophy
-            * **Eikthyr Trophy**
-            * Greydwarf Trophy
-            * Greydwarf Shaman Trophy
-            * Greydwarf Brute Trophy
-            * Skeleton Trophy
-            * Ghost Trophy
-            * Rancid Remains Trophy
-            * Troll Trophy
-            * Bear Trophy
-            * **Brenna Trophy**
-            * **The Elder Trophy**
-            * Draugr Trophy
-            * Leech Trophy
-            * Surtling Trophy
-            * Draugr Elite Trophy
-            * Abomination Trophy
-            * Wraith Trophy
-            * **Kvastur**
-            * **Bonemass Trophy**
+            * Boar Trophy                     (Common, 15%)
+            * Neck Trophy                     (Common, 5%)
+            * Deer Trophy                     (Common, 50%)
+            * **Eikthyr Trophy**              (Boss, 100%)
+            * Greydwarf Trophy                (Common, 5%)
+            * Greydwarf Shaman Trophy         (Uncommon, 10%)
+            * Greydwarf Brute Trophy          (Uncommon, 10%)
+            * Skeleton Trophy                 (Common, 10%)
+            * Ghost Trophy                    (Very Rare, 10%)
+            * Rancid Remains Trophy           (Very Rare, 10%)
+            * Troll Trophy                    (Rare, 50%)
+            * Bear Trophy                     (Rare, 50%)
+            * **Brenna Trophy**               (Miniboss, 100%)
+            * **The Elder Trophy**            (Boss, 100%)
+            * Draugr Trophy                   (Common, 10%)
+            * Leech Trophy                    (Common, 10%)
+            * Surtling Trophy                 (Common, 5%)
+            * Draugr Elite Trophy             (Uncommon, 10%)
+            * Abomination Trophy              (Rare, 30%)
+            * Wraith Trophy                   (Very Rare, 5%)
+            * **Kvastur**                     (Miniboss, 100%)
+            * **Bonemass Trophy**             (Boss, 100%)
+            * Wolf Trophy                     (Common, 10%)
+            * Drake Trophy                    (Common, 10%)
+            * Ulv Trophy                      (Common, 10%)
+            * Fenring Trophy                  (Rare, 10%)
+            * Cultist Trophy                  (Uncommon, 10%)
+            * Stone Golem Trophy              (Very Rare, 5%)
+            * **Geirrhafa Trophy**            (Miniboss, 100%)
+            * **Moder Trophy**                (Boss, 100%)
+            * Fuling Trophy                   (Common, 10%)
+            * Fuling Shaman Trophy            (Rare, 10%)
+            * Deathsquito Trophy              (Common, 5%)
+            * Growth Trophy                   (Uncommon, 5%)
+            * Lox Trophy                      (Uncommon, 10%)
+            * Fuling Berserker Trophy         (Rare, 5%)
+            * Vile Trophy                     (Very Rare, 10%)
+            * **Zil Trophy**                  (Miniboss, 100%)
+            * **Thungr Trophy**               (Miniboss, 100%)
+            * **Yagluth Trophy**              (Boss, 100%)
+            * Hare Trophy                     (Common, 5%)
+            * Seeker Trophy                   (Common, 10%)
+            * Tick Trophy                     (Common, 5%)
+            * Dvergr Trophy                   (Uncommon, 5%)
+            * Gjall Trophy                    (Very Rare, 30%)
+            * Seeker Soldier Trophy           (Very Rare, 5%)
+            * **The Queen Trophy**            ()
 * Add stamina bar
 * Add food
 * Add more foood
