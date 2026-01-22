@@ -8,6 +8,7 @@ import os
 import sys
 import time
 import atexit
+import math
 
 # If a debugger is attached (e.g. Visual Studio), pause on exit so console window stays open
 def _pause_on_exit_if_debugger():
@@ -28,6 +29,8 @@ try:
     import tcod.tileset
 except Exception:
     tcod = None
+
+from weapons_data import get_weapon_by_name, get_all_weapons
 
 # Level template progression
 # Each level defines parameters for dungeon generation
@@ -161,14 +164,20 @@ class RLDungeonGenerator:
 
         # Inventory: 4 rows x 8 cols. Top row (row 0) is the hotbar.
         self.inventory = [[None for _ in range(8)] for _ in range(4)]
-        # Add a wooden sword in the first hotbar slot
-        self.inventory[0][0] = {"type": "weapon", "name": "Wooden Sword", "damage": 5}
+        # Add a wooden sword in the first hotbar slot (copy from weapons data)
+        wooden_sword = get_weapon_by_name("Wooden Sword")
+        if wooden_sword:
+            wooden_sword['type'] = 'weapon'
+            self.inventory[0][0] = wooden_sword
 
         # Stamina fields: regen and cooldown
         self.stamina_regen_rate = 10.0  # stamina per second
         self.stamina_cooldown_seconds = 1.0  # seconds without regen after attack
         self.stamina_cooldown_until = 0.0
         self.last_stamina_update = time.time()
+        
+        # Track the last attack time for attack speed limiting
+        self.last_attack_time = 0.0
 
     def set_level_template(self, level):
         """Set the current level template based on level number."""
@@ -408,6 +417,11 @@ class RLDungeonGenerator:
         self.spawn_monsters(monster_count, monster_health)
         self.reveal_current_area()
         self.place_exit()
+        # spawn weapon items after map and exit placed
+        try:
+            self.spawn_weapon_items()
+        except Exception:
+            pass
 
     def spawn_monsters(self, count=20, health=20):
         floor_tiles = []
@@ -459,6 +473,56 @@ class RLDungeonGenerator:
             return remaining < count
         return False
 
+    def add_weapon_to_inventory(self, weapon):
+        """Try to add a weapon dict to the first available inventory slot. Returns True if added."""
+        if weapon is None:
+            return False
+        # ensure it's a copy and marked as weapon
+        w = weapon.copy()
+        w['type'] = 'weapon'
+        # Search for first empty slot (hotbar preferred: row 0 then rows 1-3)
+        for r in range(4):
+            for c in range(8):
+                if self.inventory[r][c] is None:
+                    self.inventory[r][c] = w
+                    return True
+        # Inventory full
+        return False
+
+    def spawn_weapon_items(self):
+        """Randomly place one of each weapon on floor tiles as pickable ground items."""
+        try:
+            weapons = get_all_weapons()
+        except Exception:
+            return
+        # Prepare ground_items mapping if not present
+        if not hasattr(self, 'ground_items') or self.ground_items is None:
+            self.ground_items = {}
+
+        floor_tiles = [(r, c) for r in range(self.height) for c in range(self.width) if self.dungeon[r][c].get_ch() == '.']
+        # Remove player position and exit and monster positions from candidates
+        floor_tiles = [p for p in floor_tiles if p != (self.player_row, self.player_col) and p != (self.exit_row, self.exit_col)]
+        # Remove tiles occupied by monsters
+        monster_positions = {(m['row'], m['col']) for m in self.monsters}
+        floor_tiles = [p for p in floor_tiles if p not in monster_positions]
+        if not floor_tiles:
+            return
+        import random as _rand
+        _rand.shuffle(floor_tiles)
+        idx = 0
+        for w in weapons:
+            # find next available tile
+            while idx < len(floor_tiles) and floor_tiles[idx] in self.ground_items:
+                idx += 1
+            if idx >= len(floor_tiles):
+                break
+            pos = floor_tiles[idx]
+            idx += 1
+            item = w.copy()
+            item['type'] = 'weapon'
+            # store by world coords
+            self.ground_items[(pos[0], pos[1])] = item
+
     def pickup_coins(self):
         picked = 0
         for dr in (-1, 0, 1):
@@ -466,11 +530,21 @@ class RLDungeonGenerator:
                 r = self.player_row + dr
                 c = self.player_col + dc
                 if 0 <= r < self.height and 0 <= c < self.width:
+                    # pick up coins
                     if self.dungeon[r][c].get_ch() == 'o':
                         self.dungeon[r][c] = DungeonSqr('.')
                         self.explored[r][c] = True
                         self.add_item_to_inventory('coin', 1)
                         picked += 1
+                    # pick up weapons on ground_items mapping
+                    if hasattr(self, 'ground_items') and (r, c) in self.ground_items:
+                        item = self.ground_items.pop((r, c))
+                        # try to add to inventory
+                        if self.add_weapon_to_inventory(item):
+                            picked += 1
+                        else:
+                            # inventory full, put it back
+                            self.ground_items[(r, c)] = item
         return picked
 
     def is_walkable(self, r, c):

@@ -306,13 +306,13 @@
             * **Fader Relic**
         * Other
         * Trophies
-            * Boar Trophy                     (Common, 15%)
-            * Neck Trophy                     (Common, 5%)
-            * Deer Trophy                     (Common, 50%)
-            * **Eikthyr Trophy**              (Boss, 100%)
-            * Greydwarf Trophy                (Common, 5%)
-            * Greydwarf Shaman Trophy         (Uncommon, 10%)
-            * Greydwarf Brute Trophy          (Uncommon, 10%)
+            * Boar Trophy                     (Common, 15%)         Common Spawn in Meadows
+            * Neck Trophy                     (Common, 5%)          Common Spawn in Meadows
+            * Deer Trophy                     (Common, 50%)         Common Spawn in Meadows
+            * **Eikthyr Trophy**              (Boss, 100%)          Meadows Boss
+            * Greydwarf Trophy                (Common, 5%) 		    Common Spawn in Black Forest
+            * Greydwarf Shaman Trophy         (Uncommon, 10%)       Uncommon Spawn from Greydwarf Nest, Uncommon 
+            * Greydwarf Brute Trophy          (Uncommon, 10%)       Uncommon Spawn in Black Forest
             * Skeleton Trophy                 (Common, 10%)
             * Ghost Trophy                    (Very Rare, 10%)
             * Rancid Remains Trophy           (Very Rare, 10%)
@@ -320,6 +320,7 @@
             * Bear Trophy                     (Rare, 50%)
             * **Brenna Trophy**               (Miniboss, 100%)
             * **The Elder Trophy**            (Boss, 100%)
+            * Serpent Trophy                  (Rare, 30%)
             * Draugr Trophy                   (Common, 10%)
             * Leech Trophy                    (Common, 10%)
             * Surtling Trophy                 (Common, 5%)
@@ -352,7 +353,16 @@
             * Dvergr Trophy                   (Uncommon, 5%)
             * Gjall Trophy                    (Very Rare, 30%)
             * Seeker Soldier Trophy           (Very Rare, 5%)
-            * **The Queen Trophy**            ()
+            * **The Queen Trophy**            (Boss, 100%)
+            * Charred Warrior Trophy          (Common, 5%)
+            * Charred Marksman Trophy         (Common, 5%)
+            * Volture Trophy                  (Common, 10%)
+            * Asksvin Trophy                  (Uncommon, 10%)
+            * Bonemaw Trophy                  (Very Rare, 30%)
+            * Morgen Trophy                   (Very Rare, 5%)
+            * Fallen Valkyrie Trophy          (Very Rare, 5%)
+            * Charred Warlock Trophy          (Very Rare, 5%)
+            * **Fader Trophy**                (Boss, 100%)
 * Add stamina bar
 * Add food
 * Add more foood
