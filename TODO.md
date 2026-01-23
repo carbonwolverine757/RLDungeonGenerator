@@ -78,13 +78,13 @@
   * Add more weapons
       * Weapons as follows :
         * Meadows :
-            * Wooden Sword
-            * Torch
-            * Club
-            * Stone Axe
-            * Flint Axe
-            * Flint Knife
-            * Flint Spear
+            * Wooden Sword                       (Slash:5, Use Stamina:3)
+            * Torch                              ()
+            * Club                               ()
+            * Stone Axe                          ()
+            * Flint Axe                          ()
+            * Flint Knife                        ()
+            * Flint Spear                        ()
             * Crude Bow
             * ***Antler Spear***
         * Black Forest :

@@ -161,6 +161,9 @@ class RLDungeonGenerator:
 
         # Inventory UI state
         self.inventory_open = False
+        self.hovered_item = None  # Track hovered item for tooltip display
+        self.dragged_item = None  # Item being dragged
+        self.dragged_from_slot = None  # (row, col) of the item being dragged
 
         # Inventory: 4 rows x 8 cols. Top row (row 0) is the hotbar.
         self.inventory = [[None for _ in range(8)] for _ in range(4)]
@@ -198,6 +201,13 @@ class RLDungeonGenerator:
         item = self.inventory[0][self.equipped_slot]
         if item is None or item.get("type") != "weapon":
             return
+        
+        # Get weapon stats
+        damage = item.get('damage', 5)
+        stamina_cost = item.get('stamina_use', 3)
+        attack_speed = item.get('attack_speed', 1.0)
+        weapon_range = item.get('range', 0)
+        
         def sign(x):
             return 0 if x == 0 else (1 if x > 0 else -1)
         dr = sign(self.facing[0])
@@ -205,34 +215,56 @@ class RLDungeonGenerator:
         if dr == 0 and dc == 0:
             return
         now = time.time()
-        if getattr(self, 'player_stamina', 0) < 3:
+        
+        # Check if enough stamina
+        if getattr(self, 'player_stamina', 0) < stamina_cost:
             return
-        self.player_stamina = max(0, self.player_stamina - 3)
+        
+        # Check if attack is on cooldown
+        if now - self.last_attack_time < attack_speed:
+            return
+        
+        self.player_stamina = max(0, self.player_stamina - stamina_cost)
         self.stamina_cooldown_until = now + self.stamina_cooldown_seconds
-        tr = self.player_row + dr
-        tc = self.player_col + dc
-        if tr < 0 or tc < 0 or tr >= self.height or tc >= self.width:
-            return
-        ch = self.dungeon[tr][tc].get_ch()
-        for i, m in enumerate(list(self.monsters)):
-            if m['row'] == tr and m['col'] == tc:
-                m['health'] -= 5
-                self.last_swing = (tr, tc)
-                if m['health'] <= 0:
-                    try:
-                        self.monsters.pop(i)
-                    except Exception:
-                        if m in self.monsters:
-                            self.monsters.remove(m)
-                    self.dungeon[tr][tc] = DungeonSqr('o')
-                    self.explored[tr][tc] = True
-                return
-        if ch == '+':
-            self.dungeon[tr][tc] = DungeonSqr('.')
-            self.explored[tr][tc] = True
-        if ch not in ('.', '+'):
-            pass
-        self.last_swing = (tr, tc)
+        self.last_attack_time = now
+        
+        # Attack at all tiles within range in the facing direction
+        for dist in range(1, weapon_range + 2):
+            tr = self.player_row + dr * dist
+            tc = self.player_col + dc * dist
+            if tr < 0 or tc < 0 or tr >= self.height or tc >= self.width:
+                break
+            ch = self.dungeon[tr][tc].get_ch()
+            # Stop at walls
+            if ch == '#':
+                break
+            
+            # Check for monsters at this location
+            hit = False
+            for i, m in enumerate(list(self.monsters)):
+                if m['row'] == tr and m['col'] == tc:
+                    m['health'] -= damage
+                    self.last_swing = (tr, tc)
+                    hit = True
+                    if m['health'] <= 0:
+                        try:
+                            self.monsters.pop(i)
+                        except Exception:
+                            if m in self.monsters:
+                                self.monsters.remove(m)
+                        self.dungeon[tr][tc] = DungeonSqr('o')
+                        self.explored[tr][tc] = True
+                    break
+            
+            if hit:
+                break  # Stop after hitting first target
+            
+            # Open doors
+            if ch == '+':
+                self.dungeon[tr][tc] = DungeonSqr('.')
+                self.explored[tr][tc] = True
+            
+            self.last_swing = (tr, tc)
 
     def random_split(self, min_row, min_col, max_row, max_col):
         seg_height = max_row - min_row
@@ -546,6 +578,37 @@ class RLDungeonGenerator:
                             # inventory full, put it back
                             self.ground_items[(r, c)] = item
         return picked
+
+    def drop_item_in_direction(self, item, direction_row, direction_col):
+        """Drop an item in the world in a direction from the player.
+        Returns True if dropped successfully, False otherwise."""
+        if not hasattr(self, 'ground_items'):
+            self.ground_items = {}
+        
+        # Find a walkable tile in the given direction
+        dr = 1 if direction_row > 0 else (-1 if direction_row < 0 else 0)
+        dc = 1 if direction_col > 0 else (-1 if direction_col < 0 else 0)
+        
+        for distance in range(1, 4):  # Try up to 3 tiles away
+            drop_r = self.player_row + dr * distance
+            drop_c = self.player_col + dc * distance
+            
+            if 0 <= drop_r < self.height and 0 <= drop_c < self.width:
+                ch = self.dungeon[drop_r][drop_c].get_ch()
+                # Check if tile is walkable and not occupied
+                if ch in ('.', '+', 'o') and (drop_r, drop_c) not in self.ground_items:
+                    # Check if no monsters are there
+                    occupied = False
+                    for m in self.monsters:
+                        if m['row'] == drop_r and m['col'] == drop_c:
+                            occupied = True
+                            break
+                    if not occupied:
+                        item_copy = item.copy()
+                        self.ground_items[(drop_r, drop_c)] = item_copy
+                        return True
+        return False
+
 
     def is_walkable(self, r, c):
         if r < 0 or c < 0 or r >= self.height or c >= self.width:
@@ -1224,6 +1287,7 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
     floor_char = get_char_from_tile_idx(floor_tile_idx)
     coin_char = get_char_from_tile_idx(coin_tile_idx)
     exit_char = get_char_from_tile_idx(exit_tile_idx)
+    weapon_char = get_char_from_tile_idx(get_tile_index(4, col_1based_from_left=3))
 
     # Print what we computed for debugging
     print(f"DEBUG: Computed characters:")
@@ -1233,6 +1297,7 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
     print(f"  floor_char = U+{ord(floor_char):04X} ({floor_char})")
     print(f"  coin_char = U+{ord(coin_char):04X} ({coin_char})")
     print(f"  exit_char = U+{ord(exit_char):04X} ({exit_char})")
+    print(f"  weapon_char = U+{ord(weapon_char):04X} ({weapon_char})")
 
     console = tcod.console.Console(view_w, view_h, order="F")
 
@@ -1333,6 +1398,24 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                     else:
                         console.print(c, r, disp, fg=fg, bg=tile_bg)
 
+            # Render ground weapon items
+            if hasattr(dg, 'ground_items'):
+                for (item_r, item_c), item in dg.ground_items.items():
+                    ir = item_r - cam_y
+                    ic = item_c - cam_x
+                    if 0 <= ir < view_h and 0 <= ic < view_w:
+                        if dg.explored[item_r][item_c]:
+                            # Use weapon's glyph_codepoint if available
+                            cp = item.get('glyph_codepoint')
+                            if cp:
+                                try:
+                                    w_char = chr(cp)
+                                except Exception:
+                                    w_char = weapon_char
+                            else:
+                                w_char = weapon_char
+                            console.print(ic, ir, w_char, fg=(200, 150, 100), bg=(0, 0, 0))
+
             dg.update_monster_alerts()
             for m in getattr(dg, 'monsters', []):
                  mr = m['row'] - cam_y
@@ -1352,37 +1435,41 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                 # Use tileset symbol for the player
                 console.print(pc, pr, player_char, fg=(255, 255, 255), bg=(0, 0, 0))
 
-            # HUD hotbar
+            # HUD hotbar (original: 8 slots, 1 char wide each, top row)
             for i in range(8):
                 x = i
                 y = 0
                 bg = (50, 50, 50)
                 item = dg.inventory[0][i] if i < len(dg.inventory[0]) else None
                 if item is None:
-                    # show slot number using correct tileset mapping
-                    # Digits '0'-'9' are at codepoints 48-57, which in the tileset are at:
-                    # index = codepoint - base_offset, row = index // tileset_cols + 1, col = index % tileset_cols + 1
+                    # Show empty slot: just the number
                     digit = i + 1  # 1-8
-                    digit_cp = ord('0') + digit  # codepoint for '1'-'8'
-                    digit_idx = digit_cp - base_offset
-                    digit_row = digit_idx // tileset_cols + 1
-                    digit_col = digit_idx % tileset_cols + 1
-                    digit_tile_idx = get_tile_index(digit_row, col_1based_from_left=digit_col)
-                    digit_char = get_char_from_tile_index(digit_tile_idx, use_unicode_charmap=use_unicode)
-                    console.print(x, y, digit_char, fg=(200, 200, 200), bg=bg)
+                    digit_char = str(digit)
+                    console.print(x, y, digit_char, fg=(100, 100, 100), bg=bg)
                 else:
-                    # Use tileset symbols for items
+                    # Show item icon
                     if item.get('type') == 'weapon':
-                        icon = '⚔'
+                        # Use weapon's glyph_codepoint if available
+                        cp = item.get('glyph_codepoint')
+                        if cp:
+                            try:
+                                icon = chr(cp)
+                            except Exception:
+                                icon = weapon_char
+                        else:
+                            icon = weapon_char
                     elif item.get('type') == 'coin':
-                        # Use coin symbol from tileset, show count if > 1
+                        # Use coin symbol from tileset
                         if item.get('count', 1) == 1:
                             icon = coin_char
                         else:
-                            icon = tilesheet_char_for_unicode(ord(str(min(9, item.get('count', 1)))[0]))
+                            # Show count instead
+                            count = min(9, item.get('count', 1))
+                            icon = str(count)
                     else:
-                        icon = '•'
+                        icon = '?'
                     if dg.equipped_slot == i:
+                        # Highlight equipped slot
                         console.print(x, y, icon, fg=(255, 230, 150), bg=(140, 90, 20))
                     else:
                         console.print(x, y, icon, fg=(200, 200, 200), bg=bg)
@@ -1394,12 +1481,23 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                         y = row
                         bg = (40, 40, 40)
                         item = dg.inventory[row][col]
+                        # Highlight dragged from slot
+                        if dg.dragged_from_slot == (row, col):
+                            bg = (60, 60, 40)
                         if item is None:
                             # show a tilesheet '.' glyph if available
                             console.print(x, y, tilesheet_char_for_unicode(ord('.')), fg=(100, 100, 100), bg=bg)
                         else:
                             if item.get('type') == 'weapon':
-                                icon = '⚔'
+                                # Use weapon's glyph_codepoint if available
+                                cp = item.get('glyph_codepoint')
+                                if cp:
+                                    try:
+                                        icon = chr(cp)
+                                    except Exception:
+                                        icon = '⚔'
+                                else:
+                                    icon = '⚔'
                             elif item.get('type') == 'coin':
                                 if item.get('count', 1) == 1:
                                     icon = coin_char
@@ -1408,6 +1506,26 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                             else:
                                 icon = '•'
                             console.print(x, y, icon, fg=(200, 200, 200), bg=bg)
+                
+                # Display dragged item following mouse cursor
+                if dg.dragged_item is not None and mouse_coords is not None:
+                    mx, my = mouse_coords
+                    if dg.dragged_item.get('type') == 'weapon':
+                        cp = dg.dragged_item.get('glyph_codepoint')
+                        if cp:
+                            try:
+                                drag_icon = chr(cp)
+                            except Exception:
+                                drag_icon = '⚔'
+                        else:
+                            drag_icon = '⚔'
+                    elif dg.dragged_item.get('type') == 'coin':
+                        drag_icon = coin_char
+                    else:
+                        drag_icon = '•'
+                    # Draw dragged item at mouse position with highlight
+                    if 0 <= mx < view_w and 0 <= my < view_h:
+                        console.print(mx, my, drag_icon, fg=(255, 255, 100), bg=(80, 80, 0))
 
             # Inventory summary
             summary = {}
@@ -1418,7 +1536,7 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                         continue
                     key = (item.get('type'), item.get('name'))
                     if key not in summary:
-                        summary[key] = {'type': item.get('type'), 'name': item.get('name'), 'count': 0}
+                        summary[key] = {'type': item.get('type'), 'name': item.get('name'), 'count': 0, 'glyph': item.get('glyph_codepoint')}
                     if item.get('type') == 'coin':
                         summary[key]['count'] += item.get('count', 1)
                     else:
@@ -1433,7 +1551,15 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                     break
                 count = data['count']
                 if itype == 'weapon':
-                    icon = '⚔'
+                    # Use weapon's glyph_codepoint if available
+                    cp = data.get('glyph')
+                    if cp:
+                        try:
+                            icon = chr(cp)
+                        except Exception:
+                            icon = '⚔'
+                    else:
+                        icon = '⚔'
                 elif itype == 'coin':
                     icon = coin_char
                 else:
@@ -1497,6 +1623,13 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                 stamina_num_x = max(0, view_w - len(stamina_str))
             console.print(stamina_num_x, stamina_num_y, stamina_str, fg=(255, 255, 200), bg=(0,0,0))
 
+            # Display item tooltip if hovering over inventory item
+            if dg.inventory_open and dg.hovered_item is not None:
+                item_name = dg.hovered_item.get('name', 'Unknown Item')
+                tooltip_x = max(0, (view_w - len(item_name)) // 2)
+                tooltip_y = 1
+                console.print(tooltip_x, tooltip_y, item_name, fg=(255, 255, 200), bg=(30, 30, 30))
+
             # No level indicator on map — level name shown during fullscreen card only
 
             context.present(console)
@@ -1520,6 +1653,14 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                         return
                     if event.sym == tcod.event.K_TAB:
                         dg.inventory_open = not dg.inventory_open
+                        dg.hovered_item = None  # Clear hover when closing inventory
+                        # If inventory is being closed while dragging, drop the item
+                        if not dg.inventory_open and dg.dragged_item is not None:
+                            # Drop it in front of the player
+                            dg.drop_item_in_direction(dg.dragged_item, 0, 1)
+                            dg.inventory[dg.dragged_from_slot[0]][dg.dragged_from_slot[1]] = None
+                            dg.dragged_item = None
+                            dg.dragged_from_slot = None
                     dr = 0; dc = 0
                     if event.sym in (tcod.event.K_UP, tcod.event.K_w, tcod.event.K_KP_8):
                         dr = -1
@@ -1552,23 +1693,68 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                                 dg.equipped_slot = slot
 
                 elif event.type == "MOUSEMOTION":
-                    if mouse_coords is None:
-                        continue
-                    mx, my = mouse_coords
-                    world_x = cam_x + mx
-                    world_y = cam_y + my
-                    dg.facing = (world_y - dg.player_row, world_x - dg.player_col)
-                    dg.mouse_tile = (world_y, world_x)
+                    if mouse_coords is not None:
+                        mx, my = mouse_coords
+                        # Check if hovering over inventory (only when open)
+                        if dg.inventory_open and 0 <= my < 4 and 0 <= mx < 8:
+                            item = dg.inventory[my][mx]
+                            if item is not None:
+                                dg.hovered_item = item
+                            else:
+                                dg.hovered_item = None
+                        else:
+                            dg.hovered_item = None
+                        # Update world cursor
+                        world_x = cam_x + mx
+                        world_y = cam_y + my
+                        dg.facing = (world_y - dg.player_row, world_x - dg.player_col)
+                        dg.mouse_tile = (world_y, world_x)
                 elif event.type == "MOUSEBUTTONDOWN":
                      if event.button == 1:
                         if mouse_coords is None:
                             continue
                         mx, my = mouse_coords
-                        world_x = cam_x + mx
-                        world_y = cam_y + my
-                        dg.facing = (world_y - dg.player_row, world_x - dg.player_col)
-                        dg.mouse_tile = (world_y, world_x)
-                        dg.swing_weapon()
+                        
+                        # Handle inventory dragging
+                        if dg.inventory_open and 0 <= my < 4 and 0 <= mx < 8:
+                            # Clicked on inventory slot
+                            if dg.dragged_item is None:
+                                # Start dragging if item is present
+                                item = dg.inventory[my][mx]
+                                if item is not None:
+                                    dg.dragged_item = item.copy()
+                                    dg.dragged_from_slot = (my, mx)
+                            else:
+                                # Complete drag: drop item here
+                                target_item = dg.inventory[my][mx]
+                                if target_item is None:
+                                    # Empty slot: move item here
+                                    dg.inventory[my][mx] = dg.dragged_item
+                                    dg.inventory[dg.dragged_from_slot[0]][dg.dragged_from_slot[1]] = None
+                                else:
+                                    # Occupied slot: swap items
+                                    dg.inventory[my][mx] = dg.dragged_item
+                                    dg.inventory[dg.dragged_from_slot[0]][dg.dragged_from_slot[1]] = target_item
+                                dg.dragged_item = None
+                                dg.dragged_from_slot = None
+                        elif dg.dragged_item is not None:
+                            # Clicked outside inventory while dragging: drop item in that direction
+                            world_x = cam_x + mx
+                            world_y = cam_y + my
+                            dr = world_y - dg.player_row
+                            dc = world_x - dg.player_col
+                            if dg.drop_item_in_direction(dg.dragged_item, dr, dc):
+                                # Successfully dropped, remove from inventory
+                                dg.inventory[dg.dragged_from_slot[0]][dg.dragged_from_slot[1]] = None
+                            dg.dragged_item = None
+                            dg.dragged_from_slot = None
+                        else:
+                            # Normal world interaction
+                            world_x = cam_x + mx
+                            world_y = cam_y + my
+                            dg.facing = (world_y - dg.player_row, world_x - dg.player_col)
+                            dg.mouse_tile = (world_y, world_x)
+                            dg.swing_weapon()
 
             dg.check_exit()
 

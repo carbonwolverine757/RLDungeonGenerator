@@ -1,10 +1,10 @@
-# This code is released into the Public Domain.
+﻿# This code is released into the Public Domain.
 """
 Weapons data and definitions for RLDungeonGenerator.
 
 Each weapon has 8 parameters:
 - name: Display name
-- glyph_index: Tileset character index
+- glyph_codepoint: Unicode codepoint for tileset rendering
 - damage: HP dealt per hit
 - stamina_use: Stamina consumed per attack
 - attack_speed: Cooldown between attacks (seconds)
@@ -15,8 +15,18 @@ Each weapon has 8 parameters:
 
 WEAPONS = [
     {
+        'name': 'Dagger',
+        'glyph_codepoint': 0x2020,  # Dagger symbol ✠
+        'damage': 4,
+        'stamina_use': 2,
+        'attack_speed': 0.6,
+        'range': 0,
+        'area': 1,
+        'angle': 0,
+    },
+    {
         'name': 'Wooden Sword',
-        'glyph_index': 0,
+        'glyph_codepoint': 0x1F5E1,  # Crossed swords ⚔
         'damage': 5,
         'stamina_use': 3,
         'attack_speed': 1.0,
@@ -26,7 +36,7 @@ WEAPONS = [
     },
     {
         'name': 'Iron Sword',
-        'glyph_index': 1,
+        'glyph_codepoint': 0x2694,  # Crossed swords variation ⚔
         'damage': 10,
         'stamina_use': 5,
         'attack_speed': 1.2,
@@ -36,7 +46,7 @@ WEAPONS = [
     },
     {
         'name': 'Broad Axe',
-        'glyph_index': 2,
+        'glyph_codepoint': 0x2751,  # Black diamond minus ⛑ (helmet style)
         'damage': 15,
         'stamina_use': 8,
         'attack_speed': 2.0,
@@ -46,7 +56,7 @@ WEAPONS = [
     },
     {
         'name': 'Short Spear',
-        'glyph_index': 3,
+        'glyph_codepoint': 0x2741,  # Black florette ✁
         'damage': 8,
         'stamina_use': 4,
         'attack_speed': 1.0,
@@ -56,7 +66,7 @@ WEAPONS = [
     },
     {
         'name': 'Long Spear',
-        'glyph_index': 4,
+        'glyph_codepoint': 0x2756,  # Black diamond with white dot ◖
         'damage': 12,
         'stamina_use': 6,
         'attack_speed': 1.5,
@@ -66,7 +76,7 @@ WEAPONS = [
     },
     {
         'name': 'War Hammer',
-        'glyph_index': 5,
+        'glyph_codepoint': 0x26CF,  # Hammer and pick ⛏
         'damage': 16,
         'stamina_use': 10,
         'attack_speed': 2.5,
@@ -75,18 +85,8 @@ WEAPONS = [
         'angle': 180,
     },
     {
-        'name': 'Dagger',
-        'glyph_index': 6,
-        'damage': 4,
-        'stamina_use': 2,
-        'attack_speed': 0.6,
-        'range': 0,
-        'area': 1,
-        'angle': 0,
-    },
-    {
         'name': 'Mage Staff',
-        'glyph_index': 7,
+        'glyph_codepoint': 0x1F52F,  # Sparkles/magic ✨
         'damage': 14,
         'stamina_use': 12,
         'attack_speed': 2.0,
