@@ -1,4 +1,44 @@
 * Walk through coins cannot walk through monsters
+* MAKE WEAPONS DO WHAT THEY ARE SUPPOSED TO DO
+    * range = max distance from player
+        * Staff of Fracturing (range = 7)
+        * X X X X X X X X X X X X X X
+        * X                         X
+        * X                         X
+        * X                         X
+        * X                         X
+        * X                         X
+        * X            @            X
+        * X                         X
+        * X						    X
+        * X  				        X
+        * X                         X
+        * X						    X
+        * X						    X
+        * X X X X X X X X X X X X X X
+    * area = radius from attack point
+        * Krom (area = 1.5)
+        *   X
+        * @ X X 
+        *   X
+    * angle = angle of area
+        * Battleaxe (angle = 180)
+        * X X
+        * X X X
+        * @ X X 
+        * X X X
+        * X X
+* MAKE WEAPONS ATTACK AT MOUSE HOVER TILE IF IN RANGE, FARTHEST TILE IN SAME DIRECTION IF NOT
+* MAKE WEAPONS, ATTACK INDICATOR, COINS, WEAPON DROPS, ETC ACTUALLY SHOW UP!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+* MAKE THE ATTACK DIRECTION MORE FLEXIBLE NOT JUST UP,DOWN,LEFT,RIGHT,DIAGONAL
+* Examples : 
+    * Bronze Atgeir
+        * Zone of Attack Range
+        *   X X X  
+        * X X X X X
+        * X X @ X X
+        * X X X X X
+        *   X X X  
 * Add key for attack/use
 * Add damage numbers
 * Add monsters and damage dealing
@@ -78,15 +118,15 @@
   * Add more weapons
       * Weapons as follows :
         * Meadows :
-            * Wooden Sword                       (Slash:5, Use Stamina:3)
-            * Torch                              ()
-            * Club                               ()
-            * Stone Axe                          ()
-            * Flint Axe                          ()
-            * Flint Knife                        ()
-            * Flint Spear                        ()
-            * Crude Bow
-            * ***Antler Spear***
+            * Wooden Sword                       Slash:5                        Use Stamina:3
+            * Torch                              Blunt:4 Fire:15                Use Stamina:4
+            * Club                               Blunt:12                       Use Stamina:4
+            * Stone Axe                          Slash:15
+            * Flint Axe                          
+            * Flint Knife                        
+            * Flint Spear                        
+            * Crude Bow                          
+            * ***Antler Spear***                 
         * Black Forest :
             * Stagbreaker
             * Bronze Sword

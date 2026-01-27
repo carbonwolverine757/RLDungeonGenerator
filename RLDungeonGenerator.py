@@ -195,7 +195,8 @@ class RLDungeonGenerator:
             self.level_card_until = time.time() + 1.5
 
     def swing_weapon(self):
-        """Swing the currently equipped weapon in the facing direction."""
+        """Swing the currently equipped weapon at the mouse tile if in range, 
+        or at the farthest tile in that direction within range."""
         if self.equipped_slot is None:
             return
         item = self.inventory[0][self.equipped_slot]
@@ -208,12 +209,6 @@ class RLDungeonGenerator:
         attack_speed = item.get('attack_speed', 1.0)
         weapon_range = item.get('range', 0)
         
-        def sign(x):
-            return 0 if x == 0 else (1 if x > 0 else -1)
-        dr = sign(self.facing[0])
-        dc = sign(self.facing[1])
-        if dr == 0 and dc == 0:
-            return
         now = time.time()
         
         # Check if enough stamina
@@ -224,27 +219,62 @@ class RLDungeonGenerator:
         if now - self.last_attack_time < attack_speed:
             return
         
+        # Determine target tile
+        if self.mouse_tile is None:
+            return
+        
+        mouse_row, mouse_col = self.mouse_tile
+        
+        # Calculate distance to mouse tile
+        dr_mouse = mouse_row - self.player_row
+        dc_mouse = mouse_col - self.player_col
+        distance_to_mouse = max(abs(dr_mouse), abs(dc_mouse))  # Chebyshev distance (diagonal)
+        
+        # Determine direction
+        def sign(x):
+            return 0 if x == 0 else (1 if x > 0 else -1)
+        
+        dr = sign(dr_mouse)
+        dc = sign(dc_mouse)
+        
+        if dr == 0 and dc == 0:
+            return
+        
+        # Consume stamina and update cooldown
         self.player_stamina = max(0, self.player_stamina - stamina_cost)
         self.stamina_cooldown_until = now + self.stamina_cooldown_seconds
         self.last_attack_time = now
         
-        # Attack at all tiles within range in the facing direction
-        for dist in range(1, weapon_range + 2):
+        # Determine max distance to attack: if mouse is in range, attack to mouse; otherwise attack to weapon range
+        if distance_to_mouse <= weapon_range:
+            max_dist = distance_to_mouse
+        else:
+            max_dist = weapon_range
+        
+        # Process attacks on all tiles from player toward target
+        # This creates a line attack effect
+        for dist in range(1, max_dist + 1):
             tr = self.player_row + dr * dist
             tc = self.player_col + dc * dist
+            
+            # Stop if out of bounds
             if tr < 0 or tc < 0 or tr >= self.height or tc >= self.width:
                 break
+            
             ch = self.dungeon[tr][tc].get_ch()
+            
             # Stop at walls
             if ch == '#':
                 break
+            
+            # Mark swing location for visual feedback
+            self.last_swing = (tr, tc)
             
             # Check for monsters at this location
             hit = False
             for i, m in enumerate(list(self.monsters)):
                 if m['row'] == tr and m['col'] == tc:
                     m['health'] -= damage
-                    self.last_swing = (tr, tc)
                     hit = True
                     if m['health'] <= 0:
                         try:
@@ -263,8 +293,6 @@ class RLDungeonGenerator:
             if ch == '+':
                 self.dungeon[tr][tc] = DungeonSqr('.')
                 self.explored[tr][tc] = True
-            
-            self.last_swing = (tr, tc)
 
     def random_split(self, min_row, min_col, max_row, max_col):
         seg_height = max_row - min_row
