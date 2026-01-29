@@ -30,6 +30,7 @@
         * X X
 * MAKE WEAPONS ATTACK AT MOUSE HOVER TILE IF IN RANGE, FARTHEST TILE IN SAME DIRECTION IF NOT
 * MAKE WEAPONS, ATTACK INDICATOR, COINS, WEAPON DROPS, ETC ACTUALLY SHOW UP!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    * Different gyphs for different weapon types, different colors for different materials.
 * MAKE THE ATTACK DIRECTION MORE FLEXIBLE NOT JUST UP,DOWN,LEFT,RIGHT,DIAGONAL
 * Examples : 
     * Bronze Atgeir
@@ -121,20 +122,20 @@
             * Wooden Sword                       Slash:5                        Use Stamina:3
             * Torch                              Blunt:4 Fire:15                Use Stamina:4
             * Club                               Blunt:12                       Use Stamina:4
-            * Stone Axe                          Slash:15
-            * Flint Axe                          
-            * Flint Knife                        
-            * Flint Spear                        
-            * Crude Bow                          
-            * ***Antler Spear***                 
+            * Stone Axe                          Slash:15                       Use Stamina:6
+            * Flint Axe                          Slash:20                       Use Stamina:6
+            * Flint Knife                        Slash:6 Pierce:6				Use Stamina:3
+            * Flint Spear                        Pierce:20				  	    Use Stamina:6
+            * Crude Bow                          Pierce:22 				        Use Stamina:4/s
+            * ***Antler Spear***                 Pierce:20 Pickaxe:10           Use Stamina:8
         * Black Forest :
-            * Stagbreaker
-            * Bronze Sword
-            * Bronze Axe
-            * Copper Knife
-            * Bronze Spear
-            * Bronze Mace
-            * Bronze Atgeir
+            * Stagbreaker                        Blunt:20 Pierce:5              Use Stamina:20
+            * Bronze Sword                       Slash:35					    Use Stamina:8
+            * Bronze Axe                         Slash:40					    Use Stamina:8
+            * Copper Knife                       Slash:12 Pierce:12             Use Stamina:5
+            * Bronze Spear                       Pierce:35                      Use Stamina:8
+            * Bronze Mace                        Blunt:35					    Use Stamina:8
+            * Bronze Atgeir                      Pierce:45
             * Claws of the Bear
             * **Rancid Mace**
             * **Troll Log**

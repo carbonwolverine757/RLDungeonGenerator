@@ -154,7 +154,7 @@ class RLDungeonGenerator:
         self.player_max_stamina = 50
         
         # Hotbar (8 item slots, currently empty)
-        self.equipped_slot = 0
+        self.equipped_slot = None  # No weapon equipped initially
         self.facing = (0, 1)
         self.last_swing = None
         self.mouse_tile = None
@@ -162,6 +162,7 @@ class RLDungeonGenerator:
         # Inventory UI state
         self.inventory_open = False
         self.hovered_item = None  # Track hovered item for tooltip display
+        self.hovered_ground_item = None  # Track hovered ground item
         self.dragged_item = None  # Item being dragged
         self.dragged_from_slot = None  # (row, col) of the item being dragged
 
@@ -172,6 +173,7 @@ class RLDungeonGenerator:
         if wooden_sword:
             wooden_sword['type'] = 'weapon'
             self.inventory[0][0] = wooden_sword
+            self.equipped_slot = 0  # Auto-equip the wooden sword
 
         # Stamina fields: regen and cooldown
         self.stamina_regen_rate = 10.0  # stamina per second
@@ -181,6 +183,9 @@ class RLDungeonGenerator:
         
         # Track the last attack time for attack speed limiting
         self.last_attack_time = 0.0
+        
+        # Ground items (weapons and coins lying on the ground)
+        self.ground_items = {}
 
     def set_level_template(self, level):
         """Set the current level template based on level number."""
@@ -245,10 +250,17 @@ class RLDungeonGenerator:
         self.stamina_cooldown_until = now + self.stamina_cooldown_seconds
         self.last_attack_time = now
         
-        # Determine max distance to attack: if mouse is in range, attack to mouse; otherwise attack to weapon range
-        if distance_to_mouse <= weapon_range:
+        # Determine max distance to attack
+        # For melee weapons (range=0), always attack at least 1 tile
+        # For ranged weapons, attack to mouse if in range, otherwise to max range
+        if weapon_range == 0:
+            # Melee: always attack at least 1 tile (adjacent)
+            max_dist = max(1, distance_to_mouse)
+        elif distance_to_mouse <= weapon_range:
+            # Ranged: mouse is in range, attack to mouse
             max_dist = distance_to_mouse
         else:
+            # Ranged: mouse is out of range, attack to weapon range
             max_dist = weapon_range
         
         # Process attacks on all tiles from player toward target
@@ -1574,28 +1586,30 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
             inv_y = 0
             inv_index = 0
             max_inv_rows = view_h
-            for (itype, iname), data in summary.items():
-                if inv_index >= max_inv_rows:
-                    break
-                count = data['count']
-                if itype == 'weapon':
-                    # Use weapon's glyph_codepoint if available
-                    cp = data.get('glyph')
-                    if cp:
-                        try:
-                            icon = chr(cp)
-                        except Exception:
+            # Only display inventory summary if inventory is open
+            if dg.inventory_open:
+                for (itype, iname), data in summary.items():
+                    if inv_index >= max_inv_rows:
+                        break
+                    count = data['count']
+                    if itype == 'weapon':
+                        # Use weapon's glyph_codepoint if available
+                        cp = data.get('glyph')
+                        if cp:
+                            try:
+                                icon = chr(cp)
+                            except Exception:
+                                icon = '⚔'
+                        else:
                             icon = '⚔'
+                    elif itype == 'coin':
+                        icon = coin_char
                     else:
-                        icon = '⚔'
-                elif itype == 'coin':
-                    icon = coin_char
-                else:
-                    icon = '•'
-                count_str = str(count).rjust(3)
-                inv_str = f"{count_str} {icon}"
-                console.print(inv_x, inv_y + inv_index, inv_str, fg=(200, 200, 200), bg=None)
-                inv_index += 1
+                        icon = '•'
+                    count_str = str(count).rjust(3)
+                    inv_str = f"{count_str} {icon}"
+                    console.print(inv_x, inv_y + inv_index, inv_str, fg=(200, 200, 200), bg=None)
+                    inv_index += 1
 
             # Health bar (uses digits instead of alpha 'H')
             health_pct = max(0.0, min(1.0, dg.player_health / dg.player_max_health))
@@ -1658,6 +1672,13 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                 tooltip_y = 1
                 console.print(tooltip_x, tooltip_y, item_name, fg=(255, 255, 200), bg=(30, 30, 30))
 
+            # Display tooltip if hovering over ground item
+            if dg.hovered_ground_item is not None:
+                item_name = dg.hovered_ground_item.get('name', 'Unknown Item')
+                tooltip_x = max(0, (view_w - len(item_name)) // 2)
+                tooltip_y = view_h - 1
+                console.print(tooltip_x, tooltip_y, item_name, fg=(255, 255, 200), bg=(30, 30, 30))
+
             # No level indicator on map — level name shown during fullscreen card only
 
             context.present(console)
@@ -1706,7 +1727,6 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                             dg.player_row = nr
                             dg.player_col = nc
                             dg.reveal_current_area()
-                            dg.pickup_coins()
 
                     key_to_slot = {
                         tcod.event.K_1: 0, tcod.event.K_2: 1, tcod.event.K_3: 2, tcod.event.K_4: 3,
@@ -1730,8 +1750,15 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                                 dg.hovered_item = item
                             else:
                                 dg.hovered_item = None
+                            dg.hovered_ground_item = None
                         else:
                             dg.hovered_item = None
+                            # Check if hovering over ground item
+                            world_x = cam_x + mx
+                            world_y = cam_y + my
+                            dg.hovered_ground_item = None
+                            if hasattr(dg, 'ground_items') and (world_y, world_x) in dg.ground_items:
+                                dg.hovered_ground_item = dg.ground_items[(world_y, world_x)]
                         # Update world cursor
                         world_x = cam_x + mx
                         world_y = cam_y + my
@@ -1782,7 +1809,18 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                             world_y = cam_y + my
                             dg.facing = (world_y - dg.player_row, world_x - dg.player_col)
                             dg.mouse_tile = (world_y, world_x)
-                            dg.swing_weapon()
+                            
+                            # Check if clicking on adjacent item (within 1 tile)
+                            dr_click = world_y - dg.player_row
+                            dc_click = world_x - dg.player_col
+                            distance_click = max(abs(dr_click), abs(dc_click))
+                            
+                            if distance_click == 1:
+                                # Adjacent click - try to pickup items
+                                dg.pickup_coins()
+                            else:
+                                # Non-adjacent click - swing weapon
+                                dg.swing_weapon()
 
             dg.check_exit()
 
