@@ -348,16 +348,16 @@
             * **Fader Relic**
         * Other
         * Trophies
-            * Boar Trophy                     (Common, 15%)         Common Spawn in Meadows
-            * Neck Trophy                     (Common, 5%)          Common Spawn in Meadows
-            * Deer Trophy                     (Common, 50%)         Common Spawn in Meadows
-            * **Eikthyr Trophy**              (Boss, 100%)          Meadows Boss
-            * Greydwarf Trophy                (Common, 5%) 		    Common Spawn in Black Forest
-            * Greydwarf Shaman Trophy         (Uncommon, 10%)       Uncommon Spawn from Greydwarf Nest, Uncommon 
-            * Greydwarf Brute Trophy          (Uncommon, 10%)       Uncommon Spawn in Black Forest
-            * Skeleton Trophy                 (Common, 10%)
-            * Ghost Trophy                    (Very Rare, 10%)
-            * Rancid Remains Trophy           (Very Rare, 10%)
+            * Boar Trophy                     (Common, 15%)         1
+            * Neck Trophy                     (Common, 5%)          1
+            * Deer Trophy                     (Common, 50%)         1,3,6
+            * **Eikthyr Trophy**              (Boss, 100%)          2
+            * Greydwarf Trophy                (Common, 5%) 		    3,6
+            * Greydwarf Shaman Trophy         (Uncommon, 10%)       3,6
+            * Greydwarf Brute Trophy          (Uncommon, 10%)       3,6
+            * Skeleton Trophy                 (Common, 10%)         3,4,6
+            * Ghost Trophy                    (Very Rare, 10%)      4
+            * Rancid Remains Trophy           (Very Rare, 10%)      4
             * Troll Trophy                    (Rare, 50%)
             * Bear Trophy                     (Rare, 50%)
             * **Brenna Trophy**               (Miniboss, 100%)

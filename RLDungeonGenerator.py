@@ -19,6 +19,15 @@ except Exception as e:
     import traceback as _tb
     _tcod_import_error = _tb.format_exc()
 
+# Prefer pygame for rendering when available
+try:
+    import pygame
+    _pygame_import_error = None
+except Exception:
+    pygame = None
+    import traceback as _tb2
+    _pygame_import_error = _tb2.format_exc()
+
 # numpy is optional only required for pixel rendering path
 try:
     import numpy as np
@@ -648,6 +657,176 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
             time.sleep(0.001)
 
 
+def render_with_pygame(dg: RLDungeonGenerator) -> None:
+    if pygame is None:
+        info = (
+            f"pygame is not installed or failed to import.\n"
+            f"Python executable: {sys.executable}\n"
+            f"Import traceback:\n{_pygame_import_error}\n"
+        )
+        print(info)
+        raise ImportError(info)
+
+    pygame.init()
+    # Viewport size in tiles (match tcod defaults used earlier)
+    view_w = min(40, dg.width)
+    view_h = min(25, dg.height)
+    pixel_view_w = view_w * dg.tile_size
+    pixel_view_h = view_h * dg.tile_size
+
+    screen = pygame.display.set_mode((pixel_view_w, pixel_view_h))
+    pygame.display.set_caption("RLDungeonGenerator")
+    clock = pygame.time.Clock()
+
+    # Attempt to load a PNG tilesheet first (same path as tcod renderer)
+    tile_surfaces = None
+    png_tileset_path = os.path.join(os.path.dirname(__file__), 'assets', 'tilesets', 'Redjack17.png')
+    if os.path.exists(png_tileset_path):
+        try:
+            sheet = pygame.image.load(png_tileset_path).convert_alpha()
+            sheet_w, sheet_h = sheet.get_size()
+            cols = sheet_w // dg.tile_size
+            rows = sheet_h // dg.tile_size
+            tile_surfaces = []
+            for ty in range(rows):
+                for tx in range(cols):
+                    rect = pygame.Rect(tx * dg.tile_size, ty * dg.tile_size, dg.tile_size, dg.tile_size)
+                    tile = pygame.Surface((dg.tile_size, dg.tile_size), pygame.SRCALPHA)
+                    tile.blit(sheet, (0, 0), rect)
+                    tile_surfaces.append(tile)
+        except Exception:
+            tile_surfaces = None
+
+    # Fallback to a pygame font renderer (monospace) and glyph cache
+    font = pygame.font.SysFont('consolas', dg.tile_size, bold=False)
+    glyph_cache = {}
+
+    movement_key_map = {
+        pygame.K_UP: (0.0, -1.0),
+        pygame.K_w: (0.0, -1.0),
+        pygame.K_DOWN: (0.0, 1.0),
+        pygame.K_s: (0.0, 1.0),
+        pygame.K_LEFT: (-1.0, 0.0),
+        pygame.K_a: (-1.0, 0.0),
+        pygame.K_RIGHT: (1.0, 0.0),
+        pygame.K_d: (1.0, 0.0),
+    }
+    held_directions = []
+
+    running = True
+    last_frame_time = time.time()
+    while running:
+        current_time = time.time()
+        delta_time = current_time - last_frame_time
+        last_frame_time = current_time
+        if delta_time > 0.1:
+            delta_time = 0.1
+
+        # Movement updates
+        dg.update_movement(delta_time, (0.0, 0.0))
+        if held_directions:
+            sum_dx = sum(d[0] for d in held_directions)
+            sum_dy = sum(d[1] for d in held_directions)
+            def sign(v):
+                return 1 if v > 0 else (-1 if v < 0 else 0)
+            mdx = sign(sum_dx)
+            mdy = sign(sum_dy)
+            if mdx != 0 or mdy != 0:
+                dg.move_by_pixels(int(mdx), int(mdy), pixels=1)
+
+        # Draw background
+        screen.fill((10, 10, 10))
+
+        # Camera top-left in tiles
+        cam_ty = int(dg.player_y / dg.tile_size) - view_h // 2
+        cam_tx = int(dg.player_x / dg.tile_size) - view_w // 2
+        if cam_ty < 0: cam_ty = 0
+        if cam_tx < 0: cam_tx = 0
+        if cam_ty > dg.height - view_h: cam_ty = max(0, dg.height - view_h)
+        if cam_tx > dg.width - view_w: cam_tx = max(0, dg.width - view_w)
+
+        for ty in range(view_h):
+            wr = cam_ty + ty
+            if wr < 0 or wr >= dg.height: continue
+            for tx in range(view_w):
+                wc = cam_tx + tx
+                if wc < 0 or wc >= dg.width: continue
+                ch = dg.dungeon[wr][wc].get_ch()
+                # determine colors and glyph
+                if ch == '#':
+                    fg = (125, 125, 125)
+                    bg = (10, 10, 10)
+                    glyph = '#'
+                elif ch == '.':
+                    fg = (200, 210, 235)
+                    bg = (35, 40, 55)
+                    glyph = '.'
+                elif ch == '+':
+                    fg = (255, 215, 0)
+                    bg = (0, 0, 0)
+                    glyph = '+'
+                else:
+                    fg = (255, 255, 255)
+                    bg = (0, 0, 0)
+                    glyph = ch
+
+                if not dg.explored[wr][wc]:
+                    fg = (int(fg[0] * 0.15), int(fg[1] * 0.15), int(fg[2] * 0.15))
+                    bg = (0, 0, 0)
+
+                x = tx * dg.tile_size
+                y = ty * dg.tile_size
+
+                if tile_surfaces is not None:
+                    idx = ord(glyph)
+                    if idx < len(tile_surfaces):
+                        screen.blit(tile_surfaces[idx], (x, y))
+                    else:
+                        # fallback to a filled rect and rendered glyph
+                        pygame.draw.rect(screen, bg, (x, y, dg.tile_size, dg.tile_size))
+                        surf = glyph_cache.get((glyph, fg))
+                        if surf is None:
+                            surf = font.render(glyph, True, fg)
+                            glyph_cache[(glyph, fg)] = surf
+                        screen.blit(surf, (x, y))
+                else:
+                    pygame.draw.rect(screen, bg, (x, y, dg.tile_size, dg.tile_size))
+                    surf = glyph_cache.get((glyph, fg))
+                    if surf is None:
+                        surf = font.render(glyph, True, fg)
+                        glyph_cache[(glyph, fg)] = surf
+                    # center glyph inside tile
+                    sw, sh = surf.get_size()
+                    screen.blit(surf, (x + (dg.tile_size - sw)//2, y + (dg.tile_size - sh)//2))
+
+        # Draw player as a white circle at sub-tile position
+        player_px = dg.player_x - cam_tx * dg.tile_size
+        player_py = dg.player_y - cam_ty * dg.tile_size
+        pygame.draw.circle(screen, (255, 255, 255), (int(player_px), int(player_py)), max(2, dg.tile_size // 3))
+
+        pygame.display.flip()
+
+        # Event handling
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    running = False
+                direction = movement_key_map.get(event.key)
+                if direction is not None and direction not in held_directions:
+                    held_directions.append(direction)
+            elif event.type == pygame.KEYUP:
+                direction = movement_key_map.get(event.key)
+                if direction is not None and direction in held_directions:
+                    held_directions.remove(direction)
+
+        # Cap framerate and allow high-res timers
+        clock.tick(60)
+
+    pygame.quit()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="RLDungeonGenerator with optional tcod rendering")
     parser.add_argument("--width", type=int, default=75, help="Dungeon width in tiles")
@@ -662,7 +841,11 @@ def main() -> None:
         if args.ascii:
             dg.print_map()
         else:
-            render_with_tcod(dg)
+            # Prefer pygame renderer if available
+            if pygame is not None:
+                render_with_pygame(dg)
+            else:
+                render_with_tcod(dg)
     except Exception:
         traceback.print_exc()
         try:
