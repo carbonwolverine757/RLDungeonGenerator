@@ -129,53 +129,51 @@
             * ***Antler Spear***                 Pierce:20 Pickaxe:10           Use Stamina:8
         * Black Forest :
             * Stagbreaker                        Blunt:20 Pierce:5              Use Stamina:20
-            * Finewood Bow                       Pierce:32                      Use Stamina:6/s
             * Bronze Sword                       Slash:35					    Use Stamina:8
             * Bronze Axe                         Slash:40					    Use Stamina:8
             * Copper Knife                       Slash:12 Pierce:12             Use Stamina:5
             * Bronze Spear                       Pierce:35                      Use Stamina:8
             * Bronze Mace                        Blunt:35					    Use Stamina:8
-            * Bronze Atgeir                      Pierce:45                      Use Stamina:8
-            * Claws of the Bear                  Slash:25                       Use Stamina:6
+            * Bronze Atgeir                      Pierce:45
+            * Claws of the Bear
             * **Rancid Mace**
             * **Troll Log**
             * **Surtling Bomb**
         * Ocean :
-            * Abyssal Razor                     Slash:20 Pierce:20              Use Stamina:7
-            * Abyssal Harpoon                   Pierce:10                       Use Stamina:10
+            * Abyssal Razor
+            * Abyssal Harpoon
         * Swamp :
-            * Iron Sword                        Slash:55                        Use Stamina:10
-            * Iron Mace                         Blunt:55                        Use Stamina:10
-            * Ancient Bark Spear                Pierce:55                       Use Stamina:10
-            * Iron Atgeir                       Pierce:65                       Use Stamina:10
-            * Iron Knife                        Slash:20 Pierce:20              Use Stamina:7
-            * Iron Axe                          Slash:60                        Use Stamina:10
-            * Battleaxe                         Slash:70                        Use Stamina:15
-            * Huntsman Bow                      Pierce:42                       Use Stamina:8/s
-            * Iron Sledge                       Blunt:55                        Use Stamina:27
-            * Ooze Bomb                         Poison:20                       Use Stamina:3
+            * Iron Sword
+            * Iron Mace
+            * Ancient Bark Spear
+            * Iron Atgeir
+            * Iron Knife
+            * Iron Axe
+            * Battleaxe
+            * Iron Sledge
+            * Ooze Bomb
             * **Poison Dagger**
             * **Flail**
             * **Abomination Arm**
             * ***Bonemass Blade***
         * Mountains :
-            * Silver Sword                      Slash:75 Spirit:30              Use Stamina:10
-            * Silver Knife                      Slash:25 Pierce:25              Use Stamina:7
-            * Frostner                          Blunt:35 Frost:40 Spirit:20     Use Stamina:10
-            * Fang Spear                        Pierce:75                       Use Stamina:10
-            * Crystal Battleaxe                 Slash:90 Spirit:30              Use Stamina:18
-            * Flesh Rippers                     Slash:60                        Use Stamina:8
-            * Draugr Fang                       Pierce:50 Poison:10             Use Stamina:10/s
+            * Silver Sword
+            * Silver Knife
+            * Frostner
+            * Fang Spear
+            * Crystal Battleaxe
+            * Flesh Rippers
+            * Draugr Fang
             * **Stone Golem Arm**
             * **Ice Bomb**
             * ***Moder Claw***
             * ***Frost Blade***
         * Plains :
-            * Black Metal Sword                 Slash:95                        Use Stamina:12
-            * Black Metal Atgeir                Pierce:105                      Use Stamina:12
-            * Black Metal Axe                   Slash:100 				        Use Stamina:12
-            * Black Metal Knife                 Slash:35 Pierce:35              Use Stamina:8
-            * Porcupine                         Blunt:40 Pierce:55			    Use Stamina:12
+            * Black Metal Sword
+            * Black Metal Atgeir
+            * Black Metal Axe
+            * Black Metal Knife
+            * Porcupine
             * Vilebone Maulclaws
             * Black Metal Battleaxe
             * **Fuling Berserker Club**
