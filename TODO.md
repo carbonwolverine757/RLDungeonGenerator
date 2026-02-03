@@ -176,7 +176,7 @@
             * Black Metal Axe                   Slash:100 				        Use Stamina:12
             * Black Metal Knife                 Slash:35 Pierce:35              Use Stamina:8
             * Porcupine                         Blunt:40 Pierce:55			    Use Stamina:12
-            * Vilebone Maulclaws
+            * Vilebone Maulclaws                Slash:25 Pierce:50              Use Stamina:10
             * Black Metal Battleaxe
             * **Fuling Berserker Club**
             * **Tar Sword**

@@ -1,4 +1,4 @@
-# This code is released into the Public Domain.
+﻿# This code is released into the Public Domain.
 from math import sqrt
 from random import random
 from random import randrange
@@ -68,7 +68,7 @@ class RLDungeonGenerator:
         for h in range(self.height):
             row = []
             for w in range(self.width):
-                row.append(DungeonSqr('#'))
+                row.append(DungeonSqr('\u2588'))  # FULL BLOCK for walls
 
             self.dungeon.append(row)
 
@@ -130,7 +130,7 @@ class RLDungeonGenerator:
             self.rooms.append(Room(room_start_row, room_start_col, room_height, room_width))
             for r in range(room_start_row, room_start_row + room_height):
                 for c in range(room_start_col, room_start_col + room_width):
-                    self.dungeon[r][c] = DungeonSqr('.')
+                    self.dungeon[r][c] = DungeonSqr('\u00B7')  # MIDDLE DOT for floors
 
     def are_rooms_adjacent(self, room1, room2):
         adj_rows = []
@@ -162,7 +162,7 @@ class RLDungeonGenerator:
                 start_col = room2[0].col + room2[0].width
                 end_col = room1.col                
             for c in range(start_col, end_col):
-                self.dungeon[row][c] = DungeonSqr('.')
+                self.dungeon[row][c] = DungeonSqr('\u00B7')  # MIDDLE DOT for floors
 
             if end_col - start_col >= 4:
                 self.dungeon[row][start_col] = DungeonSqr('+')
@@ -180,7 +180,7 @@ class RLDungeonGenerator:
                 end_row = room1.row
 
             for r in range(start_row, end_row):
-                self.dungeon[r][col] = DungeonSqr('.')
+                self.dungeon[r][col] = DungeonSqr('\u00B7')  # MIDDLE DOT for floors
 
             if end_row - start_row >= 4:
                 self.dungeon[start_row][col] = DungeonSqr('+')
@@ -254,7 +254,7 @@ class RLDungeonGenerator:
         if r < 0 or c < 0 or r >= self.height or c >= self.width:
             return False
         ch = self.dungeon[r][c].get_ch()
-        return ch in ('.', '+')
+        return ch in ('\u00B7', '+')  # MIDDLE DOT (floor) or door
 
     def spawn_player(self):
         # Prefer the center of the first room if available, otherwise first walkable tile
@@ -394,7 +394,7 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
 
     # Prefer a project-local bitmap tileset first
     tileset = None
-    png_tileset_path = os.path.join(os.path.dirname(__file__), 'assets', 'tilesets', 'Redjack17.png')
+    png_tileset_path = os.path.join(os.path.dirname(__file__), 'assets', 'tilesets', 'unicode_tileset.png')
     if os.path.exists(png_tileset_path):
         try:
             # Assumes CP437 16x16 grid tilesheet
@@ -507,8 +507,11 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                     dg.move_by_pixels(int(mdx), int(mdy), pixels=1)
 
             if use_pixel_render and tile_bitmaps is not None:
-                # Build pixel buffer
+                # Build pixel buffer - fill with dark background first
                 buf = np.zeros((pixel_view_h, pixel_view_w, 4), dtype=np.uint8)
+                # Fill entire buffer with dark gray background
+                buf[:, :, :3] = (10, 10, 10)  # Dark background
+                buf[:, :, 3] = 255  # Fully opaque
 
                 # Camera top-left in tiles
                 cam_ty = int(dg.player_y / dg.tile_size) - view_h // 2
@@ -521,13 +524,25 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                     for tx in range(view_w):
                         wr = cam_ty + ty
                         wc = cam_tx + tx
+                        # Fill out-of-bounds areas with dark background
                         if wr < 0 or wr >= dg.height or wc < 0 or wc >= dg.width:
+                            y0 = ty * dg.tile_size
+                            x0 = tx * dg.tile_size
+                            buf[y0:y0+dg.tile_size, x0:x0+dg.tile_size, :3] = (10, 10, 10)
+                            buf[y0:y0+dg.tile_size, x0:x0+dg.tile_size, 3] = 255
                             continue
                         ch = dg.dungeon[wr][wc].get_ch()
-                        if ch == '#':
-                            idx = ord('#')
-                        elif ch == '.':
-                            idx = ord('.')
+                        # Handle unexplored areas with dark background
+                        if not dg.explored[wr][wc]:
+                            y0 = ty * dg.tile_size
+                            x0 = tx * dg.tile_size
+                            buf[y0:y0+dg.tile_size, x0:x0+dg.tile_size, :3] = (0, 0, 0)
+                            buf[y0:y0+dg.tile_size, x0:x0+dg.tile_size, 3] = 255
+                            continue
+                        if ch == '\u2588':  # FULL BLOCK (wall)
+                            idx = ord('\u2588')
+                        elif ch == '\u00B7':  # MIDDLE DOT (floor)
+                            idx = ord('\u00B7')
                         elif ch == '+':
                             idx = ord('+')
                         else:
@@ -543,6 +558,19 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                                 buf[y0:y0+dg.tile_size, x0:x0+dg.tile_size, :3] * (1 - alpha) +
                                 tile_img[:, :, :3] * alpha
                             ).astype(np.uint8)
+                            buf[y0:y0+dg.tile_size, x0:x0+dg.tile_size, 3] = 255
+                        else:
+                            # Fallback: fill with background color if tile not found
+                            y0 = ty * dg.tile_size
+                            x0 = tx * dg.tile_size
+                            if ch == '\u2588':  # FULL BLOCK (wall)
+                                buf[y0:y0+dg.tile_size, x0:x0+dg.tile_size, :3] = (125, 125, 125)
+                            elif ch == '\u00B7':  # MIDDLE DOT (floor)
+                                buf[y0:y0+dg.tile_size, x0:x0+dg.tile_size, :3] = (180, 180, 180)
+                            elif ch == '+':
+                                buf[y0:y0+dg.tile_size, x0:x0+dg.tile_size, :3] = (255, 215, 0)
+                            else:
+                                buf[y0:y0+dg.tile_size, x0:x0+dg.tile_size, :3] = (10, 10, 10)
                             buf[y0:y0+dg.tile_size, x0:x0+dg.tile_size, 3] = 255
 
                 # Draw player as a white square (or use a small sprite if available)
@@ -587,14 +615,14 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                         if wr < 0 or wr >= dg.height or wc < 0 or wc >= dg.width:
                             continue
                         ch = dg.dungeon[wr][wc].get_ch()
-                        if ch == '#':
+                        if ch == '\u2588':  # FULL BLOCK (wall)
                             fg = (125, 125, 125)
                             bg = (10, 10, 10)
-                            glyph = ord('#')
-                        elif ch == '.':
-                            fg = (200, 210, 235)
-                            bg = (35, 40, 55)
-                            glyph = ord('.')
+                            glyph = ord('\u2588')
+                        elif ch == '\u00B7':  # MIDDLE DOT (floor)
+                            fg = (180, 180, 180)
+                            bg = (30, 30, 30)
+                            glyph = ord('\u00B7')
                         elif ch == '+':
                             fg = (255, 215, 0)
                             bg = (0, 0, 0)
@@ -680,7 +708,7 @@ def render_with_pygame(dg: RLDungeonGenerator) -> None:
 
     # Attempt to load a PNG tilesheet first (same path as tcod renderer)
     tile_surfaces = None
-    png_tileset_path = os.path.join(os.path.dirname(__file__), 'assets', 'tilesets', 'Redjack17.png')
+    png_tileset_path = os.path.join(os.path.dirname(__file__), 'assets', 'tilesets', 'unicode_tileset.png')
     if os.path.exists(png_tileset_path):
         try:
             sheet = pygame.image.load(png_tileset_path).convert_alpha()
@@ -747,20 +775,26 @@ def render_with_pygame(dg: RLDungeonGenerator) -> None:
 
         for ty in range(view_h):
             wr = cam_ty + ty
-            if wr < 0 or wr >= dg.height: continue
             for tx in range(view_w):
                 wc = cam_tx + tx
-                if wc < 0 or wc >= dg.width: continue
+                x = tx * dg.tile_size
+                y = ty * dg.tile_size
+                
+                # Handle out-of-bounds areas
+                if wr < 0 or wr >= dg.height or wc < 0 or wc >= dg.width:
+                    pygame.draw.rect(screen, (10, 10, 10), (x, y, dg.tile_size, dg.tile_size))
+                    continue
+                    
                 ch = dg.dungeon[wr][wc].get_ch()
                 # determine colors and glyph
-                if ch == '#':
+                if ch == '\u2588':  # FULL BLOCK (wall)
                     fg = (125, 125, 125)
                     bg = (10, 10, 10)
-                    glyph = '#'
-                elif ch == '.':
-                    fg = (200, 210, 235)
-                    bg = (35, 40, 55)
-                    glyph = '.'
+                    glyph = '\u2588'
+                elif ch == '\u00B7':  # MIDDLE DOT (floor)
+                    fg = (180, 180, 180)
+                    bg = (30, 30, 30)
+                    glyph = '\u00B7'
                 elif ch == '+':
                     fg = (255, 215, 0)
                     bg = (0, 0, 0)
@@ -773,9 +807,6 @@ def render_with_pygame(dg: RLDungeonGenerator) -> None:
                 if not dg.explored[wr][wc]:
                     fg = (int(fg[0] * 0.15), int(fg[1] * 0.15), int(fg[2] * 0.15))
                     bg = (0, 0, 0)
-
-                x = tx * dg.tile_size
-                y = ty * dg.tile_size
 
                 if tile_surfaces is not None:
                     idx = ord(glyph)
