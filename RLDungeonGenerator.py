@@ -9,6 +9,24 @@ import sys
 import time
 import traceback
 
+# Glyph index for walls & floors in the generated Unicode tilesheet.
+# The tilesheet is built by `generate_unicode_tileset.py` with `cols=32`,
+# so each row has 32 tiles. We want the glyph at:
+#   - row = 7 (0-based, i.e. 8th row from top)
+#   - col = 16 (0-based, i.e. 17th column from left)
+# Index = row * cols + col = 7 * 32 + 16 = 240.
+WALL_FLOOR_GLYPH_INDEX = 7 * 32 + 16
+
+# Visual tuning (higher contrast)
+# - Walls vs floors are differentiated primarily by background color.
+# - Fog-of-war is rendered much darker than explored tiles.
+COLOR_WALL_BG = (15, 15, 18)
+COLOR_FLOOR_BG = (55, 55, 62)
+COLOR_FOG_BG = (0, 0, 0)
+COLOR_WALL_FG = (235, 235, 235)
+COLOR_FLOOR_FG = (245, 245, 245)
+COLOR_FOG_FG = (18, 18, 18)
+
 try:
     import tcod
     import tcod.tileset
@@ -532,17 +550,29 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                             buf[y0:y0+dg.tile_size, x0:x0+dg.tile_size, 3] = 255
                             continue
                         ch = dg.dungeon[wr][wc].get_ch()
-                        # Handle unexplored areas with dark background
+                        # Handle unexplored areas with dark background (high contrast fog-of-war)
                         if not dg.explored[wr][wc]:
                             y0 = ty * dg.tile_size
                             x0 = tx * dg.tile_size
-                            buf[y0:y0+dg.tile_size, x0:x0+dg.tile_size, :3] = (0, 0, 0)
+                            buf[y0:y0+dg.tile_size, x0:x0+dg.tile_size, :3] = COLOR_FOG_BG
                             buf[y0:y0+dg.tile_size, x0:x0+dg.tile_size, 3] = 255
                             continue
+
+                        # Fill per-tile background first so walls/floors differ even with the same glyph.
+                        y0 = ty * dg.tile_size
+                        x0 = tx * dg.tile_size
+                        if ch == '\u2588':  # wall
+                            buf[y0:y0+dg.tile_size, x0:x0+dg.tile_size, :3] = COLOR_WALL_BG
+                        elif ch == '\u00B7':  # floor
+                            buf[y0:y0+dg.tile_size, x0:x0+dg.tile_size, :3] = COLOR_FLOOR_BG
+                        else:
+                            buf[y0:y0+dg.tile_size, x0:x0+dg.tile_size, :3] = (10, 10, 10)
+                        buf[y0:y0+dg.tile_size, x0:x0+dg.tile_size, 3] = 255
+
                         if ch == '\u2588':  # FULL BLOCK (wall)
-                            idx = ord('\u2588')
+                            idx = WALL_FLOOR_GLYPH_INDEX
                         elif ch == '\u00B7':  # MIDDLE DOT (floor)
-                            idx = ord('\u00B7')
+                            idx = WALL_FLOOR_GLYPH_INDEX
                         elif ch == '+':
                             idx = ord('+')
                         else:
@@ -550,8 +580,6 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                         # Map CP437 indices to tilesheet index - assumes tilesheet arranged by codepoint
                         if idx < len(tile_bitmaps):
                             tile_img = tile_bitmaps[idx]
-                            y0 = ty * dg.tile_size
-                            x0 = tx * dg.tile_size
                             # Simple alpha blit
                             alpha = tile_img[:, :, 3:4] / 255.0
                             buf[y0:y0+dg.tile_size, x0:x0+dg.tile_size, :3] = (
@@ -561,12 +589,10 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                             buf[y0:y0+dg.tile_size, x0:x0+dg.tile_size, 3] = 255
                         else:
                             # Fallback: fill with background color if tile not found
-                            y0 = ty * dg.tile_size
-                            x0 = tx * dg.tile_size
                             if ch == '\u2588':  # FULL BLOCK (wall)
-                                buf[y0:y0+dg.tile_size, x0:x0+dg.tile_size, :3] = (125, 125, 125)
+                                buf[y0:y0+dg.tile_size, x0:x0+dg.tile_size, :3] = COLOR_WALL_BG
                             elif ch == '\u00B7':  # MIDDLE DOT (floor)
-                                buf[y0:y0+dg.tile_size, x0:x0+dg.tile_size, :3] = (180, 180, 180)
+                                buf[y0:y0+dg.tile_size, x0:x0+dg.tile_size, :3] = COLOR_FLOOR_BG
                             elif ch == '+':
                                 buf[y0:y0+dg.tile_size, x0:x0+dg.tile_size, :3] = (255, 215, 0)
                             else:
@@ -615,14 +641,14 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                         if wr < 0 or wr >= dg.height or wc < 0 or wc >= dg.width:
                             continue
                         ch = dg.dungeon[wr][wc].get_ch()
-                        if ch == '\u2588':  # FULL BLOCK (wall)
-                            fg = (125, 125, 125)
-                            bg = (10, 10, 10)
-                            glyph = ord('\u2588')
-                        elif ch == '\u00B7':  # MIDDLE DOT (floor)
-                            fg = (180, 180, 180)
-                            bg = (30, 30, 30)
-                            glyph = ord('\u00B7')
+                        if ch == '\u2588':  # wall
+                            fg = COLOR_WALL_FG
+                            bg = COLOR_WALL_BG
+                            glyph = WALL_FLOOR_GLYPH_INDEX
+                        elif ch == '\u00B7':  # floor
+                            fg = COLOR_FLOOR_FG
+                            bg = COLOR_FLOOR_BG
+                            glyph = WALL_FLOOR_GLYPH_INDEX
                         elif ch == '+':
                             fg = (255, 215, 0)
                             bg = (0, 0, 0)
@@ -632,8 +658,8 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                             bg = (0, 0, 0)
                             glyph = ord(ch)
                         if not dg.explored[wr][wc]:
-                            fg = (int(fg[0] * 0.15), int(fg[1] * 0.15), int(fg[2] * 0.15))
-                            bg = (0, 0, 0)
+                            fg = COLOR_FOG_FG
+                            bg = COLOR_FOG_BG
                         console.print(c, r, chr(glyph), fg=fg, bg=bg)
 
                 # Draw the player at sub-tile fractional offset by deciding visual cell and also draw an extra pixel "dot"
@@ -787,13 +813,13 @@ def render_with_pygame(dg: RLDungeonGenerator) -> None:
                     
                 ch = dg.dungeon[wr][wc].get_ch()
                 # determine colors and glyph
-                if ch == '\u2588':  # FULL BLOCK (wall)
-                    fg = (125, 125, 125)
-                    bg = (10, 10, 10)
+                if ch == '\u2588':  # wall
+                    fg = COLOR_WALL_FG
+                    bg = COLOR_WALL_BG
                     glyph = '\u2588'
-                elif ch == '\u00B7':  # MIDDLE DOT (floor)
-                    fg = (180, 180, 180)
-                    bg = (30, 30, 30)
+                elif ch == '\u00B7':  # floor
+                    fg = COLOR_FLOOR_FG
+                    bg = COLOR_FLOOR_BG
                     glyph = '\u00B7'
                 elif ch == '+':
                     fg = (255, 215, 0)
@@ -805,11 +831,17 @@ def render_with_pygame(dg: RLDungeonGenerator) -> None:
                     glyph = ch
 
                 if not dg.explored[wr][wc]:
-                    fg = (int(fg[0] * 0.15), int(fg[1] * 0.15), int(fg[2] * 0.15))
-                    bg = (0, 0, 0)
+                    fg = COLOR_FOG_FG
+                    bg = COLOR_FOG_BG
 
                 if tile_surfaces is not None:
-                    idx = ord(glyph)
+                    # Use a shared glyph index from the tileset for both walls and floors.
+                    if glyph in ('\u2588', '\u00B7'):
+                        idx = WALL_FLOOR_GLYPH_INDEX
+                    else:
+                        idx = ord(glyph)
+                    # Draw background color so walls vs floors are distinguishable.
+                    pygame.draw.rect(screen, bg, (x, y, dg.tile_size, dg.tile_size))
                     if idx < len(tile_surfaces):
                         screen.blit(tile_surfaces[idx], (x, y))
                     else:

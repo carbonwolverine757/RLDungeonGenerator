@@ -137,9 +137,9 @@
             * Bronze Mace                        Blunt:35					    Use Stamina:8
             * Bronze Atgeir                      Pierce:45                      Use Stamina:8
             * Claws of the Bear                  Slash:25                       Use Stamina:6
-            * **Rancid Mace**
-            * **Troll Log**
-            * **Surtling Bomb**
+            * **Rancid Mace**                    
+            * **Troll Log**                      
+            * **Surtling Bomb**                  
         * Ocean :
             * Abyssal Razor                     Slash:20 Pierce:20              Use Stamina:7
             * Abyssal Harpoon                   Pierce:10                       Use Stamina:10
@@ -154,10 +154,10 @@
             * Huntsman Bow                      Pierce:42                       Use Stamina:8/s
             * Iron Sledge                       Blunt:55                        Use Stamina:27
             * Ooze Bomb                         Poison:20                       Use Stamina:3
-            * **Poison Dagger**
-            * **Flail**
-            * **Abomination Arm**
-            * ***Bonemass Blade***
+            * **Poison Dagger**                 
+            * **Flail**                         
+            * **Abomination Arm**               
+            * ***Bonemass Blade***              
         * Mountains :
             * Silver Sword                      Slash:75 Spirit:30              Use Stamina:10
             * Silver Knife                      Slash:25 Pierce:25              Use Stamina:7
@@ -166,26 +166,26 @@
             * Crystal Battleaxe                 Slash:90 Spirit:30              Use Stamina:18
             * Flesh Rippers                     Slash:60                        Use Stamina:8
             * Draugr Fang                       Pierce:50 Poison:10             Use Stamina:10/s
-            * **Stone Golem Arm**
-            * **Ice Bomb**
-            * ***Moder Claw***
-            * ***Frost Blade***
+            * **Stone Golem Arm**               
+            * **Ice Bomb**                      
+            * ***Moder Claw***                  
+            * ***Frost Blade***                 
         * Plains :
             * Black Metal Sword                 Slash:95                        Use Stamina:12
             * Black Metal Atgeir                Pierce:105                      Use Stamina:12
             * Black Metal Axe                   Slash:100 				        Use Stamina:12
-            * Black Metal Knife                 Slash:35 Pierce:35              Use Stamina:8
+            * Black Metal Knife                 Slash:30 Pierce:30              Use Stamina:8
             * Porcupine                         Blunt:40 Pierce:55			    Use Stamina:12
             * Vilebone Maulclaws                Slash:25 Pierce:50              Use Stamina:10
-            * Black Metal Battleaxe
-            * **Fuling Berserker Club**
-            * **Tar Sword**
-            * **Tar Bomb**
-            * ***Spirit Hammer***
+            * Black Metal Battleaxe             Slash:110                       Use Stamina:24
+            * **Fuling Berserker Club**         Blunt:120                       Use Stamina:30
+            * **Tar Sword**                     
+            * **Tar Bomb**                      
+            * ***Spirit Hammer***               
         * Mistlands :
-            * Skol and Hati
-            * Krom
-            * Demolisher
+            * Skol and Hati                     Slash:40 Pierce:40              Use Stamina:8
+            * Krom                              Slash:150                       Use Stamina:20
+            * Demolisher                        Blunt:145                       Use Stamina:35
             * Carapace Spear
             * Mistwalker
             * Himminafl
