@@ -186,8 +186,8 @@
             * Skol and Hati                     Slash:40 Pierce:40              Use Stamina:8
             * Krom                              Slash:150                       Use Stamina:20
             * Demolisher                        Blunt:145                       Use Stamina:35
-            * Carapace Spear
-            * Mistwalker
+            * Carapace Spear                    Pierce:115                      Use Stamina:14
+            * Mistwalker                        Slash:75 Frost:40 Spirit:15     Use Stamina:14
             * Himminafl
             * Skull Splittur
             * Arbalest

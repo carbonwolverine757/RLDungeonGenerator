@@ -1,4 +1,4 @@
-﻿# This code is released into the Public Domain.
+# This code is released into the Public Domain.
 from math import sqrt
 from random import random
 from random import randrange
@@ -728,7 +728,8 @@ def render_with_pygame(dg: RLDungeonGenerator) -> None:
     pixel_view_w = view_w * dg.tile_size
     pixel_view_h = view_h * dg.tile_size
 
-    screen = pygame.display.set_mode((pixel_view_w, pixel_view_h))
+    # Create a resizable window so the user can maximize or adjust it.
+    screen = pygame.display.set_mode((pixel_view_w, pixel_view_h), pygame.RESIZABLE)
     pygame.display.set_caption("RLDungeonGenerator")
     clock = pygame.time.Clock()
 
