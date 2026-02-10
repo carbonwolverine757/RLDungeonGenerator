@@ -8,6 +8,7 @@ import os
 import sys
 import time
 import traceback
+import logging
 
 # Glyph index for walls & floors in the generated Unicode tilesheet.
 # The tilesheet is built by `generate_unicode_tileset.py` with `cols=32`,
@@ -28,6 +29,15 @@ COLOR_FLOOR_FG = (245, 245, 245)
 COLOR_FOG_FG = (18, 18, 18)
 
 try:
+    import pygame
+    _pygame_import_error = None
+except Exception:
+    pygame = None
+    import traceback as _tb2
+    _pygame_import_error = _tb2.format_exc()
+
+# Prefer tcod for alternative rendering when available (import after pygame to avoid SDL DLL conflicts)
+try:
     import tcod
     import tcod.tileset
     import tcod.image
@@ -37,14 +47,47 @@ except Exception as e:
     import traceback as _tb
     _tcod_import_error = _tb.format_exc()
 
-# Prefer pygame for rendering when available
-try:
-    import pygame
-    _pygame_import_error = None
-except Exception:
-    pygame = None
-    import traceback as _tb2
-    _pygame_import_error = _tb2.format_exc()
+# Configure simple console logging so import/initialization diagnostics are visible
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s')
+
+def _print_pygame_diagnostics():
+    if pygame is None:
+        logging.error("pygame import failed. Traceback:\n%s", _pygame_import_error)
+        return
+    # pygame imported successfully; show useful attributes
+    try:
+        logging.info("pygame imported from: %s", getattr(pygame, '__file__', '<builtin>'))
+    except Exception:
+        logging.exception("Failed reading pygame.__file__")
+    try:
+        ver = None
+        if hasattr(pygame, 'version'):
+            try:
+                # pygame.version may be a module or object
+                ver = getattr(pygame.version, 'ver', None) or getattr(pygame, 'version', None)
+            except Exception:
+                ver = getattr(pygame, 'version', None)
+        logging.info("pygame version: %s", ver)
+    except Exception:
+        logging.exception("Failed reading pygame version")
+    try:
+        init_state = None
+        if hasattr(pygame, 'get_init'):
+            init_state = pygame.get_init()
+            logging.info("pygame.get_init()=%s", init_state)
+    except Exception:
+        logging.exception("pygame.get_init() check failed")
+
+    # Attempt a non-invasive init check: call pygame.init() inside try/except so any
+    # failures are printed but won't crash the module import.
+    try:
+        init_ret = pygame.init()
+        logging.info("pygame.init() returned: %s", init_ret)
+    except Exception:
+        logging.exception("pygame.init() raised an exception")
+
+# Print diagnostics immediately so the console shows why pygame may be unavailable
+_print_pygame_diagnostics()
 
 # numpy is optional only required for pixel rendering path
 try:
@@ -79,7 +122,9 @@ class RLDungeonGenerator:
         self.tile_size = 16
         self.player_x = 0.0
         self.player_y = 0.0
-        self.player_speed_pixels = 120.0  # pixels per second
+        # Movement speed expressed as tiles per second; converted to pixels/sec below
+        self.player_speed_tiles_per_sec = 3.0
+        self.player_speed_pixels = self.player_speed_tiles_per_sec * self.tile_size
         self.player_radius = 6.0
         self.last_revealed_tile = (-1, -1)
 
@@ -347,16 +392,34 @@ class RLDungeonGenerator:
                 self.reveal_current_area()
 
     def _can_move_to(self, px, py):
-        radius = self.player_radius
-        # Use precise division instead of floor-division so small pixel moves are detected correctly
-        min_col = int((px - radius) / self.tile_size)
-        max_col = int((px + radius) / self.tile_size)
-        min_row = int((py - radius) / self.tile_size)
-        max_row = int((py + radius) / self.tile_size)
+        # Enforce that the player's center must be at least half a tile away from any non-walkable tile.
+        # This prevents the player's center from getting too close to walls when tile size changes.
+        min_dist = 0.5 * self.tile_size
+        # Compute bounding tile range to test
+        min_col = int((px - min_dist) / self.tile_size)
+        max_col = int((px + min_dist) / self.tile_size)
+        min_row = int((py - min_dist) / self.tile_size)
+        max_row = int((py + min_dist) / self.tile_size)
+        min_dist_sq = min_dist * min_dist
+
         for r in range(min_row, max_row + 1):
             for c in range(min_col, max_col + 1):
                 if not self.is_walkable(r, c):
-                    return False
+                    # Tile rectangle in pixels
+                    tx0 = c * self.tile_size
+                    ty0 = r * self.tile_size
+                    tx1 = tx0 + self.tile_size
+                    ty1 = ty0 + self.tile_size
+
+                    # Closest point on tile rect to player's center
+                    closest_x = min(max(px, tx0), tx1)
+                    closest_y = min(max(py, ty0), ty1)
+
+                    dx = px - closest_x
+                    dy = py - closest_y
+                    if dx * dx + dy * dy < min_dist_sq:
+                        return False
+
         return True
 
     def reveal_current_area(self):
@@ -722,11 +785,11 @@ def render_with_pygame(dg: RLDungeonGenerator) -> None:
         raise ImportError(info)
 
     pygame.init()
-    # Viewport size in tiles (match tcod defaults used earlier)
-    view_w = min(40, dg.width)
-    view_h = min(25, dg.height)
-    pixel_view_w = view_w * dg.tile_size
-    pixel_view_h = view_h * dg.tile_size
+    # Initial viewport in tiles (used to create starting window)
+    init_view_w = min(40, dg.width)
+    init_view_h = min(25, dg.height)
+    pixel_view_w = init_view_w * dg.tile_size
+    pixel_view_h = init_view_h * dg.tile_size
 
     # Create a resizable window so the user can maximize or adjust it.
     screen = pygame.display.set_mode((pixel_view_w, pixel_view_h), pygame.RESIZABLE)
@@ -734,6 +797,7 @@ def render_with_pygame(dg: RLDungeonGenerator) -> None:
     clock = pygame.time.Clock()
 
     # Attempt to load a PNG tilesheet first (same path as tcod renderer)
+    tile_surfaces_orig = None
     tile_surfaces = None
     png_tileset_path = os.path.join(os.path.dirname(__file__), 'assets', 'tilesets', 'unicode_tileset.png')
     if os.path.exists(png_tileset_path):
@@ -742,19 +806,25 @@ def render_with_pygame(dg: RLDungeonGenerator) -> None:
             sheet_w, sheet_h = sheet.get_size()
             cols = sheet_w // dg.tile_size
             rows = sheet_h // dg.tile_size
-            tile_surfaces = []
+            tile_surfaces_orig = []
             for ty in range(rows):
                 for tx in range(cols):
                     rect = pygame.Rect(tx * dg.tile_size, ty * dg.tile_size, dg.tile_size, dg.tile_size)
                     tile = pygame.Surface((dg.tile_size, dg.tile_size), pygame.SRCALPHA)
                     tile.blit(sheet, (0, 0), rect)
-                    tile_surfaces.append(tile)
+                    tile_surfaces_orig.append(tile)
+            # Start with a scaled copy equal to original tile size
+            tile_surfaces = list(tile_surfaces_orig)
         except Exception:
+            tile_surfaces_orig = None
             tile_surfaces = None
 
     # Fallback to a pygame font renderer (monospace) and glyph cache
     font = pygame.font.SysFont('consolas', dg.tile_size, bold=False)
     glyph_cache = {}
+    # Keep initial view size in tiles fixed; tile size will change on window resize
+    init_view_w = min(40, dg.width)
+    init_view_h = min(25, dg.height)
 
     movement_key_map = {
         pygame.K_UP: (0.0, -1.0),
@@ -777,8 +847,8 @@ def render_with_pygame(dg: RLDungeonGenerator) -> None:
         if delta_time > 0.1:
             delta_time = 0.1
 
-        # Movement updates
-        dg.update_movement(delta_time, (0.0, 0.0))
+        # Movement updates: use delta-time based movement so speed is tiles/sec independent of tile_size
+        # Apply continuous movement from held keys using `update_movement` which uses `player_speed_pixels`.
         if held_directions:
             sum_dx = sum(d[0] for d in held_directions)
             sum_dy = sum(d[1] for d in held_directions)
@@ -787,12 +857,74 @@ def render_with_pygame(dg: RLDungeonGenerator) -> None:
             mdx = sign(sum_dx)
             mdy = sign(sum_dy)
             if mdx != 0 or mdy != 0:
-                dg.move_by_pixels(int(mdx), int(mdy), pixels=1)
+                dg.update_movement(delta_time, (mdx, mdy))
+        else:
+            dg.update_movement(delta_time, (0.0, 0.0))
 
-        # Draw background
+
+        # Update viewport to keep tile count fixed and instead adjust tile size
+        pixel_view_w, pixel_view_h = screen.get_size()
+        view_w = init_view_w
+        view_h = init_view_h
+
+        # Compute the largest integer tile size that fits both dimensions
+        desired_tile_w = max(1, pixel_view_w // view_w)
+        desired_tile_h = max(1, pixel_view_h // view_h)
+        new_tile_size = min(desired_tile_w, desired_tile_h)
+
+        # If tile size changed, update dg.tile_size, rescale tiles and font, and clear glyph cache
+        if new_tile_size != dg.tile_size:
+            old_tile_size = dg.tile_size
+            # Preserve player's tile+fractional offset so they don't appear to move on resize
+            try:
+                if old_tile_size > 0:
+                    frac_x = dg.player_x / old_tile_size - dg.player_col
+                    frac_y = dg.player_y / old_tile_size - dg.player_row
+                else:
+                    frac_x = 0.5
+                    frac_y = 0.5
+            except Exception:
+                frac_x = 0.5
+                frac_y = 0.5
+
+            dg.tile_size = new_tile_size
+            # Keep movement speed consistent in tiles/sec regardless of pixel tile size
+            try:
+                dg.player_speed_pixels = dg.player_speed_tiles_per_sec * dg.tile_size
+            except Exception:
+                pass
+            # Rescale tile surfaces if we have originals
+            if tile_surfaces_orig is not None:
+                try:
+                    tile_surfaces = [pygame.transform.smoothscale(s, (dg.tile_size, dg.tile_size)) for s in tile_surfaces_orig]
+                except Exception:
+                    tile_surfaces = list(tile_surfaces_orig)
+            # Recreate font at new size and clear glyph cache
+            try:
+                font = pygame.font.SysFont('consolas', dg.tile_size, bold=False)
+            except Exception:
+                font = pygame.font.SysFont(None, dg.tile_size)
+            glyph_cache.clear()
+
+            # Recompute player pixel coordinates to keep the same tile and fractional offset
+            try:
+                dg.player_x = (dg.player_col + frac_x) * dg.tile_size
+                dg.player_y = (dg.player_row + frac_y) * dg.tile_size
+            except Exception:
+                # Fallback: center player in its tile
+                dg.player_x = (dg.player_col + 0.5) * dg.tile_size
+                dg.player_y = (dg.player_row + 0.5) * dg.tile_size
+
+        # Compute used pixel area for tiles and center it in the window if extra space exists
+        used_w = view_w * dg.tile_size
+        used_h = view_h * dg.tile_size
+        offset_x = (pixel_view_w - used_w) // 2 if pixel_view_w > used_w else 0
+        offset_y = (pixel_view_h - used_h) // 2 if pixel_view_h > used_h else 0
+
+        # Draw background (fill entire window)
         screen.fill((10, 10, 10))
 
-        # Camera top-left in tiles
+        # Camera top-left in tiles (clamped so camera doesn't go out of bounds)
         cam_ty = int(dg.player_y / dg.tile_size) - view_h // 2
         cam_tx = int(dg.player_x / dg.tile_size) - view_w // 2
         if cam_ty < 0: cam_ty = 0
@@ -804,8 +936,8 @@ def render_with_pygame(dg: RLDungeonGenerator) -> None:
             wr = cam_ty + ty
             for tx in range(view_w):
                 wc = cam_tx + tx
-                x = tx * dg.tile_size
-                y = ty * dg.tile_size
+                x = offset_x + tx * dg.tile_size
+                y = offset_y + ty * dg.tile_size
                 
                 # Handle out-of-bounds areas
                 if wr < 0 or wr >= dg.height or wc < 0 or wc >= dg.width:
@@ -864,8 +996,8 @@ def render_with_pygame(dg: RLDungeonGenerator) -> None:
                     screen.blit(surf, (x + (dg.tile_size - sw)//2, y + (dg.tile_size - sh)//2))
 
         # Draw player as a white circle at sub-tile position
-        player_px = dg.player_x - cam_tx * dg.tile_size
-        player_py = dg.player_y - cam_ty * dg.tile_size
+        player_px = dg.player_x - cam_tx * dg.tile_size + offset_x
+        player_py = dg.player_y - cam_ty * dg.tile_size + offset_y
         pygame.draw.circle(screen, (255, 255, 255), (int(player_px), int(player_py)), max(2, dg.tile_size // 3))
 
         pygame.display.flip()
@@ -884,6 +1016,12 @@ def render_with_pygame(dg: RLDungeonGenerator) -> None:
                 direction = movement_key_map.get(event.key)
                 if direction is not None and direction in held_directions:
                     held_directions.remove(direction)
+            elif event.type == pygame.VIDEORESIZE:
+                # Recreate the window surface to the new size while keeping RESIZABLE
+                try:
+                    screen = pygame.display.set_mode((event.w, event.h), pygame.RESIZABLE)
+                except Exception:
+                    pass
 
         # Cap framerate and allow high-res timers
         clock.tick(60)
