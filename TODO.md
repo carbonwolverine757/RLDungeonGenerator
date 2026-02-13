@@ -195,23 +195,23 @@
             * Staff of Frost                    Frost:30                      Use Eitr:5
             * Staff of Embers                   Blunt:120 Fire:120            Use Eitr:35
             * Dead Raiser                       Summons Skellett              Use Eitr:100 Use Health:40%
-            * Staff of Protection               Damage Absorption:200         Use Eitr:60 Use Health:40%
+            * Staff of Protection               Damage Absorption:200-700     Use Eitr:60 Use Health:40%
             * **Extractor Spear**               Pierce:95
             * **Staff of the Gjall**            
             * **Eitr Blade**                    
             * **Eitr Grenade**                  
             * **Staff of Eitr**                 
             * ***Staff of The Queen***          
-            * ***Queen's Arm Greatsword***     
+            * ***Queen's Arm Greatsword***      Slash:200 Terrain:100        Use Stamina:
         * Ashlands :
-            * Nidhogg
-            * Splitnir
-            * Slayer
-            * Flametal Mace
-            * Berserkir Axes
-            * Ash Fang
-            * Ripper
-            * Staff of Fracturing
+            * Nidhogg                           Slash:135                    Use Stamina:14
+            * Splitnir                          Pierce:135                   Use Stamina:14
+            * Slayer                            Slash:170                    Use Stamina:24
+            * Flametal Mace                     Blunt:135                    Use Stamina:14
+            * Berserkir Axes                    Slash:140                    Use Stamina:14
+            * Ash Fang                          Pierce:82                    Use Stamina:14/s
+            * Ripper                            Pierce:220                   Use Stamina:1/s
+            * Staff of Fracturing               Blunt:12 Fire:12             Use Eitr:24
             * Staff of Wilds
             * Trollstav
             * Dundr

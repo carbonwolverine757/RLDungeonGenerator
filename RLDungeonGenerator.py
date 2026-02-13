@@ -21,12 +21,14 @@ WALL_FLOOR_GLYPH_INDEX = 7 * 32 + 16
 # Visual tuning (higher contrast)
 # - Walls vs floors are differentiated primarily by background color.
 # - Fog-of-war is rendered much darker than explored tiles.
-COLOR_WALL_BG = (15, 15, 18)
-COLOR_FLOOR_BG = (55, 55, 62)
-COLOR_FOG_BG = (0, 0, 0)
-COLOR_WALL_FG = (235, 235, 235)
-COLOR_FLOOR_FG = (245, 245, 245)
-COLOR_FOG_FG = (18, 18, 18)
+COLOR_WALL_BG = (10, 50, 10)
+COLOR_FLOOR_BG = (50, 150, 50)
+# Fog-of-war background for unexplored tiles (green tint)
+COLOR_FOG_BG = (40, 120, 40)
+# Foreground (glyph) colors
+COLOR_WALL_FG = (20, 100, 20)
+COLOR_FLOOR_FG = (40, 160, 30)
+COLOR_FOG_FG = (35, 140, 20)
 
 try:
     import pygame
@@ -392,9 +394,10 @@ class RLDungeonGenerator:
                 self.reveal_current_area()
 
     def _can_move_to(self, px, py):
-        # Enforce that the player's center must be at least half a tile away from any non-walkable tile.
-        # This prevents the player's center from getting too close to walls when tile size changes.
-        min_dist = 0.5 * self.tile_size
+        # Enforce that the player's outer radius does not overlap any non-walkable
+        # tile. This allows the player's edge to touch the wall but prevents
+        # intersection/overlap with the wall tile.
+        min_dist = self.player_radius
         # Compute bounding tile range to test
         min_col = int((px - min_dist) / self.tile_size)
         max_col = int((px + min_dist) / self.tile_size)
