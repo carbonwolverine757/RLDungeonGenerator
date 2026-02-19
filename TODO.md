@@ -215,7 +215,7 @@
             * Staff of Fracturing               Blunt:12 Fire:12             Use Eitr:24
             * Staff of Wilds                    Blunt:20 Poison:20           Use Eitr:50
             * Trollstav                         Fire:300 Blunt:100 Summon    Use Eitr:120 Use Health:60%
-            * Dundr                             Lightning:18                 Use Eitr:28
+            * Dundr                             Lightning:18(total:216)      Use Eitr:28
             * **Celestial Staff**               
             * **Staff of Snapping Jaws**        
             * **Explosive Grenade**             
@@ -229,17 +229,17 @@
 * Add armor mechanic
 * Add armor
     * Armor as follows :
-        * Rag (Light)
-        * Leather (Light)
-        * Leather Cape
-        * Troll Hide (Light, Sneak Bonus)
-        * Troll Hide Cape
-        * Bronze (Heavy)
-        * Root (Light, Damage res, Archery Bonus)
-        * Iron (Heavy)
-        * Fenris (Light, Dmg res, Speed Bonus)
-        * Fenris Cape (Speed Bonus)
-        * Wolf (Heavy)
+        * Rag (Light)                                          Armor:1 Speed:+0%
+        * Leather (Light)                                      Armor:2 Speed:+0%
+        * Leather Cape                                         Armor:
+        * Troll Hide (Light, Sneak Bonus)                      Armor:
+        * Troll Hide Cape                                      Armor:
+        * Bronze (Heavy)                                       Armor:
+        * Root (Light, Damage res, Archery Bonus)              Armor:
+        * Iron (Heavy)                                         Armor:
+        * Fenris (Light, Dmg res, Speed Bonus)                 Armor:
+        * Fenris Cape (Speed Bonus)                            Armor:
+        * Wolf (Heavy)                                         Armor:
         * Wolf Fur Cape (Frost Res)
         * Vilebone (Light, Damage Bonus, Stamina Reduction)
         * Lox Hide Cape (Frost Res)
@@ -250,7 +250,7 @@
         * Carapace (Heavy)
         * Embla (Mage, Eitr Regen Bonus)
         * Ask (Light, Speed Bonus, Stamina Reduction)
-        * Asksvin Cape (Speed Bonus, Stamina Reduction))
+        * Asksvin Cape (Speed Bonus, Stamina Reduction)
         * Flametal (Heavy, Dmg res)
         * Ashen Cape (Armor)
     * Trinkets :

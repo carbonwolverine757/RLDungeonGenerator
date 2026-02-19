@@ -1,0 +1,8 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^& C:\\\\Users\\\\Kazoku\\\\source\\\\repos\\\\carbonwolverine757\\\\RLDungeonGenerator\\\\env\\\\Scripts\\\\python\\.exe c:/Users/Kazoku/source/repos/carbonwolverine757/RLDungeonGenerator/RLDungeonGenerator\\.py --ascii$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}
