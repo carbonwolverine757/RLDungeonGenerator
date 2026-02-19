@@ -1,4 +1,5 @@
-* MAKE WEAPONS DO WHAT THEY ARE SUPPOSED TO DO
+*
+*MAKE WEAPONS DO WHAT THEY ARE SUPPOSED TO DO
     * range = max distance from player
         * Staff of Fracturing (range = 7)
         * X X X X X X X X X X X X X X
@@ -212,19 +213,19 @@
             * Ash Fang                          Pierce:82                    Use Stamina:14/s
             * Ripper                            Pierce:220                   Use Stamina:1/s
             * Staff of Fracturing               Blunt:12 Fire:12             Use Eitr:24
-            * Staff of Wilds
-            * Trollstav
-            * Dundr
-            * **Celestial Staff**
-            * **Staff of Snapping Jaws**
-            * **Explosive Grenade**
-            * **Staff of Caltrops**
-            * **Lava Blade**
-            * **Staff of the Charred**
-            * **Staff of Brimstone**
-            * ***Blade of Lord Reto***
-            * ***Fader Claw***
-            * ***Staff of The Emerald Flame***
+            * Staff of Wilds                    Blunt:20 Poison:20           Use Eitr:50
+            * Trollstav                         Fire:300 Blunt:100 Summon    Use Eitr:120 Use Health:60%
+            * Dundr                             Lightning:18                 Use Eitr:28
+            * **Celestial Staff**               
+            * **Staff of Snapping Jaws**        
+            * **Explosive Grenade**             
+            * **Staff of Caltrops**             
+            * **Lava Blade**                    
+            * **Staff of the Charred**          
+            * **Staff of Brimstone**            
+            * ***Blade of Lord Reto***          
+            * ***Fader Claw***                  
+            * ***Staff of The Emerald Flame***  
 * Add armor mechanic
 * Add armor
     * Armor as follows :

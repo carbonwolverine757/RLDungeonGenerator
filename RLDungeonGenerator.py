@@ -17,14 +17,17 @@ import logging
 #   - col = 16 (0-based, i.e. 17th column from left)
 # Index = row * cols + col = 7 * 32 + 16 = 240.
 WALL_FLOOR_GLYPH_INDEX = 7 * 32 + 16
+# Glyph index for doors in the generated Unicode tilesheet.
+# Use tile at row = 7, col = 15 (0-based). Index = 7 * 32 + 15 = 239.
+DOOR_GLYPH_INDEX = 7 * 32 + 15
 
 # Visual tuning (higher contrast)
 # - Walls vs floors are differentiated primarily by background color.
 # - Fog-of-war is rendered much darker than explored tiles.
-COLOR_WALL_BG = (10, 50, 10)
-COLOR_FLOOR_BG = (50, 150, 50)
+COLOR_WALL_BG = (50, 82, 17)
+COLOR_FLOOR_BG = (101, 164, 34)
 # Fog-of-war background for unexplored tiles (green tint)
-COLOR_FOG_BG = (40, 120, 40)
+COLOR_FOG_BG = (75, 123, 25)
 # Foreground (glyph) colors
 COLOR_WALL_FG = (20, 100, 20)
 COLOR_FLOOR_FG = (40, 160, 30)
@@ -640,7 +643,7 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                         elif ch == '\u00B7':  # MIDDLE DOT (floor)
                             idx = WALL_FLOOR_GLYPH_INDEX
                         elif ch == '+':
-                            idx = ord('+')
+                            idx = DOOR_GLYPH_INDEX
                         else:
                             idx = ord(ch)
                         # Map CP437 indices to tilesheet index - assumes tilesheet arranged by codepoint
@@ -718,7 +721,7 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                         elif ch == '+':
                             fg = (255, 215, 0)
                             bg = (0, 0, 0)
-                            glyph = ord('+')
+                            glyph = DOOR_GLYPH_INDEX
                         else:
                             fg = (255, 255, 255)
                             bg = (0, 0, 0)
@@ -971,9 +974,11 @@ def render_with_pygame(dg: RLDungeonGenerator) -> None:
                     bg = COLOR_FOG_BG
 
                 if tile_surfaces is not None:
-                    # Use a shared glyph index from the tileset for both walls and floors.
+                    # Use a shared glyph index from the tileset for walls/floors and a dedicated one for doors.
                     if glyph in ('\u2588', '\u00B7'):
                         idx = WALL_FLOOR_GLYPH_INDEX
+                    elif glyph == '+':
+                        idx = DOOR_GLYPH_INDEX
                     else:
                         idx = ord(glyph)
                     # Draw background color so walls vs floors are distinguishable.
