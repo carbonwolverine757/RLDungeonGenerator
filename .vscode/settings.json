@@ -3,6 +3,18 @@
         "/^& C:\\\\Users\\\\Kazoku\\\\source\\\\repos\\\\carbonwolverine757\\\\RLDungeonGenerator\\\\env\\\\Scripts\\\\python\\.exe c:/Users/Kazoku/source/repos/carbonwolverine757/RLDungeonGenerator/RLDungeonGenerator\\.py --ascii$/": {
             "approve": true,
             "matchCommandLine": true
+        },
+        "/^cd 'c:\\\\Users\\\\Kazoku\\\\source\\\\repos\\\\carbonwolverine757\\\\RLDungeonGenerator'; & 'C:/Users/Kazoku/source/repos/carbonwolverine757/RLDungeonGenerator/env/Scripts/python\\.exe' RLDungeonGenerator\\.py --ascii$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^cd 'c:\\\\Users\\\\Kazoku\\\\source\\\\repos\\\\carbonwolverine757\\\\RLDungeonGenerator'; & 'C:/Users/Kazoku/source/repos/carbonwolverine757/RLDungeonGenerator/env/Scripts/python\\.exe' RLDungeonGenerator\\.py --ascii 2>&1 \\| head -50$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^cd 'c:\\\\Users\\\\Kazoku\\\\source\\\\repos\\\\carbonwolverine757\\\\RLDungeonGenerator'; & 'C:/Users/Kazoku/source/repos/carbonwolverine757/RLDungeonGenerator/env/Scripts/python\\.exe' RLDungeonGenerator\\.py --ascii \\| Select-Object -First 5$/": {
+            "approve": true,
+            "matchCommandLine": true
         }
     }
 }

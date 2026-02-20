@@ -1,4 +1,4 @@
-*
+*Make map movement less chunky
 *MAKE WEAPONS DO WHAT THEY ARE SUPPOSED TO DO
     * range = max distance from player
         * Staff of Fracturing (range = 7)
@@ -231,28 +231,28 @@
     * Armor as follows :
         * Rag (Light)                                          Armor:1 Speed:+0%
         * Leather (Light)                                      Armor:2 Speed:+0%
-        * Leather Cape                                         Armor:
-        * Troll Hide (Light, Sneak Bonus)                      Armor:
-        * Troll Hide Cape                                      Armor:
-        * Bronze (Heavy)                                       Armor:
-        * Root (Light, Damage res, Archery Bonus)              Armor:
-        * Iron (Heavy)                                         Armor:
-        * Fenris (Light, Dmg res, Speed Bonus)                 Armor:
-        * Fenris Cape (Speed Bonus)                            Armor:
-        * Wolf (Heavy)                                         Armor:
-        * Wolf Fur Cape (Frost Res)
-        * Vilebone (Light, Damage Bonus, Stamina Reduction)
-        * Lox Hide Cape (Frost Res)
-        * Padded (Heavy)
-        * Linen Cape 
-        * Eitrweave (Mage, Eitr Regen Bonus)
-        * Feather Cape (Frost Res, No Fall Damage)
-        * Carapace (Heavy)
-        * Embla (Mage, Eitr Regen Bonus)
-        * Ask (Light, Speed Bonus, Stamina Reduction)
-        * Asksvin Cape (Speed Bonus, Stamina Reduction)
-        * Flametal (Heavy, Dmg res)
-        * Ashen Cape (Armor)
+        * Leather Cape                                         Armor:1
+        * Troll Hide (Light, Sneak Bonus)                      Armor:6
+        * Troll Hide Cape                                      Armor:2
+        * Bronze (Heavy)                                       Armor:8
+        * Root (Light, Damage res, Archery Bonus)              Armor:8
+        * Iron (Heavy)                                         Armor:14
+        * Fenris (Light, Dmg res, Speed Bonus)                 Armor:10
+        * Fenris Cape (Speed Bonus)                            Armor:3
+        * Wolf (Heavy)                                         Armor:20
+        * Wolf Fur Cape (Frost Res)                            Armor:4
+        * Vilebone (Light, Damage Bonus, Stamina Reduction)    Armor:12
+        * Lox Hide Cape (Frost Res)                            Armor:
+        * Padded (Heavy)                                       Armor:
+        * Linen Cape                                           Armor:
+        * Eitrweave (Mage, Eitr Regen Bonus)                   Armor:
+        * Feather Cape (Frost Res, No Fall Damage)             Armor:
+        * Carapace (Heavy)                                     Armor:
+        * Embla (Mage, Eitr Regen Bonus)                       Armor:
+        * Ask (Light, Speed Bonus, Stamina Reduction)          Armor:
+        * Asksvin Cape (Speed Bonus, Stamina Reduction)        Armor:
+        * Flametal (Heavy, Dmg res)                            Armor:
+        * Ashen Cape (Armor)                                   Armor:
     * Trinkets :
         * Heart of the Forest (50, Health Regen Bonus)
         * Bronze Pendant (50, Stamina Regen Bonus)

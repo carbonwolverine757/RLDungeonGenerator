@@ -249,7 +249,7 @@ class RLDungeonGenerator:
                 start_col = room2[0].col + room2[0].width
                 end_col = room1.col                
             for c in range(start_col, end_col):
-                self.dungeon[row][c] = DungeonSqr('\u00B7')  # MIDDLE DOT for floors
+                self.dungeon[row][c] = DungeonSqr(self.floor_glyph)  # Use current level's floor glyph
 
             if end_col - start_col >= 4:
                 self.dungeon[row][start_col] = DungeonSqr('+')
@@ -267,7 +267,7 @@ class RLDungeonGenerator:
                 end_row = room1.row
 
             for r in range(start_row, end_row):
-                self.dungeon[r][col] = DungeonSqr('\u00B7')  # MIDDLE DOT for floors
+                self.dungeon[r][col] = DungeonSqr(self.floor_glyph)  # Use current level's floor glyph
 
             if end_row - start_row >= 4:
                 self.dungeon[start_row][col] = DungeonSqr('+')
@@ -339,7 +339,7 @@ class RLDungeonGenerator:
         for h in range(self.height):
             row = []
             for w in range(self.width):
-                row.append(DungeonSqr('\u2588'))
+                row.append(DungeonSqr(self.wall_glyph))
             self.dungeon.append(row)
 
         # Reset fog-of-war
@@ -561,11 +561,11 @@ class RLDungeonGenerator:
         er = room.row + room.height // 2
         ec = room.col + room.width // 2
         # If center is not a floor, search for any floor tile in the room
-        if self.dungeon[er][ec].get_ch() != '\u00B7':
+        if self.dungeon[er][ec].get_ch() != self.floor_glyph:
             placed = False
             for r in range(room.row, room.row + room.height):
                 for c in range(room.col, room.col + room.width):
-                    if self.dungeon[r][c].get_ch() == '\u00B7' and (r, c) != (self.player_row, self.player_col):
+                    if self.dungeon[r][c].get_ch() == self.floor_glyph and (r, c) != (self.player_row, self.player_col):
                         er, ec = r, c
                         placed = True
                         break
@@ -662,6 +662,7 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
     }
     # Track held directions for frame-based single-pixel movement
     held_directions = []
+    shift_held = False
 
     with tcod.context.new(
         columns=view_w,
@@ -712,6 +713,10 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                 mdx = sign(sum_dx)
                 mdy = sign(sum_dy)
                 if mdx != 0 or mdy != 0:
+                    # Increase movement when sprinting (shift held) - move 7x per second
+                    if shift_held:
+                        dg.move_by_pixels(int(mdx), int(mdy), pixels=1)
+                        dg.move_by_pixels(int(mdx), int(mdy), pixels=1)
                     dg.move_by_pixels(int(mdx), int(mdy), pixels=1)
 
             if use_pixel_render and tile_bitmaps is not None:
@@ -885,17 +890,23 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                 if event.type == "KEYDOWN":
                     if event.sym == tcod.event.K_ESCAPE:
                         return
-                    # Add to held directions for frame-based movement
-                    direction = movement_key_map.get(event.sym)
-                    if direction is not None:
-                        # keep unique entries
-                        if direction not in held_directions:
-                            held_directions.append(direction)
+                    elif event.sym == tcod.event.K_LSHIFT or event.sym == tcod.event.K_RSHIFT:
+                        shift_held = True
+                    else:
+                        # Add to held directions for frame-based movement
+                        direction = movement_key_map.get(event.sym)
+                        if direction is not None:
+                            # keep unique entries
+                            if direction not in held_directions:
+                                held_directions.append(direction)
                 if event.type == "KEYUP":
-                    # Remove from held directions
-                    direction = movement_key_map.get(event.sym)
-                    if direction is not None and direction in held_directions:
-                        held_directions.remove(direction)
+                    if event.sym == tcod.event.K_LSHIFT or event.sym == tcod.event.K_RSHIFT:
+                        shift_held = False
+                    else:
+                        # Remove from held directions
+                        direction = movement_key_map.get(event.sym)
+                        if direction is not None and direction in held_directions:
+                            held_directions.remove(direction)
 
             # Small sleep to prevent excessive CPU usage
             time.sleep(0.001)
@@ -964,6 +975,7 @@ def render_with_pygame(dg: RLDungeonGenerator) -> None:
         pygame.K_d: (1.0, 0.0),
     }
     held_directions = []
+    shift_held = False
 
     running = True
     last_frame_time = time.time()
@@ -1138,13 +1150,21 @@ def render_with_pygame(dg: RLDungeonGenerator) -> None:
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     running = False
-                direction = movement_key_map.get(event.key)
-                if direction is not None and direction not in held_directions:
-                    held_directions.append(direction)
+                elif event.key == pygame.K_LSHIFT or event.key == pygame.K_RSHIFT:
+                    shift_held = True
+                    dg.player_speed_pixels = 7.0 * dg.tile_size
+                else:
+                    direction = movement_key_map.get(event.key)
+                    if direction is not None and direction not in held_directions:
+                        held_directions.append(direction)
             elif event.type == pygame.KEYUP:
-                direction = movement_key_map.get(event.key)
-                if direction is not None and direction in held_directions:
-                    held_directions.remove(direction)
+                if event.key == pygame.K_LSHIFT or event.key == pygame.K_RSHIFT:
+                    shift_held = False
+                    dg.player_speed_pixels = 3.0 * dg.tile_size
+                else:
+                    direction = movement_key_map.get(event.key)
+                    if direction is not None and direction in held_directions:
+                        held_directions.remove(direction)
             elif event.type == pygame.VIDEORESIZE:
                 # Recreate the window surface to the new size while keeping RESIZABLE
                 try:
@@ -1166,7 +1186,12 @@ def main() -> None:
     args = parser.parse_args()
 
     dg = RLDungeonGenerator(args.width, args.height)
-    dg.generate_map()
+    # Go straight to levels list if available, otherwise generate procedurally
+    if dg.levels:
+        dg.apply_level(0)
+        dg.generate_map()
+    else:
+        dg.generate_map()
 
     try:
         if args.ascii:
