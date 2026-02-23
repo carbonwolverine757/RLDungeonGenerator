@@ -229,30 +229,30 @@
 * Add armor mechanic
 * Add armor
     * Armor as follows :
-        * Rag (Light)                                          Armor:1 Speed:+0%
-        * Leather (Light)                                      Armor:2 Speed:+0%
-        * Leather Cape                                         Armor:1
-        * Troll Hide (Light, Sneak Bonus)                      Armor:6
-        * Troll Hide Cape                                      Armor:2
-        * Bronze (Heavy)                                       Armor:8
-        * Root (Light, Damage res, Archery Bonus)              Armor:8
-        * Iron (Heavy)                                         Armor:14
-        * Fenris (Light, Dmg res, Speed Bonus)                 Armor:10
-        * Fenris Cape (Speed Bonus)                            Armor:3
-        * Wolf (Heavy)                                         Armor:20
-        * Wolf Fur Cape (Frost Res)                            Armor:4
-        * Vilebone (Light, Damage Bonus, Stamina Reduction)    Armor:12
-        * Lox Hide Cape (Frost Res)                            Armor:
-        * Padded (Heavy)                                       Armor:
-        * Linen Cape                                           Armor:
-        * Eitrweave (Mage, Eitr Regen Bonus)                   Armor:
-        * Feather Cape (Frost Res, No Fall Damage)             Armor:
-        * Carapace (Heavy)                                     Armor:
-        * Embla (Mage, Eitr Regen Bonus)                       Armor:
-        * Ask (Light, Speed Bonus, Stamina Reduction)          Armor:
-        * Asksvin Cape (Speed Bonus, Stamina Reduction)        Armor:
-        * Flametal (Heavy, Dmg res)                            Armor:
-        * Ashen Cape (Armor)                                   Armor:
+        * Rag (Light)                                          Armor:1  Speed:+0%
+        * Leather (Light)                                      Armor:2  Speed:+0%
+        * Leather Cape                                         Armor:1  Speed:+0%
+        * Troll Hide (Light, Sneak Bonus)                      Armor:6  Speed:
+        * Troll Hide Cape                                      Armor:2  Speed:
+        * Bronze (Heavy)                                       Armor:8  Speed:
+        * Root (Light, Damage res, Archery Bonus)              Armor:8  Speed:
+        * Iron (Heavy)                                         Armor:14 Speed:
+        * Fenris (Light, Dmg res, Speed Bonus)                 Armor:10 Speed:
+        * Fenris Cape (Speed Bonus)                            Armor:3  Speed:
+        * Wolf (Heavy)                                         Armor:20 Speed:
+        * Wolf Fur Cape (Frost Res)                            Armor:4  Speed:
+        * Vilebone (Light, Damage Bonus, Stamina Reduction)    Armor:12 Speed:
+        * Lox Hide Cape (Frost Res)                            Armor:5  Speed:
+        * Padded (Heavy)                                       Armor:26 Speed
+        * Linen Cape                                           Armor:5  Speed
+        * Eitrweave (Mage, Eitr Regen Bonus)                   Armor:16 Speed
+        * Feather Cape (Frost Res, No Fall Damage)             Armor:6  Speed
+        * Carapace (Heavy)                                     Armor:32 Speed
+        * Embla (Mage, Eitr Regen Bonus)                       Armor:19 Speed
+        * Ask (Light, Speed Bonus, Stamina Reduction)          Armor:28 Speed
+        * Asksvin Cape (Speed Bonus, Stamina Reduction)        Armor:7  Speed
+        * Flametal (Heavy, Dmg res)                            Armor:38 Speed
+        * Ashen Cape (Armor)                                   Armor:16 Speed
     * Trinkets :
         * Heart of the Forest (50, Health Regen Bonus)
         * Bronze Pendant (50, Stamina Regen Bonus)

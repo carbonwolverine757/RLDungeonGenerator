@@ -543,6 +543,12 @@ class RLDungeonGenerator:
         self.apply_level(self.current_level_index)
         self.generate_map()
 
+    def get_current_level_name(self) -> str:
+        """Get the name of the current level."""
+        if self.levels and 0 <= self.current_level_index < len(self.levels):
+            return self.levels[self.current_level_index].get('name', 'Unknown')
+        return 'Unknown'
+
     def place_exit(self):
         """Place an exit tile in a room (not at the player's current position if possible)."""
         if not self.rooms:
@@ -912,6 +918,116 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
             time.sleep(0.001)
 
 
+def show_level_selection_menu(screen: 'pygame.Surface', dg: RLDungeonGenerator, clock: 'pygame.time.Clock', font: 'pygame.font.Font') -> int:
+    """Display a level selection menu with scrolling and return the selected level index."""
+    if not dg.levels:
+        return 0
+    
+    button_height = 40
+    padding = 10
+    title_height = 70
+    scroll_offset = 0
+    menu_running = True
+    selected_level = 0
+    
+    while menu_running:
+        # Get current screen dimensions
+        screen_width, screen_height = screen.get_size()
+        
+        # Calculate responsive button width (80% of screen width, max 500px)
+        button_width = min(int(screen_width * 0.8), 500)
+        button_x = (screen_width - button_width) // 2  # Center horizontally
+        
+        # Calculate available space for buttons
+        available_height = screen_height - title_height - padding
+        buttons_per_screen = max(1, available_height // (button_height + padding))
+        
+        # Clear screen
+        screen.fill((30, 30, 30))
+        
+        # Draw title
+        title_font = pygame.font.SysFont('consolas', 32, bold=True)
+        title_surf = title_font.render('Select Level', True, (255, 255, 255))
+        title_rect = title_surf.get_rect(center=(screen_width // 2, 35))
+        screen.blit(title_surf, title_rect)
+        
+        # Draw level buttons with scrolling
+        button_rects = []
+        y_pos = title_height + padding
+        start_index = max(0, scroll_offset // (button_height + padding))
+        
+        for i in range(start_index, len(dg.levels)):
+            if y_pos + button_height > screen_height:
+                break
+            
+            level = dg.levels[i]
+            level_name = level.get('name', f'Level {i}')
+            
+            # Create button rect
+            button_rect = pygame.Rect(button_x, y_pos, button_width, button_height)
+            button_rects.append((button_rect, i))
+            
+            # Check if mouse is over this button
+            mouse_pos = pygame.mouse.get_pos()
+            if button_rect.collidepoint(mouse_pos):
+                button_color = (100, 150, 255)
+            else:
+                button_color = (70, 100, 180)
+            
+            # Draw button
+            pygame.draw.rect(screen, button_color, button_rect)
+            pygame.draw.rect(screen, (200, 200, 200), button_rect, 2)  # Border
+            
+            # Draw text (truncate if too long)
+            text_surf = font.render(level_name, True, (255, 255, 255))
+            text_rect = text_surf.get_rect(center=button_rect.center)
+            
+            # Clip text to button width
+            if text_rect.width > button_width - 10:
+                # Render truncated text
+                truncated_name = level_name[:len(level_name)//2] + '...'
+                text_surf = font.render(truncated_name, True, (255, 255, 255))
+                text_rect = text_surf.get_rect(center=button_rect.center)
+            
+            screen.blit(text_surf, text_rect)
+            y_pos += button_height + padding
+        
+        # Draw scroll indicator
+        total_height = len(dg.levels) * (button_height + padding)
+        if total_height > available_height:
+            scroll_bar_height = max(20, int(available_height * available_height / total_height))
+            scroll_bar_pos = int(scroll_offset * available_height / total_height)
+            scroll_bar_rect = pygame.Rect(screen_width - 15, title_height + scroll_bar_pos, 10, scroll_bar_height)
+            pygame.draw.rect(screen, (150, 150, 150), scroll_bar_rect)
+        
+        pygame.display.flip()
+        
+        # Handle events
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return -1  # Signal to quit
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 1:  # Left click
+                    mouse_pos = event.pos
+                    for button_rect, level_idx in button_rects:
+                        if button_rect.collidepoint(mouse_pos):
+                            selected_level = level_idx
+                            menu_running = False
+                            break
+                elif event.button == 4:  # Mouse wheel up
+                    scroll_offset = max(0, scroll_offset - (button_height + padding))
+                elif event.button == 5:  # Mouse wheel down
+                    max_scroll = max(0, total_height - available_height)
+                    scroll_offset = min(max_scroll, scroll_offset + (button_height + padding))
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    return -1  # Signal to quit
+        
+        clock.tick(60)
+    
+    return selected_level
+
+
 def render_with_pygame(dg: RLDungeonGenerator) -> None:
     if pygame is None:
         info = (
@@ -931,7 +1047,7 @@ def render_with_pygame(dg: RLDungeonGenerator) -> None:
 
     # Create a resizable window so the user can maximize or adjust it.
     screen = pygame.display.set_mode((pixel_view_w, pixel_view_h), pygame.RESIZABLE)
-    pygame.display.set_caption("RLDungeonGenerator")
+    pygame.display.set_caption(f"RLDungeonGenerator - {dg.get_current_level_name()}")
     clock = pygame.time.Clock()
 
     # Attempt to load a PNG tilesheet first (same path as tcod renderer)
@@ -976,6 +1092,17 @@ def render_with_pygame(dg: RLDungeonGenerator) -> None:
     }
     held_directions = []
     shift_held = False
+
+    # Show level selection menu
+    selected_level_idx = show_level_selection_menu(screen, dg, clock, font)
+    if selected_level_idx == -1:
+        pygame.quit()
+        return
+    
+    # Apply selected level and generate map
+    dg.apply_level(selected_level_idx)
+    dg.generate_map()
+    pygame.display.set_caption(f"RLDungeonGenerator - {dg.get_current_level_name()}")
 
     running = True
     last_frame_time = time.time()
@@ -1142,6 +1269,8 @@ def render_with_pygame(dg: RLDungeonGenerator) -> None:
         pygame.draw.circle(screen, (255, 255, 255), (int(player_px), int(player_py)), max(2, dg.tile_size // 3))
 
         pygame.display.flip()
+        # Update window title with current level
+        pygame.display.set_caption(f"RLDungeonGenerator - {dg.get_current_level_name()}")
 
         # Event handling
         for event in pygame.event.get():
@@ -1186,15 +1315,15 @@ def main() -> None:
     args = parser.parse_args()
 
     dg = RLDungeonGenerator(args.width, args.height)
-    # Go straight to levels list if available, otherwise generate procedurally
-    if dg.levels:
-        dg.apply_level(0)
-        dg.generate_map()
-    else:
-        dg.generate_map()
-
+    
     try:
         if args.ascii:
+            # Go straight to levels list if available, otherwise generate procedurally
+            if dg.levels:
+                dg.apply_level(0)
+                dg.generate_map()
+            else:
+                dg.generate_map()
             dg.print_map()
         else:
             # Prefer pygame renderer if available
