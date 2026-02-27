@@ -232,27 +232,27 @@
         * Rag (Light)                                          Armor:1  Speed:+0%
         * Leather (Light)                                      Armor:2  Speed:+0%
         * Leather Cape                                         Armor:1  Speed:+0%
-        * Troll Hide (Light, Sneak Bonus)                      Armor:6  Speed:
-        * Troll Hide Cape                                      Armor:2  Speed:
-        * Bronze (Heavy)                                       Armor:8  Speed:
-        * Root (Light, Damage res, Archery Bonus)              Armor:8  Speed:
-        * Iron (Heavy)                                         Armor:14 Speed:
-        * Fenris (Light, Dmg res, Speed Bonus)                 Armor:10 Speed:
-        * Fenris Cape (Speed Bonus)                            Armor:3  Speed:
-        * Wolf (Heavy)                                         Armor:20 Speed:
-        * Wolf Fur Cape (Frost Res)                            Armor:4  Speed:
-        * Vilebone (Light, Damage Bonus, Stamina Reduction)    Armor:12 Speed:
-        * Lox Hide Cape (Frost Res)                            Armor:5  Speed:
-        * Padded (Heavy)                                       Armor:26 Speed
-        * Linen Cape                                           Armor:5  Speed
-        * Eitrweave (Mage, Eitr Regen Bonus)                   Armor:16 Speed
-        * Feather Cape (Frost Res, No Fall Damage)             Armor:6  Speed
-        * Carapace (Heavy)                                     Armor:32 Speed
-        * Embla (Mage, Eitr Regen Bonus)                       Armor:19 Speed
-        * Ask (Light, Speed Bonus, Stamina Reduction)          Armor:28 Speed
-        * Asksvin Cape (Speed Bonus, Stamina Reduction)        Armor:7  Speed
-        * Flametal (Heavy, Dmg res)                            Armor:38 Speed
-        * Ashen Cape (Armor)                                   Armor:16 Speed
+        * Troll Hide (Light, Sneak Bonus)                      Armor:6  Speed:+0%
+        * Troll Hide Cape                                      Armor:2  Speed:+0%
+        * Bronze (Heavy)                                       Armor:8  Speed:-5%
+        * Root (Light, Damage res, Archery Bonus)              Armor:8  Speed:-2%
+        * Iron (Heavy)                                         Armor:14 Speed:-5%
+        * Fenris (Light, Dmg res, Speed Bonus)                 Armor:10 Speed:+3%
+        * Fenris Cape (Speed Bonus)                            Armor:3  Speed:+5%
+        * Wolf (Heavy)                                         Armor:20 Speed:-5%
+        * Wolf Fur Cape (Frost Res)                            Armor:4  Speed:+0%
+        * Vilebone (Light, Damage Bonus, Stamina Reduction)    Armor:12 Speed:+0%
+        * Lox Hide Cape (Frost Res)                            Armor:5  Speed:+0%
+        * Padded (Heavy)                                       Armor:26 Speed:-5%
+        * Linen Cape                                           Armor:5  Speed:+0%
+        * Eitrweave (Mage, Eitr Regen Bonus)                   Armor:16 Speed:-2%
+        * Feather Cape (Frost Res, No Fall Damage)             Armor:6  Speed:+0%
+        * Carapace (Heavy)                                     Armor:32 Speed:-5%
+        * Embla (Mage, Eitr Regen Bonus)                       Armor:19 Speed:-2%
+        * Ask (Light, Speed Bonus, Stamina Reduction)          Armor:28 Speed:+5%
+        * Asksvin Cape (Speed Bonus, Stamina Reduction)        Armor:7  Speed:+7%
+        * Flametal (Heavy, Dmg res)                            Armor:38 Speed:-5%
+        * Ashen Cape (Armor)                                   Armor:16 Speed:+0%
     * Trinkets :
         * Heart of the Forest (50, Health Regen Bonus)
         * Bronze Pendant (50, Stamina Regen Bonus)
@@ -429,6 +429,60 @@
 * Add parrying and staggering
 * Add dodging
 * Add levels
+    * Loot Tables
+        * Meadows
+            * Neck
+                * 1 Neck Tail
+                * 5% Neck Trophy
+            * Greyling
+                * 1 Resin
+            * Boar
+                * 1 Boar Meat
+                * 1 Leather Scraps
+                * 15% Boar Trophy
+            * Deer
+                * 1 Deer Meat
+                * 1 Deer Hide
+                * 50% Deer Trophy
+            * Beech Tree
+                * 3 rolls
+                    50% 1 Wood
+                    50% 2 Wood
+                * 2 rolls
+                    50% 1 Resin
+            * Birch Tree
+                * 3 rolls
+                    50% 1 Wood
+                    50% 2 Wood
+                * 2 rolls
+                    50% 1 Finewood
+                    50% 2 Finewood
+                * 2 rolls
+                    50% Resin
+            * Rock
+                * 2 rolls
+                    * 1-3 Stone
+            * Eikthyr
+                * 1 Eikthyr Trophy
+                * 3 Hard Antler
+            * Fir Tree
+                * 3 rolls
+                    1-2 Wood
+                * 2 rolls
+                    1-2 Corewood
+                * 2 rolls
+                    50% Resin
+            * Burial Chambers Chest
+            * Troll Cave
+            * *Smoldering Tomb*
+            * Sunken Crypt
+            * Frost Cave
+            * *Howling Caverns*
+            * Fuling Village
+            * *Sealed Tower*
+            * 
+            * 
+            * 
     * Each level is in a certain biome. Biomes each have different loot, enemies, crafting recipes, and terrain. If a level is completed by finding the loot and exploring the dungeon fully, then the character progresses to the next level. If the character dies on a level, they are reverted to the start of that level. On game start, either a game that is in progress is selected, or a new game is started.
     * Levels are as follows
 

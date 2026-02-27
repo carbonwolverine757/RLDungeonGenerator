@@ -112,11 +112,19 @@ except Exception:
     np = None
 
 class DungeonSqr:
-    def __init__(self, sqr):
-        self.sqr = sqr
+    # Tile types
+    WALL = 'wall'
+    FLOOR = 'floor'
+    DOOR = 'door'
+    EXIT = 'exit'
+    
+    def __init__(self, glyph: str, tile_type: str = 'wall'):
+        self.glyph = glyph
+        self.tile_type = tile_type
 
-    def get_ch(self):
-        return self.sqr
+    def get_ch(self) -> str:
+        """Return the glyph character for rendering."""
+        return self.glyph
 
 class Room:
     def __init__(self, r, c, h, w):
@@ -217,7 +225,7 @@ class RLDungeonGenerator:
             self.rooms.append(Room(room_start_row, room_start_col, room_height, room_width))
             for r in range(room_start_row, room_start_row + room_height):
                 for c in range(room_start_col, room_start_col + room_width):
-                    self.dungeon[r][c] = DungeonSqr(self.floor_glyph)
+                    self.dungeon[r][c] = DungeonSqr(self.floor_glyph, DungeonSqr.FLOOR)
 
     def are_rooms_adjacent(self, room1, room2):
         adj_rows = []
@@ -249,13 +257,13 @@ class RLDungeonGenerator:
                 start_col = room2[0].col + room2[0].width
                 end_col = room1.col                
             for c in range(start_col, end_col):
-                self.dungeon[row][c] = DungeonSqr(self.floor_glyph)  # Use current level's floor glyph
+                self.dungeon[row][c] = DungeonSqr(self.floor_glyph, DungeonSqr.FLOOR)  # Use current level's floor glyph
 
             if end_col - start_col >= 4:
-                self.dungeon[row][start_col] = DungeonSqr('+')
-                self.dungeon[row][end_col - 1] = DungeonSqr('+')
+                self.dungeon[row][start_col] = DungeonSqr('+', DungeonSqr.DOOR)
+                self.dungeon[row][end_col - 1] = DungeonSqr('+', DungeonSqr.DOOR)
             elif start_col == end_col - 1:
-                self.dungeon[row][start_col] = DungeonSqr('+')
+                self.dungeon[row][start_col] = DungeonSqr('+', DungeonSqr.DOOR)
         else:
             col = choice(room2[1])
             # Figure out which room is above the other
@@ -267,13 +275,13 @@ class RLDungeonGenerator:
                 end_row = room1.row
 
             for r in range(start_row, end_row):
-                self.dungeon[r][col] = DungeonSqr(self.floor_glyph)  # Use current level's floor glyph
+                self.dungeon[r][col] = DungeonSqr(self.floor_glyph, DungeonSqr.FLOOR)  # Use current level's floor glyph
 
             if end_row - start_row >= 4:
-                self.dungeon[start_row][col] = DungeonSqr('+')
-                self.dungeon[end_row - 1][col] = DungeonSqr('+')
+                self.dungeon[start_row][col] = DungeonSqr('+', DungeonSqr.DOOR)
+                self.dungeon[end_row - 1][col] = DungeonSqr('+', DungeonSqr.DOOR)
             elif start_row == end_row - 1:
-                self.dungeon[start_row][col] = DungeonSqr('+')
+                self.dungeon[start_row][col] = DungeonSqr('+', DungeonSqr.DOOR)
 
     # Find two nearby rooms that are in difference groups, draw
     # a corridor between them and merge the groups
@@ -339,7 +347,7 @@ class RLDungeonGenerator:
         for h in range(self.height):
             row = []
             for w in range(self.width):
-                row.append(DungeonSqr(self.wall_glyph))
+                row.append(DungeonSqr(self.wall_glyph, DungeonSqr.WALL))
             self.dungeon.append(row)
 
         # Reset fog-of-war
@@ -356,10 +364,35 @@ class RLDungeonGenerator:
         self.reveal_current_area()
 
     def is_walkable(self, r, c):
+        """Return True if the tile at the given coordinates can be entered.
+
+        Walkable tiles are floors, doors, and exits. Walls are not walkable.
+        This determination is based on tile *type*, not glyph, so multiple
+        characters can represent walls or floors without affecting logic.
+        """
         if r < 0 or c < 0 or r >= self.height or c >= self.width:
             return False
-        ch = self.dungeon[r][c].get_ch()
-        return ch in (self.floor_glyph, '+', EXIT_GLYPH)  # floor, door, or exit
+        tile = self.dungeon[r][c]
+        return tile.tile_type in (DungeonSqr.FLOOR, DungeonSqr.DOOR, DungeonSqr.EXIT)
+
+    # internal helpers
+    def _is_floor_char(self, ch: str) -> bool:
+        """Check whether *ch* represents a floor-like tile.
+
+        The set currently includes the configured floor glyph plus door/exit
+        symbols.  Anything not in this group is interpreted as a wall.
+        """
+        return ch in (self.floor_glyph, '+', EXIT_GLYPH)
+
+    def _is_wall_char(self, ch: str) -> bool:
+        """True for any character that isn’t considered floor/door/exit.
+
+        Used by rendering and generation logic that previously compared to
+        ``self.wall_glyph`` directly.  Keeping a separate method makes it
+        straightforward to change behaviour later (for example, treat
+        additional glyphs as non-wall).
+        """
+        return not self._is_floor_char(ch)
 
     def spawn_player(self):
         # Prefer the center of the first room if available, otherwise first walkable tile
@@ -507,12 +540,12 @@ class RLDungeonGenerator:
     def apply_level(self, index: int) -> None:
         """Apply level settings by index from self.levels."""
         if not self.levels:
-            # defaults (match original constants)
+            # defaults (match original constants); stored as codepoints
             level = {
                 'name': 'default',
-                'floor_glyph': '\u00B7',
-                'wall_glyph': '\u2588',
-                'fog_glyph': ' ',
+                'floor_glyph': 0x00B7,  # middle dot
+                'wall_glyph': 0x2588,   # full block
+                'fog_glyph': ord(' '),
                 'floor_bg': COLOR_FLOOR_BG,
                 'wall_bg': COLOR_WALL_BG,
                 'fog_bg': COLOR_FOG_BG,
@@ -523,9 +556,17 @@ class RLDungeonGenerator:
         else:
             level = self.levels[index % len(self.levels)]
 
-        self.floor_glyph = level.get('floor_glyph', '\u00B7')
-        self.wall_glyph = level.get('wall_glyph', '\u2588')
-        self.fog_glyph = level.get('fog_glyph', ' ')
+        # allow glyphs to be stored as either codepoints (int) or chars
+        self.floor_glyph = level.get('floor_glyph', 0x00B7)
+        self.wall_glyph = level.get('wall_glyph', 0x2588)
+        self.fog_glyph = level.get('fog_glyph', ord(' '))
+        # convert ints to characters for internal comparisons
+        if isinstance(self.floor_glyph, int):
+            self.floor_glyph = chr(self.floor_glyph)
+        if isinstance(self.wall_glyph, int):
+            self.wall_glyph = chr(self.wall_glyph)
+        if isinstance(self.fog_glyph, int):
+            self.fog_glyph = chr(self.fog_glyph)
         self.color_floor_bg = level.get('floor_bg', COLOR_FLOOR_BG)
         self.color_wall_bg = level.get('wall_bg', COLOR_WALL_BG)
         self.color_fog_bg = level.get('fog_bg', COLOR_FOG_BG)
@@ -580,7 +621,7 @@ class RLDungeonGenerator:
 
         # Place the exit glyph
         try:
-            self.dungeon[er][ec] = DungeonSqr(EXIT_GLYPH)
+            self.dungeon[er][ec] = DungeonSqr(EXIT_GLYPH, DungeonSqr.EXIT)
             self.exit_pos = (er, ec)
         except Exception:
             self.exit_pos = None
@@ -762,18 +803,18 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                         # Fill per-tile background first so walls/floors differ even with the same glyph.
                         y0 = ty * dg.tile_size
                         x0 = tx * dg.tile_size
-                        if ch == dg.wall_glyph:  # wall
+                        tile = dg.dungeon[wr][wc]
+                        if tile.tile_type == DungeonSqr.WALL:  # wall
                             buf[y0:y0+dg.tile_size, x0:x0+dg.tile_size, :3] = dg.color_wall_bg
-                        elif ch == dg.floor_glyph:  # floor
+                        elif tile.tile_type == DungeonSqr.FLOOR:  # floor
                             buf[y0:y0+dg.tile_size, x0:x0+dg.tile_size, :3] = dg.color_floor_bg
                         else:
                             buf[y0:y0+dg.tile_size, x0:x0+dg.tile_size, :3] = (10, 10, 10)
                         buf[y0:y0+dg.tile_size, x0:x0+dg.tile_size, 3] = 255
 
-                        if ch == dg.wall_glyph:  # FULL BLOCK (wall)
-                            idx = WALL_FLOOR_GLYPH_INDEX
-                        elif ch == dg.floor_glyph:  # floor
-                            idx = WALL_FLOOR_GLYPH_INDEX
+                        # choose tile based on actual glyph value
+                        if ch == dg.wall_glyph or ch == dg.floor_glyph:
+                            idx = ord(ch)
                         elif ch == '+':
                             idx = DOOR_GLYPH_INDEX
                         else:
@@ -790,11 +831,12 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                             buf[y0:y0+dg.tile_size, x0:x0+dg.tile_size, 3] = 255
                         else:
                             # Fallback: fill with background color if tile not found
-                            if ch == dg.wall_glyph:
+                            tile = dg.dungeon[wr][wc]
+                            if tile.tile_type == DungeonSqr.WALL:
                                 buf[y0:y0+dg.tile_size, x0:x0+dg.tile_size, :3] = dg.color_wall_bg
-                            elif ch == dg.floor_glyph:
+                            elif tile.tile_type == DungeonSqr.FLOOR:
                                 buf[y0:y0+dg.tile_size, x0:x0+dg.tile_size, :3] = dg.color_floor_bg
-                            elif ch == '+':
+                            elif tile.tile_type == DungeonSqr.DOOR:
                                 buf[y0:y0+dg.tile_size, x0:x0+dg.tile_size, :3] = (255, 215, 0)
                             else:
                                 buf[y0:y0+dg.tile_size, x0:x0+dg.tile_size, :3] = (10, 10, 10)
@@ -842,18 +884,23 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                         if wr < 0 or wr >= dg.height or wc < 0 or wc >= dg.width:
                             continue
                         ch = dg.dungeon[wr][wc].get_ch()
-                        if ch == dg.wall_glyph:  # wall
+                        tile = dg.dungeon[wr][wc]
+                        if tile.tile_type == DungeonSqr.WALL:  # wall
                             fg = dg.color_wall_fg
                             bg = dg.color_wall_bg
-                            glyph = WALL_FLOOR_GLYPH_INDEX
-                        elif ch == dg.floor_glyph:  # floor
+                            glyph = ord(ch)
+                        elif tile.tile_type == DungeonSqr.FLOOR:  # floor
                             fg = dg.color_floor_fg
                             bg = dg.color_floor_bg
-                            glyph = WALL_FLOOR_GLYPH_INDEX
-                        elif ch == '+':
+                            glyph = ord(ch)
+                        elif tile.tile_type == DungeonSqr.DOOR:  # door
                             fg = (255, 215, 0)
                             bg = (0, 0, 0)
                             glyph = DOOR_GLYPH_INDEX
+                        elif tile.tile_type == DungeonSqr.EXIT:  # exit
+                            fg = dg.color_floor_fg
+                            bg = dg.color_floor_bg
+                            glyph = ord(ch)
                         else:
                             fg = (255, 255, 255)
                             bg = (0, 0, 0)
@@ -1211,19 +1258,24 @@ def render_with_pygame(dg: RLDungeonGenerator) -> None:
                     continue
                     
                 ch = dg.dungeon[wr][wc].get_ch()
+                tile = dg.dungeon[wr][wc]
                 # determine colors and glyph from active level
-                if ch == dg.wall_glyph:  # wall
+                if tile.tile_type == DungeonSqr.WALL:  # wall
                     fg = dg.color_wall_fg
                     bg = dg.color_wall_bg
-                    glyph = dg.wall_glyph
-                elif ch == dg.floor_glyph:  # floor
+                    glyph = ch
+                elif tile.tile_type == DungeonSqr.FLOOR:  # floor
                     fg = dg.color_floor_fg
                     bg = dg.color_floor_bg
-                    glyph = dg.floor_glyph
-                elif ch == '+':
+                    glyph = ch
+                elif tile.tile_type == DungeonSqr.DOOR:  # door
                     fg = (255, 215, 0)
                     bg = (0, 0, 0)
                     glyph = '+'
+                elif tile.tile_type == DungeonSqr.EXIT:  # exit
+                    fg = dg.color_floor_fg
+                    bg = dg.color_floor_bg
+                    glyph = ch
                 else:
                     fg = (255, 255, 255)
                     bg = (0, 0, 0)
@@ -1236,7 +1288,7 @@ def render_with_pygame(dg: RLDungeonGenerator) -> None:
                 if tile_surfaces is not None:
                     # Use a shared glyph index from the tileset for walls/floors and a dedicated one for doors.
                     if glyph in (dg.wall_glyph, dg.floor_glyph):
-                        idx = WALL_FLOOR_GLYPH_INDEX
+                        idx = ord(glyph)
                     elif glyph == '+':
                         idx = DOOR_GLYPH_INDEX
                     else:
