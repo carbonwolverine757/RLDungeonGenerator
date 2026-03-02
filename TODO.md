@@ -461,7 +461,9 @@
                     50% Resin
             * Rock
                 * 2 rolls
-                    * 1-3 Stone
+                    * 50% 1 Stone
+                    * 50% 2 Stone
+                    * 50% 3 Stone
             * Eikthyr
                 * 1 Eikthyr Trophy
                 * 3 Hard Antler
@@ -472,6 +474,11 @@
                     1-2 Corewood
                 * 2 rolls
                     50% Resin
+            * Copper Deposit
+                * 2 rolls
+                    50
+            * Tin Deposit
+
             * Burial Chambers Chest
             * Troll Cave
             * *Smoldering Tomb*

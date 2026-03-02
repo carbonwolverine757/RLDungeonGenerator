@@ -156,6 +156,8 @@ class RLDungeonGenerator:
         self.current_level_index = 0
         # Exit position (row, col) when placed
         self.exit_pos = None
+        # Whether current level uses openspace generation
+        self.uses_openspace = False
         # Apply initial level (sets glyphs/colors)
         self.apply_level(self.current_level_index)
         # Exit position (row, col) when placed
@@ -226,6 +228,28 @@ class RLDungeonGenerator:
             for r in range(room_start_row, room_start_row + room_height):
                 for c in range(room_start_col, room_start_col + room_width):
                     self.dungeon[r][c] = DungeonSqr(self.floor_glyph, DungeonSqr.FLOOR)
+
+    def generate_openspace_map(self):
+        """Generate an openspace map: huge open area with walls at edges."""
+        # Fill most of the dungeon with floor tiles
+        for r in range(self.height):
+            for c in range(self.width):
+                # Create walls at the edges (1 tile border)
+                if r == 0 or r == self.height - 1 or c == 0 or c == self.width - 1:
+                    self.dungeon[r][c] = DungeonSqr(self.wall_glyph, DungeonSqr.WALL)
+                else:
+                    self.dungeon[r][c] = DungeonSqr(self.floor_glyph, DungeonSqr.FLOOR)
+        
+        # Create one room in the middle for the map structure
+        room_width = max(5, self.width // 4)
+        room_height = max(5, self.height // 4)
+        room_row = (self.height - room_height) // 2
+        room_col = (self.width - room_width) // 2
+        
+        self.rooms.append(Room(room_row, room_col, room_height, room_width))
+        for r in range(room_row, room_row + room_height):
+            for c in range(room_col, room_col + room_width):
+                self.dungeon[r][c] = DungeonSqr(self.floor_glyph, DungeonSqr.FLOOR)
 
     def are_rooms_adjacent(self, room1, room2):
         adj_rows = []
@@ -353,10 +377,15 @@ class RLDungeonGenerator:
         # Reset fog-of-war
         self.explored = [[False for _ in range(self.width)] for _ in range(self.height)]
 
-        # (re-)generate layout
-        self.random_split(1, 1, self.height - 1, self.width - 1)
-        self.carve_rooms()
-        self.connect_rooms()
+        # Generate using either openspace or procedural maze layout
+        if self.uses_openspace:
+            self.generate_openspace_map()
+        else:
+            # (re-)generate layout
+            self.random_split(1, 1, self.height - 1, self.width - 1)
+            self.carve_rooms()
+            self.connect_rooms()
+        
         # Place the player and reveal nearby area
         self.spawn_player()
         # Place an exit tile somewhere meaningful
@@ -526,7 +555,8 @@ class RLDungeonGenerator:
                 for c in range(c0, c1):
                     self.explored[r][c] = True
         else:
-            radius = 2
+            # Use larger radius for openspace maps, smaller for corridors
+            radius = 8 if self.uses_openspace else 2
             rr = self.player_row
             cc = self.player_col
             for dr in range(-radius, radius + 1):
@@ -552,6 +582,7 @@ class RLDungeonGenerator:
                 'floor_fg': COLOR_FLOOR_FG,
                 'wall_fg': COLOR_WALL_FG,
                 'fog_fg': COLOR_FOG_FG,
+                'openspace': False,
             }
         else:
             level = self.levels[index % len(self.levels)]
@@ -573,6 +604,7 @@ class RLDungeonGenerator:
         self.color_floor_fg = level.get('floor_fg', COLOR_FLOOR_FG)
         self.color_wall_fg = level.get('wall_fg', COLOR_WALL_FG)
         self.color_fog_fg = level.get('fog_fg', COLOR_FOG_FG)
+        self.uses_openspace = level.get('openspace', False)
         self.current_level_index = index % (len(self.levels) or 1)
 
     def advance_level(self) -> None:
@@ -1361,8 +1393,8 @@ def render_with_pygame(dg: RLDungeonGenerator) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="RLDungeonGenerator with optional tcod rendering")
-    parser.add_argument("--width", type=int, default=75, help="Dungeon width in tiles")
-    parser.add_argument("--height", type=int, default=40, help="Dungeon height in tiles")
+    parser.add_argument("--width", type=int, default=150, help="Dungeon width in tiles")
+    parser.add_argument("--height", type=int, default=80, help="Dungeon height in tiles")
     parser.add_argument("--ascii", action="store_true", help="Print ASCII map to console instead of opening a window")
     args = parser.parse_args()
 

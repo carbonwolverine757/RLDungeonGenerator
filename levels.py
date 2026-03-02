@@ -12,6 +12,7 @@
 LEVELS = [
     {
         'name': 'Meadows',
+        'openspace': True,
         'floor_glyph': 240,
         'wall_glyph': 240,
         'fog_glyph': ' ',
@@ -24,6 +25,7 @@ LEVELS = [
     },
     {
         'name': 'Eikthyr Bossfight',
+        'openspace': True,
         'floor_glyph': 240,
         'wall_glyph': 240,
         'fog_glyph': ' ',
@@ -36,6 +38,7 @@ LEVELS = [
     },
     {
         'name': 'Black Forest',
+        'openspace': True,
         'floor_glyph': 240,
         'wall_glyph': 240,
         'fog_glyph': ' ',
@@ -48,7 +51,7 @@ LEVELS = [
     },
     {
         'name': 'Burial Chambers',
-        'floor_glyph': 243,
+        'floor_glyph': 244,
         'wall_glyph': 243,
         'fog_glyph': ' ',
         'floor_bg': (120, 120, 120),
@@ -60,7 +63,7 @@ LEVELS = [
     },
     {
         'name': 'Troll Cave',
-        'floor_glyph': 243,
+        'floor_glyph': 244,
         'wall_glyph': 243,
         'fog_glyph': ' ',
         'floor_bg': (110, 100, 80),
@@ -72,7 +75,7 @@ LEVELS = [
     },
     {
         'name': 'Smoldering Tomb',
-        'floor_glyph': 243,
+        'floor_glyph': 244,
         'wall_glyph': 243,
         'fog_glyph': ' ',
         'floor_bg': (140, 60, 40),
@@ -84,6 +87,7 @@ LEVELS = [
     },
     {
         'name': 'The Elder Bossfight',
+        'openspace': True,
         'floor_glyph': 240,
         'wall_glyph': 243,
         'fog_glyph': ' ',
@@ -96,6 +100,7 @@ LEVELS = [
     },
     {
         'name': 'Ocean',
+        'openspace': True,
         'floor_glyph': 241,
         'wall_glyph': 241,
         'fog_glyph': ' ',
@@ -108,7 +113,8 @@ LEVELS = [
     },
     {
         'name': 'Swamps',
-        'floor_glyph': 240,
+        'openspace': True,
+        'floor_glyph': 244,
         'wall_glyph': 240,
         'fog_glyph': ' ',
         'floor_bg': (80, 90, 50),
@@ -120,8 +126,8 @@ LEVELS = [
     },
     {
         'name': 'Sunken Crypts',
-        'floor_glyph': 241,
-        'wall_glyph': 243,
+        'floor_glyph': 244,
+        'wall_glyph': 246,
         'fog_glyph': ' ',
         'floor_bg': (90, 110, 120),
         'wall_bg': (50, 70, 80),
@@ -132,8 +138,9 @@ LEVELS = [
     },
     {
         'name': 'Bonemass Bossfight',
-        'floor_glyph': 183,
-        'wall_glyph': 9608,
+        'openspace': True,
+        'floor_glyph': 244,
+        'wall_glyph': 241,
         'fog_glyph': ' ',
         'floor_bg': (100, 100, 100),
         'wall_bg': (50, 50, 50),
@@ -144,8 +151,9 @@ LEVELS = [
     },
     {
         'name': 'Ocean 2',
-        'floor_glyph': 8767,
-        'wall_glyph': 9608,
+        'openspace': True,
+        'floor_glyph': 241,
+        'wall_glyph': 241,
         'fog_glyph': ' ',
         'floor_bg': (20, 100, 150),
         'wall_bg': (10, 60, 100),
@@ -156,8 +164,8 @@ LEVELS = [
     },
     {
         'name': 'Mountains',
-        'floor_glyph': 183,
-        'wall_glyph': 9608,
+        'floor_glyph': 242,
+        'wall_glyph': 243,
         'fog_glyph': ' ',
         'floor_bg': (130, 130, 130),
         'wall_bg': (80, 80, 80),
@@ -168,8 +176,8 @@ LEVELS = [
     },
     {
         'name': 'Ice Caves',
-        'floor_glyph': 183,
-        'wall_glyph': 9608,
+        'floor_glyph': 243,
+        'wall_glyph': 243,
         'fog_glyph': ' ',
         'floor_bg': (150, 200, 220),
         'wall_bg': (100, 150, 180),
@@ -180,8 +188,8 @@ LEVELS = [
     },
     {
         'name': 'Howling Caverns',
-        'floor_glyph': 183,
-        'wall_glyph': 9608,
+        'floor_glyph': 242,
+        'wall_glyph': 242,
         'fog_glyph': ' ',
         'floor_bg': (200, 220, 230),
         'wall_bg': (150, 170, 180),
@@ -192,8 +200,8 @@ LEVELS = [
     },
     {
         'name': 'Moder Bossfight',
-        'floor_glyph': 183,
-        'wall_glyph': 9608,
+        'floor_glyph': 242,
+        'wall_glyph': 243,
         'fog_glyph': ' ',
         'floor_bg': (100, 100, 100),
         'wall_bg': (50, 50, 50),
@@ -204,8 +212,9 @@ LEVELS = [
     },
     {
         'name': 'Ocean 3',
-        'floor_glyph': 8767,
-        'wall_glyph': 9608,
+        'openspace': True,
+        'floor_glyph': 241,
+        'wall_glyph': 241,
         'fog_glyph': ' ',
         'floor_bg': (20, 100, 150),
         'wall_bg': (10, 60, 100),
@@ -264,6 +273,7 @@ LEVELS = [
     },
     {
         'name': 'Ocean 4',
+        'openspace': True,
         'floor_glyph': 8767,
         'wall_glyph': 9608,
         'fog_glyph': ' ',
@@ -348,6 +358,7 @@ LEVELS = [
     },
     {
         'name': 'Ocean 5',
+        'openspace': True,
         'floor_glyph': 8767,
         'wall_glyph': 9608,
         'fog_glyph': ' ',
