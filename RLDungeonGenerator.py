@@ -20,8 +20,6 @@ WALL_FLOOR_GLYPH_INDEX = 7 * 32 + 16
 # Glyph index for doors in the generated Unicode tilesheet.
 # Use tile at row = 7, col = 15 (0-based). Index = 7 * 32 + 15 = 239.
 DOOR_GLYPH_INDEX = 7 * 32 + 15
-# Exit glyph (passable). We'll render as '>' and place it somewhere on the map.
-EXIT_GLYPH = '>'
 
 # Visual tuning (higher contrast)
 # - Walls vs floors are differentiated primarily by background color.
@@ -51,6 +49,15 @@ except Exception:
         from levels import LEVELS
     except Exception:
         LEVELS = []
+
+# Monster type configurations live in `monsters.py`
+try:
+    from .monsters import MONSTER_TYPES
+except Exception:
+    try:
+        from monsters import MONSTER_TYPES
+    except Exception:
+        MONSTER_TYPES = []
 
 # Prefer tcod for alternative rendering when available (import after pygame to avoid SDL DLL conflicts)
 try:
@@ -158,6 +165,13 @@ class RLDungeonGenerator:
         self.exit_pos = None
         # Whether current level uses openspace generation
         self.uses_openspace = False
+        # Player health and stamina
+        self.max_health = 25
+        self.health = self.max_health
+        self.max_stamina = 50
+        self.stamina = self.max_stamina
+        # Monsters list (each monster is a dict with 'type', 'row', 'col', 'health')
+        self.monsters = []
         # Apply initial level (sets glyphs/colors)
         self.apply_level(self.current_level_index)
         # Exit position (row, col) when placed
@@ -366,6 +380,7 @@ class RLDungeonGenerator:
         # Reset generation state so this can be called multiple times (e.g. when exiting)
         self.leaves = []
         self.rooms = []
+        self.monsters = []  # Reset monsters list
         # Recreate dungeon filled with walls
         self.dungeon = []
         for h in range(self.height):
@@ -390,17 +405,23 @@ class RLDungeonGenerator:
         self.spawn_player()
         # Place an exit tile somewhere meaningful
         self.place_exit()
+        # Place monsters scattered across the map
+        self.place_monsters()
         self.reveal_current_area()
 
     def is_walkable(self, r, c):
         """Return True if the tile at the given coordinates can be entered.
 
-        Walkable tiles are floors, doors, and exits. Walls are not walkable.
+        Walkable tiles are floors, doors, and exits. Walls and monsters are not walkable.
         This determination is based on tile *type*, not glyph, so multiple
         characters can represent walls or floors without affecting logic.
         """
         if r < 0 or c < 0 or r >= self.height or c >= self.width:
             return False
+        # Check if there's a monster at this position
+        for monster in self.monsters:
+            if monster['row'] == r and monster['col'] == c:
+                return False
         tile = self.dungeon[r][c]
         return tile.tile_type in (DungeonSqr.FLOOR, DungeonSqr.DOOR, DungeonSqr.EXIT)
 
@@ -614,6 +635,9 @@ class RLDungeonGenerator:
             return
         self.current_level_index = (self.current_level_index + 1) % len(self.levels)
         self.apply_level(self.current_level_index)
+        # Restore health and stamina on level advancement
+        self.health = self.max_health
+        self.stamina = self.max_stamina
         self.generate_map()
 
     def get_current_level_name(self) -> str:
@@ -657,6 +681,49 @@ class RLDungeonGenerator:
             self.exit_pos = (er, ec)
         except Exception:
             self.exit_pos = None
+
+    def place_monsters(self):
+        """Place monsters scattered across walkable areas of the map."""
+        self.monsters = []
+        
+        # Get current level name
+        current_level_name = self.get_current_level_name()
+        
+        # Filter monster types that can appear in this level
+        available_monster_types = []
+        for monster_type in MONSTER_TYPES:
+            level_list = monster_type.get('levels', [])
+            if not level_list or current_level_name in level_list:
+                available_monster_types.append(monster_type)
+        
+        if not available_monster_types:
+            return  # No monsters available for this level
+        
+        # Determine number of monsters based on map size (roughly 1 monster per 50 tiles)
+        num_monsters = max(1, (self.width * self.height) // 50)
+        
+        # Collect all walkable positions (excluding player and exit positions)
+        walkable_positions = []
+        for r in range(self.height):
+            for c in range(self.width):
+                if self.is_walkable(r, c) and (r, c) != (self.player_row, self.player_col) and (r, c) != self.exit_pos:
+                    walkable_positions.append((r, c))
+        
+        # Randomly select positions for monsters
+        if len(walkable_positions) > 0:
+            import random
+            monster_positions = random.sample(walkable_positions, min(num_monsters, len(walkable_positions)))
+            
+            # Create monster objects
+            for r, c in monster_positions:
+                monster_type = random.choice(available_monster_types)
+                monster = {
+                    'type': monster_type,
+                    'row': r,
+                    'col': c,
+                    'health': monster_type['health']
+                }
+                self.monsters.append(monster)
 
     def print_map(self):
         for r in range(self.height):
@@ -891,6 +958,24 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                     buf[y0c:y1c, x0c:x1c, :3] = 255
                     buf[y0c:y1c, x0c:x1c, 3] = 255
 
+                # Draw monsters as red squares
+                for monster in dg.monsters:
+                    monster_px = int((monster['col'] + 0.5) * dg.tile_size - cam_px)
+                    monster_py = int((monster['row'] + 0.5) * dg.tile_size - cam_py)
+                    mr = monster_py - dg.tile_size // 2
+                    mc = monster_px - dg.tile_size // 2
+                    # small red square for monsters
+                    ms = max(2, dg.tile_size // 3)
+                    y0 = mr - ms//2
+                    x0 = mc - ms//2
+                    y1 = y0 + ms
+                    x1 = x0 + ms
+                    y0c = max(0, y0); x0c = max(0, x0)
+                    y1c = min(pixel_view_h, y1); x1c = min(pixel_view_w, x1)
+                    if y1c > y0c and x1c > x0c:
+                        buf[y0c:y1c, x0c:x1c, :3] = (255, 0, 0)
+                        buf[y0c:y1c, x0c:x1c, 3] = 255
+
                 # Convert buffer to tcod image and present
                 try:
                     img = tcod.image.Image(buffer=buf)
@@ -966,6 +1051,15 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                     ipc = pc + ox
                     if 0 <= ipr < view_h and 0 <= ipc < view_w:
                         console.print(ipc, ipr, '.', fg=(255, 0, 0))
+
+                # Draw monsters
+                for monster in dg.monsters:
+                    mr = monster['row'] - cam_y
+                    mc = monster['col'] - cam_x
+                    if 0 <= mr < view_h and 0 <= mc < view_w:
+                        glyph_index = monster['type']['glyph_index']
+                        console.print(mc, mr, chr(glyph_index), fg=(255, 0, 0))
+
                 context.present(console)
 
             # Process events (non-blocking)
@@ -1107,7 +1201,9 @@ def show_level_selection_menu(screen: 'pygame.Surface', dg: RLDungeonGenerator, 
     return selected_level
 
 
-def render_with_pygame(dg: RLDungeonGenerator) -> None:
+def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_menu: bool = False) -> None:
+    import os
+    
     if pygame is None:
         info = (
             f"pygame is not installed or failed to import.\n"
@@ -1118,6 +1214,48 @@ def render_with_pygame(dg: RLDungeonGenerator) -> None:
         raise ImportError(info)
 
     pygame.init()
+    
+    # Check if we can actually create a display (detect headless environment)
+    # Skip headless detection if GUI is forced, or if we're in VS Code (user wants GUI)
+    is_vscode = any(k.startswith('VSCODE_') for k in os.environ.keys())
+    
+    if not force_gui and not is_vscode:
+        import platform
+        
+        is_headless = (
+            os.environ.get('CI', '').lower() in ('true', '1') or
+            # Only consider missing DISPLAY as headless on Unix-like systems
+            (platform.system() != 'Windows' and os.environ.get('DISPLAY', '') == '') or
+            not hasattr(sys.stdout, 'isatty') or
+            not sys.stdout.isatty()
+        )
+        
+        if is_headless:
+            # Headless environment detected, fall back to ASCII output
+            print("Headless environment detected. Using ASCII output.")
+            if dg.levels:
+                dg.apply_level(0)
+                dg.generate_map()
+            else:
+                dg.generate_map()
+            dg.print_map()
+            return
+    
+    try:
+        test_surface = pygame.display.set_mode((1, 1))
+        pygame.display.quit()  # Clean up test surface
+        pygame.init()  # Re-init after quit
+    except Exception:
+        # Headless environment detected, fall back to ASCII output
+        print("Headless environment detected. Using ASCII output.")
+        if dg.levels:
+            dg.apply_level(0)
+            dg.generate_map()
+        else:
+            dg.generate_map()
+        dg.print_map()
+        return
+    
     # Initial viewport in tiles (used to create starting window)
     init_view_w = min(40, dg.width)
     init_view_h = min(25, dg.height)
@@ -1172,12 +1310,11 @@ def render_with_pygame(dg: RLDungeonGenerator) -> None:
     held_directions = []
     shift_held = False
 
-    # Show level selection menu
+    # Always show level selection menu when using the GUI
     selected_level_idx = show_level_selection_menu(screen, dg, clock, font)
     if selected_level_idx == -1:
         pygame.quit()
         return
-    
     # Apply selected level and generate map
     dg.apply_level(selected_level_idx)
     dg.generate_map()
@@ -1352,6 +1489,63 @@ def render_with_pygame(dg: RLDungeonGenerator) -> None:
         player_py = dg.player_y - cam_ty * dg.tile_size + offset_y
         pygame.draw.circle(screen, (255, 255, 255), (int(player_px), int(player_py)), max(2, dg.tile_size // 3))
 
+        # Draw monsters
+        for monster in dg.monsters:
+            monster_row, monster_col = monster['row'], monster['col']
+            if (cam_ty <= monster_row < cam_ty + view_h and 
+                cam_tx <= monster_col < cam_tx + view_w):
+                x = offset_x + (monster_col - cam_tx) * dg.tile_size
+                y = offset_y + (monster_row - cam_ty) * dg.tile_size
+                
+                # Use monster glyph from tileset
+                glyph_index = monster['type']['glyph_index']
+                if tile_surfaces is not None and glyph_index < len(tile_surfaces):
+                    # Don't draw background for monsters to preserve transparency
+                    screen.blit(tile_surfaces[glyph_index], (x, y))
+                else:
+                    # Fallback: draw red circle
+                    monster_px = (monster_col - cam_tx + 0.5) * dg.tile_size + offset_x
+                    monster_py = (monster_row - cam_ty + 0.5) * dg.tile_size + offset_y
+                    pygame.draw.circle(screen, (255, 0, 0), (int(monster_px), int(monster_py)), max(2, dg.tile_size // 4))
+
+        # Draw health and stamina bars
+        bar_tile_size = dg.tile_size
+        
+        # Health bar (vertical, red, bottom left)
+        # Each tile represents 25 health, so 1 full tile
+        health_tiles = max(1, (dg.health + 24) // 25)  # Round up
+        max_health_tiles = max(1, (dg.max_health + 24) // 25)
+        health_bar_x = 10
+        health_bar_y = pixel_view_h - (max_health_tiles * bar_tile_size) - 10
+        for i in range(max_health_tiles):
+            tile_y = health_bar_y + i * bar_tile_size
+            if i < health_tiles:
+                pygame.draw.rect(screen, (255, 0, 0), (health_bar_x, tile_y, bar_tile_size, bar_tile_size))
+            pygame.draw.rect(screen, (100, 100, 100), (health_bar_x, tile_y, bar_tile_size, bar_tile_size), 2)
+        
+        # Health number (centered in bar)
+        health_font = pygame.font.SysFont('consolas', 16, bold=True)
+        health_text = health_font.render(f'{dg.health}', True, (255, 255, 255))
+        health_text_rect = health_text.get_rect(center=(health_bar_x + bar_tile_size // 2, health_bar_y + (max_health_tiles * bar_tile_size) // 2))
+        screen.blit(health_text, health_text_rect)
+        
+        # Stamina bar (horizontal, yellow, slightly above bottom center)
+        # Each tile represents 25 stamina, so 2 full tiles
+        stamina_tiles = max(1, (dg.stamina + 24) // 25)  # Round up
+        max_stamina_tiles = max(1, (dg.max_stamina + 24) // 25)
+        stamina_bar_x = (pixel_view_w - (max_stamina_tiles * bar_tile_size)) // 2
+        stamina_bar_y = pixel_view_h - (2 * bar_tile_size) - 10
+        for i in range(max_stamina_tiles):
+            tile_x = stamina_bar_x + i * bar_tile_size
+            if i < stamina_tiles:
+                pygame.draw.rect(screen, (200, 200, 0), (tile_x, stamina_bar_y, bar_tile_size, bar_tile_size))
+            pygame.draw.rect(screen, (100, 100, 100), (tile_x, stamina_bar_y, bar_tile_size, bar_tile_size), 2)
+        
+        # Stamina number (centered in bar)
+        stamina_text = health_font.render(f'{dg.stamina}', True, (255, 255, 255))
+        stamina_text_rect = stamina_text.get_rect(center=(stamina_bar_x + (max_stamina_tiles * bar_tile_size) // 2, stamina_bar_y + bar_tile_size // 2))
+        screen.blit(stamina_text, stamina_text_rect)
+
         pygame.display.flip()
         # Update window title with current level
         pygame.display.set_caption(f"RLDungeonGenerator - {dg.get_current_level_name()}")
@@ -1396,6 +1590,8 @@ def main() -> None:
     parser.add_argument("--width", type=int, default=150, help="Dungeon width in tiles")
     parser.add_argument("--height", type=int, default=80, help="Dungeon height in tiles")
     parser.add_argument("--ascii", action="store_true", help="Print ASCII map to console instead of opening a window")
+    parser.add_argument("--gui", action="store_true", help="Force GUI mode even in headless environments")
+    parser.add_argument("--menu", action="store_true", help="Always show level selection menu (even in VS Code)")
     args = parser.parse_args()
 
     dg = RLDungeonGenerator(args.width, args.height)
@@ -1412,7 +1608,7 @@ def main() -> None:
         else:
             # Prefer pygame renderer if available
             if pygame is not None:
-                render_with_pygame(dg)
+                render_with_pygame(dg, args.gui, args.menu)
             else:
                 render_with_tcod(dg)
     except Exception:

@@ -15,6 +15,14 @@
         "/^cd 'c:\\\\Users\\\\Kazoku\\\\source\\\\repos\\\\carbonwolverine757\\\\RLDungeonGenerator'; & 'C:/Users/Kazoku/source/repos/carbonwolverine757/RLDungeonGenerator/env/Scripts/python\\.exe' RLDungeonGenerator\\.py --ascii \\| Select-Object -First 5$/": {
             "approve": true,
             "matchCommandLine": true
+        },
+        "/^python RLDungeonGenerator\\.py$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^python RLDungeonGenerator\\.py --menu$/": {
+            "approve": true,
+            "matchCommandLine": true
         }
     }
 }

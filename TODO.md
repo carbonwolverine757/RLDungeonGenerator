@@ -409,6 +409,40 @@
 * Add stamina bar
 * Add food
 * Add more foood
+    * Food
+        * Meadows
+            Mushroom            Health:15  Stamina:15
+            Raspberry           Health:7   Stamina:20
+            Cooked Neck Tail    Health:25  Stamina:8
+            Cooked Boar Meat    Health:30  Stamina:10
+            Cooked Deer Meat    Health:35  Stamina:12
+            Honey               Health:8   Stamina:35
+        * Black Forest
+            Blueberries         Health:8   Stamina:25
+            Yellow Mushroom     Health:10  Stamina:30
+            Carrot              Health:13  Stamina:40
+            Cooked Bear Meat    Health:40  Stamina:13
+            Carrot Soup         Health:17  Stamina:50
+            Queen's Jam         Health:15  Stamina:45
+            Deer Stew           Health:50  Stamina:17
+            Minced Meat Sauce   Health:45  Stamina:15
+            Boar Jerky          Health:23  Stamina:23
+        * Swamp
+            Muckshake           Health:17  Stamina:50
+            Turnip Stew         Health:19  Stamina:55
+            Black Soup          Health:50  Stamina:17
+            Sausages            Health:55  Stamina:19
+            Cooked Fish         Health:50  Stamina:17
+            Cooked Serpent Meat Health:70  Stamina:24
+            Serpent Stew        Health:80  Stamina:
+        * Mountain
+
+        * Plains
+
+        * Mistlands
+
+        * Ashlands
+
 * Add shields
     * Shields :
         * Wooden Shield
