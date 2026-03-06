@@ -434,9 +434,16 @@
             Sausages            Health:55  Stamina:19
             Cooked Fish         Health:50  Stamina:17
             Cooked Serpent Meat Health:70  Stamina:24
-            Serpent Stew        Health:80  Stamina:
+            Serpent Stew        Health:80  Stamina:27
         * Mountain
-
+            Cooked Wolf Meat    Health:40  Stamina:14
+            Onion               Health:14  Stamina:40
+            Wolf Skewer         Health:65  Stamina:22
+            Onion Soup          Health:20  Stamina:60
+            Eyescream           Health:22  Stamina:65
+            Wolf Jerky          Health:31  Stamina:31
+            Cooked Serpent Meat Health:70  Stamina:
+            Serpent Stew        Health:80  Stamina:
         * Plains
 
         * Mistlands

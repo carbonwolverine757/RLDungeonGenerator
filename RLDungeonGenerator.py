@@ -20,6 +20,9 @@ WALL_FLOOR_GLYPH_INDEX = 7 * 32 + 16
 # Glyph index for doors in the generated Unicode tilesheet.
 # Use tile at row = 7, col = 15 (0-based). Index = 7 * 32 + 15 = 239.
 DOOR_GLYPH_INDEX = 7 * 32 + 15
+# Glyph index for exits in the generated Unicode tilesheet.
+# Use tile at row = 7, col = 17 (0-based). Index = 7 * 32 + 17 = 241.
+EXIT_GLYPH_INDEX = 7 * 32 + 17
 
 # Visual tuning (higher contrast)
 # - Walls vs floors are differentiated primarily by background color.
@@ -401,10 +404,10 @@ class RLDungeonGenerator:
             self.carve_rooms()
             self.connect_rooms()
         
-        # Place the player and reveal nearby area
-        self.spawn_player()
         # Place an exit tile somewhere meaningful
         self.place_exit()
+        # Place the player and reveal nearby area
+        self.spawn_player()
         # Place monsters scattered across the map
         self.place_monsters()
         self.reveal_current_area()
@@ -432,7 +435,7 @@ class RLDungeonGenerator:
         The set currently includes the configured floor glyph plus door/exit
         symbols.  Anything not in this group is interpreted as a wall.
         """
-        return ch in (self.floor_glyph, '+', EXIT_GLYPH)
+        return ch in (self.floor_glyph, '+', self.exit_glyph)
 
     def _is_wall_char(self, ch: str) -> bool:
         """True for any character that isn’t considered floor/door/exit.
@@ -450,12 +453,12 @@ class RLDungeonGenerator:
             room = self.rooms[0]
             r = room.row + room.height // 2
             c = room.col + room.width // 2
-            if self.is_walkable(r, c):
+            if self.is_walkable(r, c) and (r, c) != self.exit_pos:
                 self.set_player_position(r, c)
                 return
         for r in range(self.height):
             for c in range(self.width):
-                if self.is_walkable(r, c):
+                if self.is_walkable(r, c) and (r, c) != self.exit_pos:
                     self.set_player_position(r, c)
                     return
 
@@ -514,7 +517,7 @@ class RLDungeonGenerator:
             self.player_col = new_col
             # If player stepped on the exit, generate a new map
             try:
-                if self.dungeon[new_row][new_col].get_ch() == EXIT_GLYPH:
+                if self.dungeon[new_row][new_col].get_ch() == self.exit_glyph:
                     # Advance to next level configuration and regenerate
                     self.advance_level()
                     return
@@ -612,6 +615,7 @@ class RLDungeonGenerator:
         self.floor_glyph = level.get('floor_glyph', 0x00B7)
         self.wall_glyph = level.get('wall_glyph', 0x2588)
         self.fog_glyph = level.get('fog_glyph', ord(' '))
+        self.exit_glyph = level.get('exit_glyph', EXIT_GLYPH_INDEX)
         # convert ints to characters for internal comparisons
         if isinstance(self.floor_glyph, int):
             self.floor_glyph = chr(self.floor_glyph)
@@ -619,6 +623,8 @@ class RLDungeonGenerator:
             self.wall_glyph = chr(self.wall_glyph)
         if isinstance(self.fog_glyph, int):
             self.fog_glyph = chr(self.fog_glyph)
+        if isinstance(self.exit_glyph, int):
+            self.exit_glyph = chr(self.exit_glyph)
         self.color_floor_bg = level.get('floor_bg', COLOR_FLOOR_BG)
         self.color_wall_bg = level.get('wall_bg', COLOR_WALL_BG)
         self.color_fog_bg = level.get('fog_bg', COLOR_FOG_BG)
@@ -647,37 +653,49 @@ class RLDungeonGenerator:
         return 'Unknown'
 
     def place_exit(self):
-        """Place an exit tile in a room (not at the player's current position if possible)."""
+        """Place an exit tile in the centre of the starting room.
+
+        The previous implementation picked a random room (avoiding the one the
+        player was standing in if possible).  The new behaviour fixes the
+        exit in the first room carved when the map was generated.  This keeps
+        the exit near the player’s spawn point and makes the level layout more
+        predictable for testing and early exploration.
+
+        If for some reason the very centre isn’t a floor tile we fall back to
+        the first walkable tile we can find within the starting room.  We also
+        try not to place the exit directly on the player; if the centre happens
+        to coincide with the player position we search for another suitable
+        floor tile in that room.
+        """
         if not self.rooms:
             self.exit_pos = None
             return
 
-        # Prefer a room that does not contain the player
-        candidates = [room for room in self.rooms if not (
-            self.player_row >= room.row and self.player_row < room.row + room.height and
-            self.player_col >= room.col and self.player_col < room.col + room.width)]
-        if not candidates:
-            candidates = list(self.rooms)
+        # Always use the first room (spawn point) as the exit room.
+        room = self.rooms[0]
 
-        room = choice(candidates)
-        # Try the center first
+        # target the centre of that room
         er = room.row + room.height // 2
         ec = room.col + room.width // 2
-        # If center is not a floor, search for any floor tile in the room
-        if self.dungeon[er][ec].get_ch() != self.floor_glyph:
+
+        # if centre isn’t a floor or it’s where the player currently sits,
+        # search the room for any other floor tile that isn’t the player.
+        if (self.dungeon[er][ec].get_ch() != self.floor_glyph or
+                (er, ec) == (self.player_row, self.player_col)):
             placed = False
             for r in range(room.row, room.row + room.height):
                 for c in range(room.col, room.col + room.width):
-                    if self.dungeon[r][c].get_ch() == self.floor_glyph and (r, c) != (self.player_row, self.player_col):
+                    if (self.dungeon[r][c].get_ch() == self.floor_glyph and
+                            (r, c) != (self.player_row, self.player_col)):
                         er, ec = r, c
                         placed = True
                         break
                 if placed:
                     break
 
-        # Place the exit glyph
+        # finally set the exit glyph (fallbacks handled above)
         try:
-            self.dungeon[er][ec] = DungeonSqr(EXIT_GLYPH, DungeonSqr.EXIT)
+            self.dungeon[er][ec] = DungeonSqr(self.exit_glyph, DungeonSqr.EXIT)
             self.exit_pos = (er, ec)
         except Exception:
             self.exit_pos = None
