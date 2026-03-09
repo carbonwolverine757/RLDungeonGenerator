@@ -1,6 +1,6 @@
 from RLDungeonGenerator import RLDungeonGenerator
 
-rg = RLDungeonGenerator(width=40, height=20)
+rg = RLDungeonGenerator(40, 20)
 rg.generate_map()
 print('player', rg.player_row, rg.player_col)
 print('exit', rg.exit_pos)

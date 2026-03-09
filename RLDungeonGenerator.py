@@ -448,7 +448,7 @@ class RLDungeonGenerator:
         return not self._is_floor_char(ch)
 
     def spawn_player(self):
-        # Prefer the center of the first room if available, otherwise first walkable tile
+        # Prefer the center of the first room if available, otherwise another tile in the same room
         if len(self.rooms) > 0:
             room = self.rooms[0]
             r = room.row + room.height // 2
@@ -456,6 +456,13 @@ class RLDungeonGenerator:
             if self.is_walkable(r, c) and (r, c) != self.exit_pos:
                 self.set_player_position(r, c)
                 return
+            # If center is not available, search within the room for another suitable tile
+            for rr in range(room.row, room.row + room.height):
+                for cc in range(room.col, room.col + room.width):
+                    if self.is_walkable(rr, cc) and (rr, cc) != self.exit_pos:
+                        self.set_player_position(rr, cc)
+                        return
+        # Fallback: search the entire map
         for r in range(self.height):
             for c in range(self.width):
                 if self.is_walkable(r, c) and (r, c) != self.exit_pos:
