@@ -27,6 +27,22 @@
         "/^python -c \"from RLDungeonGenerator import RLDungeonGenerator; rg = RLDungeonGenerator\\(40, 20\\); rg\\.generate_map\\(\\); print\\('player', rg\\.player_row, rg\\.player_col\\); print\\('exit', rg\\.exit_pos\\)\"$/": {
             "approve": true,
             "matchCommandLine": true
+        },
+        "/^python -m RLDungeonGenerator --ascii$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^python -m py_compile RLDungeonGenerator\\.py$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^python -m RLDungeonGenerator --ascii 2>&1 \\| head -50$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^python -m RLDungeonGenerator --ascii 2>&1 \\| Select-Object -First 30$/": {
+            "approve": true,
+            "matchCommandLine": true
         }
     }
 }

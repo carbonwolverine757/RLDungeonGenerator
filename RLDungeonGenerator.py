@@ -62,6 +62,15 @@ except Exception:
     except Exception:
         MONSTER_TYPES = []
 
+# Weapon configurations live in `weapons.py`
+try:
+    from .weapons import WEAPONS
+except Exception:
+    try:
+        from weapons import WEAPONS
+    except Exception:
+        WEAPONS = []
+
 # Prefer tcod for alternative rendering when available (import after pygame to avoid SDL DLL conflicts)
 try:
     import tcod
@@ -175,6 +184,10 @@ class RLDungeonGenerator:
         self.stamina = self.max_stamina
         # Monsters list (each monster is a dict with 'type', 'row', 'col', 'health')
         self.monsters = []
+        # Equipped weapon (defaults to first weapon in WEAPONS)
+        self.equipped_weapon = WEAPONS[0] if WEAPONS else None
+        # Active attack effects (visual only)
+        self.attack_effects = []  # each entry: {'tiles': set((r,c)), 'expires_at': float}
         # Apply initial level (sets glyphs/colors)
         self.apply_level(self.current_level_index)
         # Exit position (row, col) when placed
@@ -534,6 +547,143 @@ class RLDungeonGenerator:
             if (new_row, new_col) != self.last_revealed_tile:
                 self.last_revealed_tile = (new_row, new_col)
                 self.reveal_current_area()
+
+    def _resolve_attack_target(self, target_row, target_col, weapon=None):
+        """Resolve the actual attack center and direction based on a clicked tile."""
+        weapon = weapon or self.equipped_weapon
+        if weapon is None:
+            return (target_row + 0.5, target_col + 0.5, 1.0, 0.0)
+
+        player_center_row = self.player_row + 0.5
+        player_center_col = self.player_col + 0.5
+        target_center_row = target_row + 0.5
+        target_center_col = target_col + 0.5
+
+        dr = target_center_row - player_center_row
+        dc = target_center_col - player_center_col
+        dist = sqrt(dr * dr + dc * dc)
+        if dist == 0.0:
+            return (player_center_row, player_center_col, 1.0, 0.0)
+
+        dir_row = dr / dist
+        dir_col = dc / dist
+
+        max_range = float(weapon.get('range', 0))
+        if max_range > 0 and dist > max_range:
+            target_center_row = player_center_row + dir_row * max_range
+            target_center_col = player_center_col + dir_col * max_range
+
+        return (target_center_row, target_center_col, dir_row, dir_col)
+
+    def _compute_attack_tiles(self, center_row, center_col, dir_row, dir_col, weapon=None):
+        """Compute the set of tiles affected by an attack cone."""
+        weapon = weapon or self.equipped_weapon
+        if weapon is None:
+            return set()
+
+        import math
+
+        area = float(weapon.get('area', 0))
+        half_angle_rad = math.radians(float(weapon.get('angle', 360)) * 0.5)
+        include_all = weapon.get('angle', 360) >= 360
+
+        tiles = set()
+        max_dist = int(math.ceil(area))
+
+        for dr in range(-max_dist, max_dist + 1):
+            for dc in range(-max_dist, max_dist + 1):
+                tr = int(center_row) + dr
+                tc = int(center_col) + dc
+                if tr < 0 or tr >= self.height or tc < 0 or tc >= self.width:
+                    continue
+
+                vec_r = (tr + 0.5) - center_row
+                vec_c = (tc + 0.5) - center_col
+                dist = math.hypot(vec_r, vec_c)
+                if dist > area:
+                    continue
+
+                if include_all or (dir_row == 0 and dir_col == 0):
+                    tiles.add((tr, tc))
+                    continue
+
+                dot = dir_row * vec_r + dir_col * vec_c
+                if dist == 0:
+                    tiles.add((tr, tc))
+                    continue
+                cos_theta = max(-1.0, min(1.0, dot / dist))
+                if math.acos(cos_theta) <= half_angle_rad:
+                    tiles.add((tr, tc))
+
+        return tiles
+
+    def _add_attack_effect(self, tiles, duration=0.25):
+        """Add a short-lived visual effect for an attack."""
+        if not tiles:
+            return
+        self.attack_effects.append({
+            'tiles': set(tiles),
+            'expires_at': time.time() + duration,
+        })
+
+    def _update_attack_effects(self, current_time=None):
+        if current_time is None:
+            current_time = time.time()
+        self.attack_effects = [e for e in self.attack_effects if e['expires_at'] > current_time]
+
+    def perform_attack(self, target_row, target_col, weapon=None):
+        """Perform an attack aimed at the given tile."""
+        weapon = weapon or self.equipped_weapon
+        if weapon is None:
+            return
+
+        target_center_row, target_center_col, dir_row, dir_col = self._resolve_attack_target(target_row, target_col, weapon)
+        tiles = self._compute_attack_tiles(target_center_row, target_center_col, dir_row, dir_col, weapon)
+        self._add_attack_effect(tiles)
+
+        # Deal damage to monsters in the attack area
+        try:
+            damage = float(weapon.get('damage', 0))
+            if damage > 0:
+                for monster in self.monsters:
+                    monster_row = monster['row']
+                    monster_col = monster['col']
+                    if (monster_row, monster_col) in tiles:
+                        monster['health'] -= damage
+        except Exception:
+            pass
+
+        # Deduct stamina if possible (does not block attacks)
+        try:
+            cost = float(weapon.get('stamina_cost', 0))
+            if cost > 0 and hasattr(self, 'stamina'):
+                self.stamina = max(0, self.stamina - cost)
+        except Exception:
+            pass
+
+        # Remove dead monsters
+        self._cleanup_dead_monsters()
+
+    def _cleanup_dead_monsters(self):
+        """Remove monsters with health <= 0 from the monsters list."""
+        self.monsters = [m for m in self.monsters if m.get('health', 1) > 0]
+
+    def screen_to_tile(self, pixel_x, pixel_y, cam_tx, cam_ty, offset_x, offset_y, view_w, view_h):
+        """Convert screen pixel coordinates to a dungeon tile (row, col).
+
+        Returns None if the pixel is outside the visible tile area.
+        """
+        local_x = pixel_x - offset_x
+        local_y = pixel_y - offset_y
+        if local_x < 0 or local_y < 0:
+            return None
+
+        tile_x = int(local_x // self.tile_size)
+        tile_y = int(local_y // self.tile_size)
+        if tile_x < 0 or tile_y < 0 or tile_x >= view_w or tile_y >= view_h:
+            return None
+
+        return (cam_ty + tile_y, cam_tx + tile_x)
 
     def _can_move_to(self, px, py):
         # Enforce that the player's outer radius does not overlap any non-walkable
@@ -1354,6 +1504,9 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
         if delta_time > 0.1:
             delta_time = 0.1
 
+        # Update temporary attack effects (visual only)
+        dg._update_attack_effects(current_time)
+
         # Movement updates: use delta-time based movement so speed is tiles/sec independent of tile_size
         # Apply continuous movement from held keys using `update_movement` which uses `player_speed_pixels`.
         if held_directions:
@@ -1533,6 +1686,17 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
                     monster_py = (monster_row - cam_ty + 0.5) * dg.tile_size + offset_y
                     pygame.draw.circle(screen, (255, 0, 0), (int(monster_px), int(monster_py)), max(2, dg.tile_size // 4))
 
+        # Draw attack effects overlay (if any)
+        if dg.attack_effects:
+            overlay = pygame.Surface((dg.tile_size, dg.tile_size), pygame.SRCALPHA)
+            overlay.fill((255, 0, 0, 100))
+            for effect in dg.attack_effects:
+                for (er, ec) in effect['tiles']:
+                    if cam_ty <= er < cam_ty + view_h and cam_tx <= ec < cam_tx + view_w:
+                        ex = offset_x + (ec - cam_tx) * dg.tile_size
+                        ey = offset_y + (er - cam_ty) * dg.tile_size
+                        screen.blit(overlay, (ex, ey))
+
         # Draw health and stamina bars
         bar_tile_size = dg.tile_size
         
@@ -1579,6 +1743,11 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 1:  # Left click
+                    target = dg.screen_to_tile(event.pos[0], event.pos[1], cam_tx, cam_ty, offset_x, offset_y, view_w, view_h)
+                    if target is not None:
+                        dg.perform_attack(*target)
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     running = False

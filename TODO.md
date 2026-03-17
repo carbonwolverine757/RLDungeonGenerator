@@ -442,10 +442,18 @@
             Onion Soup          Health:20  Stamina:60
             Eyescream           Health:22  Stamina:65
             Wolf Jerky          Health:31  Stamina:31
+            Cooked Serpent Meat Health:70  Stamina:24
+            Serpent Stew        Health:80  Stamina:27
+        * Plains
+            Cloudberries        Health:15  Stamina:45
+            Cooked Lox Meat     Health:50  Stamina:17
+            Bread               Health:23  Stamina:
+            Blood Pudding       Health:25  Stamina:
+            Lox Meat Pie        Health:75  Stamina:
+            Fish Wraps          Health:70  Stamina:
+            Frosted Sweetbread  Health:43  Stamina:
             Cooked Serpent Meat Health:70  Stamina:
             Serpent Stew        Health:80  Stamina:
-        * Plains
-
         * Mistlands
 
         * Ashlands
