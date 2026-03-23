@@ -188,6 +188,8 @@ class RLDungeonGenerator:
         self.equipped_weapon = WEAPONS[0] if WEAPONS else None
         # Active attack effects (visual only)
         self.attack_effects = []  # each entry: {'tiles': set((r,c)), 'expires_at': float}
+        # Damage popups (visual feedback for damage dealt)
+        self.damage_popups = []  # each entry: {'row': int, 'col': int, 'damage': int, 'expires_at': float}
         # Apply initial level (sets glyphs/colors)
         self.apply_level(self.current_level_index)
         # Exit position (row, col) when placed
@@ -631,6 +633,17 @@ class RLDungeonGenerator:
             current_time = time.time()
         self.attack_effects = [e for e in self.attack_effects if e['expires_at'] > current_time]
 
+    def _update_damage_popups(self, current_time=None):
+        """Prune expired damage popups.
+
+        Each popup is expected to have an 'expires_at' timestamp (float).
+        This is called every frame from the renderer.
+        """
+        if current_time is None:
+            current_time = time.time()
+        # Keep only popups that haven't expired yet
+        self.damage_popups = [p for p in self.damage_popups if p.get('expires_at', 0) > current_time]
+
     def perform_attack(self, target_row, target_col, weapon=None):
         """Perform an attack aimed at the given tile."""
         weapon = weapon or self.equipped_weapon
@@ -650,6 +663,15 @@ class RLDungeonGenerator:
                     monster_col = monster['col']
                     if (monster_row, monster_col) in tiles:
                         monster['health'] -= damage
+                        # Add damage popup
+                        created = time.time()
+                        self.damage_popups.append({
+                            'row': monster_row,
+                            'col': monster_col,
+                            'damage': int(damage),
+                            'created_at': created,
+                            'expires_at': created + 2.0,  # Show for 2 seconds
+                        })
         except Exception:
             pass
 
@@ -1467,6 +1489,11 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
 
     # Fallback to a pygame font renderer (monospace) and glyph cache
     font = pygame.font.SysFont('consolas', dg.tile_size, bold=False)
+    # Smaller popup font for damage numbers
+    try:
+        popup_font = pygame.font.SysFont('consolas', max(10, dg.tile_size // 2), bold=True)
+    except Exception:
+        popup_font = pygame.font.SysFont(None, max(10, dg.tile_size // 2))
     glyph_cache = {}
     # Keep initial view size in tiles fixed; tile size will change on window resize
     init_view_w = min(40, dg.width)
@@ -1506,6 +1533,8 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
 
         # Update temporary attack effects (visual only)
         dg._update_attack_effects(current_time)
+        # Update damage popups
+        dg._update_damage_popups(current_time)
 
         # Movement updates: use delta-time based movement so speed is tiles/sec independent of tile_size
         # Apply continuous movement from held keys using `update_movement` which uses `player_speed_pixels`.
@@ -1564,6 +1593,10 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
                 font = pygame.font.SysFont('consolas', dg.tile_size, bold=False)
             except Exception:
                 font = pygame.font.SysFont(None, dg.tile_size)
+            try:
+                popup_font = pygame.font.SysFont('consolas', max(10, dg.tile_size // 2), bold=True)
+            except Exception:
+                popup_font = pygame.font.SysFont(None, max(10, dg.tile_size // 2))
             glyph_cache.clear()
 
             # Recompute player pixel coordinates to keep the same tile and fractional offset
@@ -1685,6 +1718,39 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
                     monster_px = (monster_col - cam_tx + 0.5) * dg.tile_size + offset_x
                     monster_py = (monster_row - cam_ty + 0.5) * dg.tile_size + offset_y
                     pygame.draw.circle(screen, (255, 0, 0), (int(monster_px), int(monster_py)), max(2, dg.tile_size // 4))
+
+        # Draw damage popups (float up and fade over their lifetime)
+        for popup in dg.damage_popups:
+            popup_row, popup_col = popup['row'], popup['col']
+            if (cam_ty <= popup_row < cam_ty + view_h and 
+                cam_tx <= popup_col < cam_tx + view_w):
+                popup_px = (popup_col - cam_tx + 0.5) * dg.tile_size + offset_x
+                # Base Y (just above the monster)
+                base_py = (popup_row - cam_ty + 0.5) * dg.tile_size + offset_y - dg.tile_size // 2
+                created = popup.get('created_at', current_time)
+                expires = popup.get('expires_at', created + 2.0)
+                duration = max(0.0001, expires - created)
+                age = current_time - created
+                progress = min(max(age / duration, 0.0), 1.0)
+                # Float distance in pixels (move up by ~1.5 tiles over lifetime)
+                float_pixels = dg.tile_size * 1.5
+                y_offset = -int(float_pixels * progress)
+                popup_text = str(popup['damage'])
+                # White smaller text
+                try:
+                    popup_surf = popup_font.render(popup_text, True, (255, 255, 255))
+                except Exception:
+                    popup_surf = font.render(popup_text, True, (255, 255, 255))
+                # Fade out as it ages
+                try:
+                    alpha = int(255 * (1.0 - progress))
+                    if alpha < 0: alpha = 0
+                    if alpha > 255: alpha = 255
+                    popup_surf.set_alpha(alpha)
+                except Exception:
+                    pass
+                popup_rect = popup_surf.get_rect(center=(int(popup_px), int(base_py + y_offset)))
+                screen.blit(popup_surf, popup_rect)
 
         # Draw attack effects overlay (if any)
         if dg.attack_effects:

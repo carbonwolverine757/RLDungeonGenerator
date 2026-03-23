@@ -1,45 +1,6 @@
 *Make map movement less chunky
-*MAKE WEAPONS DO WHAT THEY ARE SUPPOSED TO DO
-    * range = max distance from player
-        * Staff of Fracturing (range = 7)
-        * X X X X X X X X X X X X X X
-        * X                         X
-        * X                         X
-        * X                         X
-        * X                         X
-        * X                         X
-        * X            @            X
-        * X                         X
-        * X						    X
-        * X  				        X
-        * X                         X
-        * X						    X
-        * X						    X
-        * X X X X X X X X X X X X X X
-    * area = radius from attack point
-        * Krom (area = 1.5)
-        *   X
-        * @ X X 
-        *   X
-    * angle = angle of area
-        * Battleaxe (angle = 180)
-        * X X
-        * X X X
-        * @ X X 
-        * X X X
-        * X X
-* MAKE WEAPONS ATTACK AT MOUSE HOVER TILE IF IN RANGE, FARTHEST TILE IN SAME DIRECTION IF NOT
 * MAKE WEAPONS, ATTACK INDICATOR, COINS, WEAPON DROPS, ETC ACTUALLY SHOW UP!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     * Different gyphs for different weapon types, different colors for different materials.
-* MAKE THE ATTACK DIRECTION MORE FLEXIBLE NOT JUST UP,DOWN,LEFT,RIGHT,DIAGONAL
-* Examples : 
-    * Bronze Atgeir
-        * Zone of Attack Range
-        *   X X X  
-        * X X X X X
-        * X X @ X X
-        * X X X X X
-        *   X X X  
 * Add key for attack/use
 * Add damage numbers
 * Add monsters and damage dealing
@@ -447,15 +408,27 @@
         * Plains
             Cloudberries        Health:15  Stamina:45
             Cooked Lox Meat     Health:50  Stamina:17
-            Bread               Health:23  Stamina:
-            Blood Pudding       Health:25  Stamina:
-            Lox Meat Pie        Health:75  Stamina:
-            Fish Wraps          Health:70  Stamina:
-            Frosted Sweetbread  Health:43  Stamina:
-            Cooked Serpent Meat Health:70  Stamina:
-            Serpent Stew        Health:80  Stamina:
+            Bread               Health:23  Stamina:70
+            Blood Pudding       Health:25  Stamina:75
+            Lox Meat Pie        Health:75  Stamina:25
+            Fish Wraps          Health:70  Stamina:24
+            Frosted Sweetbread  Health:43  Stamina:43
+            Cooked Serpent Meat Health:70  Stamina:24
+            Serpent Stew        Health:80  Stamina:27
+            Cooked Egg          Health:35  Stamina:12
+            Cooked Chicken Meat Health:60  Stamina:20
         * Mistlands
-
+            Cooked Egg          Health:
+            Cooked Chicken Meat 
+            Jotun Puffs         
+            Magecap             
+            Cooked Hare Meat    
+            Cooked Seeker Meat  
+            Meat Platter        
+            Misthare Supreme    
+            Mushroom Omelette   
+            Salad               
+            
         * Ashlands
 
 * Add shields
