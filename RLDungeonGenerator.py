@@ -707,6 +707,36 @@ class RLDungeonGenerator:
 
         return (cam_ty + tile_y, cam_tx + tile_x)
 
+    def bresenham_line(self, r0, c0, r1, c1):
+        """Return list of (row,col) tiles along a Bresenham line from (r0,c0) to (r1,c1).
+
+        Includes both endpoints and the start tile. Useful for ray checks.
+        """
+        # Use canonical Bresenham algorithm where column is x and row is y
+        tiles = []
+        x0, y0 = c0, r0
+        x1, y1 = c1, r1
+        dx = abs(x1 - x0)
+        sx = 1 if x0 < x1 else -1
+        dy = -abs(y1 - y0)
+        sy = 1 if y0 < y1 else -1
+        err = dx + dy  # error value
+
+        x, y = x0, y0
+        while True:
+            tiles.append((y, x))
+            if x == x1 and y == y1:
+                break
+            e2 = 2 * err
+            if e2 >= dy:
+                err += dy
+                x += sx
+            if e2 <= dx:
+                err += dx
+                y += sy
+
+        return tiles
+
     def _can_move_to(self, px, py):
         # Enforce that the player's outer radius does not overlap any non-walkable
         # tile. This allows the player's edge to touch the wall but prevents
@@ -1813,7 +1843,31 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
                 if event.button == 1:  # Left click
                     target = dg.screen_to_tile(event.pos[0], event.pos[1], cam_tx, cam_ty, offset_x, offset_y, view_w, view_h)
                     if target is not None:
-                        dg.perform_attack(*target)
+                        tr, tc = target
+                        # Trace a line of tiles from player to clicked tile and look
+                        # for the first monster on that ray. If found, retarget
+                        # the attack to that monster's tile.
+                        line_tiles = dg.bresenham_line(dg.player_row, dg.player_col, tr, tc)
+                        chosen = None
+                        # skip the first tile because it's the player's tile
+                        for (lr, lc) in line_tiles[1:]:
+                            for m in dg.monsters:
+                                if m.get('row') == lr and m.get('col') == lc:
+                                    chosen = (lr, lc)
+                                    break
+                            if chosen:
+                                break
+
+                        if chosen is not None:
+                            tr, tc = chosen
+
+                        # Draw the line as a short-lived visual effect
+                        try:
+                            dg._add_attack_effect(set(line_tiles), duration=0.25)
+                        except Exception:
+                            pass
+
+                        dg.perform_attack(tr, tc)
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     running = False

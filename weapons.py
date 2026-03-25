@@ -13,9 +13,9 @@ WEAPONS = [
         'name': 'Unarmed',
         'damage': 999,
         'stamina_cost': 0,
-        'range': 1.5,
-        'area': 25.0,
-        'angle': 10.0,
+        'range': 99.5,
+        'area': 5.0,
+        'angle': 360.0,
         'glyph': None,
     },
 ]
