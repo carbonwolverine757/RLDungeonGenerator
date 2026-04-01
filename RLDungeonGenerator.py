@@ -916,12 +916,14 @@ class RLDungeonGenerator:
         # Get current level name
         current_level_name = self.get_current_level_name()
         
-        # Filter monster types that can appear in this level
-        available_monster_types = []
-        for monster_type in MONSTER_TYPES:
-            level_list = monster_type.get('levels', [])
-            if not level_list or current_level_name in level_list:
-                available_monster_types.append(monster_type)
+        # Filter monster types to those that explicitly list this level.
+        # Only monster types whose `levels` list contains the current level
+        # name will be considered for placement.
+        available_monster_types = [
+            mt for mt in MONSTER_TYPES
+            # empty `levels` list means the monster can appear on any level
+            if not mt.get('levels') or current_level_name in mt.get('levels', [])
+        ]
         
         if not available_monster_types:
             return  # No monsters available for this level
@@ -936,21 +938,46 @@ class RLDungeonGenerator:
                 if self.is_walkable(r, c) and (r, c) != (self.player_row, self.player_col) and (r, c) != self.exit_pos:
                     walkable_positions.append((r, c))
         
-        # Randomly select positions for monsters
+        # Randomly select positions for monsters and ensure every available
+        # monster type appears at least once. Also prefer at least two
+        # monsters on the map when possible.
         if len(walkable_positions) > 0:
             import random
-            monster_positions = random.sample(walkable_positions, min(num_monsters, len(walkable_positions)))
-            
-            # Create monster objects
-            for r, c in monster_positions:
-                monster_type = random.choice(available_monster_types)
-                monster = {
-                    'type': monster_type,
+            max_positions = len(walkable_positions)
+            # Ensure we have room to place all monster types at least once
+            desired = max(num_monsters, len(available_monster_types))
+            # Prefer at least two monsters for variety
+            desired = max(desired, 2)
+            desired = min(desired, max_positions)
+
+            monster_positions = random.sample(walkable_positions, desired)
+
+            # First, assign one instance of each monster type (if possible)
+            self.monsters = []
+            pos_idx = 0
+            for mt in available_monster_types:
+                if pos_idx >= len(monster_positions):
+                    break
+                r, c = monster_positions[pos_idx]
+                self.monsters.append({
+                    'type': mt,
                     'row': r,
                     'col': c,
-                    'health': monster_type['health']
-                }
-                self.monsters.append(monster)
+                    'health': mt['health']
+                })
+                pos_idx += 1
+
+            # Fill remaining slots with random choices from available types
+            while pos_idx < len(monster_positions):
+                r, c = monster_positions[pos_idx]
+                mt = random.choice(available_monster_types)
+                self.monsters.append({
+                    'type': mt,
+                    'row': r,
+                    'col': c,
+                    'health': mt['health']
+                })
+                pos_idx += 1
 
     def print_map(self):
         for r in range(self.height):

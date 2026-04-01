@@ -10,6 +10,12 @@ MONSTER_TYPES = [
         'name': 'Boar',
         'glyph_index': 3 * 32 + 1,  # Row 3, Column 1
         'health': 10,
-        'levels': ['Meadows'],  # Empty list means appears in all levels
+        'levels': ['Meadows'],
+    },
+    {
+        'name': 'Greyling',
+        'glyph_index': 3 * 32 + 2,  # Row 3, Column 2
+        'health': 20,
+        'levels': ['Black Forest'],
     },
 ]
