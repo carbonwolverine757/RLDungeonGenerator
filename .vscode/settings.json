@@ -47,6 +47,14 @@
         "/^python -m RLDungeonGenerator --ascii 2>&1 \\| Select-Object -First 10$/": {
             "approve": true,
             "matchCommandLine": true
+        },
+        "/^\\.\\\\env\\\\Scripts\\\\python\\.exe RLDungeonGenerator\\.py$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^\\.\\\\env\\\\Scripts\\\\python\\.exe -m py_compile RLDungeonGenerator\\.py$/": {
+            "approve": true,
+            "matchCommandLine": true
         }
     }
 }

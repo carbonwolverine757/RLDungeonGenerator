@@ -1,8 +1,7 @@
 *Make map movement less chunky
-* MAKE WEAPONS, ATTACK INDICATOR, COINS, WEAPON DROPS, ETC ACTUALLY SHOW UP!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+* COINS, WEAPON DROPS, ETC ACTUALLY SHOW UP!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     * Different gyphs for different weapon types, different colors for different materials.
 * Add key for attack/use
-* Add damage numbers
 * Add monsters and damage dealing
     * Monsters :
         * Meadows :

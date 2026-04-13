@@ -168,7 +168,7 @@ class RLDungeonGenerator:
         # Movement speed expressed as tiles per second; converted to pixels/sec below
         self.player_speed_tiles_per_sec = 3.0
         self.player_speed_pixels = self.player_speed_tiles_per_sec * self.tile_size
-        self.player_radius = 6.0
+        self.player_radius = self.tile_size * 0.375
         self.last_revealed_tile = (-1, -1)
         # Levels and current index
         self.levels = LEVELS or []
@@ -769,6 +769,54 @@ class RLDungeonGenerator:
 
         return True
 
+    def _can_move_monster_to(self, px, py, monster, radius=None):
+        """Check whether a monster can move to pixel coords (px,py).
+
+        This is similar to _can_move_to but ignores the monster itself when
+        checking for blocking monsters and uses a smaller collision radius.
+        """
+        if radius is None:
+            radius = max(2, int(self.tile_size * 0.3))
+
+        min_col = int((px - radius) / self.tile_size)
+        max_col = int((px + radius) / self.tile_size)
+        min_row = int((py - radius) / self.tile_size)
+        max_row = int((py + radius) / self.tile_size)
+        min_dist_sq = radius * radius
+
+        for r in range(min_row, max_row + 1):
+            for c in range(min_col, max_col + 1):
+                # Out-of-bounds tiles are not walkable
+                if r < 0 or c < 0 or r >= self.height or c >= self.width:
+                    return False
+
+                # Tile must be walkable terrain
+                tile = self.dungeon[r][c]
+                if tile.tile_type not in (DungeonSqr.FLOOR, DungeonSqr.DOOR, DungeonSqr.EXIT):
+                    return False
+
+                # If another monster occupies the tile, block movement.
+                for m in self.monsters:
+                    if m is monster:
+                        continue
+                    if m.get('row') == r and m.get('col') == c:
+                        return False
+
+                # Precise circle vs rect test (closest point on tile rect)
+                tx0 = c * self.tile_size
+                ty0 = r * self.tile_size
+                tx1 = tx0 + self.tile_size
+                ty1 = ty0 + self.tile_size
+
+                closest_x = min(max(px, tx0), tx1)
+                closest_y = min(max(py, ty0), ty1)
+                dx = px - closest_x
+                dy = py - closest_y
+                if dx * dx + dy * dy < min_dist_sq:
+                    return False
+
+        return True
+
     def reveal_current_area(self):
         # Reveal the entire room when inside one; otherwise reveal a small radius (corridor)
         current_room = None
@@ -799,6 +847,59 @@ class RLDungeonGenerator:
                     if 0 <= r < self.height and 0 <= c < self.width:
                         if dr*dr + dc*dc <= radius*radius:
                             self.explored[r][c] = True
+
+    def update_monsters(self, delta_time):
+        """Update monsters: alert checking and movement towards player when alerted."""
+        if not self.monsters:
+            return
+
+        for monster in list(self.monsters):
+            mt = monster.get('type', {})
+            # Ensure monster has pixel position
+            if 'x' not in monster or 'y' not in monster:
+                monster['x'] = (monster.get('col', 0) + 0.5) * self.tile_size
+                monster['y'] = (monster.get('row', 0) + 0.5) * self.tile_size
+
+            # Aggro check (distance in tiles)
+            dx_tiles = (monster['x'] - self.player_x) / self.tile_size
+            dy_tiles = (monster['y'] - self.player_y) / self.tile_size
+            dist_tiles = sqrt(dx_tiles * dx_tiles + dy_tiles * dy_tiles)
+            aggro = float(mt.get('aggro_distance', 0))
+            alerted = dist_tiles <= aggro if aggro > 0 else False
+            monster['alerted'] = alerted
+
+            if alerted:
+                # Movement towards player in pixels/sec
+                speed_tiles = float(mt.get('movement_speed', 0))
+                if speed_tiles <= 0:
+                    continue
+                speed_px = speed_tiles * self.tile_size
+                dx = self.player_x - monster['x']
+                dy = self.player_y - monster['y']
+                dist = sqrt(dx * dx + dy * dy)
+                if dist == 0:
+                    continue
+                dir_x = dx / dist
+                dir_y = dy / dist
+                move_x = dir_x * speed_px * delta_time
+                move_y = dir_y * speed_px * delta_time
+
+                # Try full move; if blocked, try axis-aligned moves
+                new_x = monster['x'] + move_x
+                new_y = monster['y'] + move_y
+                if self._can_move_monster_to(new_x, new_y, monster):
+                    monster['x'] = new_x
+                    monster['y'] = new_y
+                else:
+                    # try x only
+                    if self._can_move_monster_to(monster['x'] + move_x, monster['y'], monster):
+                        monster['x'] += move_x
+                    elif self._can_move_monster_to(monster['x'], monster['y'] + move_y, monster):
+                        monster['y'] += move_y
+
+                # Update integer tile coords
+                monster['col'] = int(monster['x'] / self.tile_size)
+                monster['row'] = int(monster['y'] / self.tile_size)
 
     def apply_level(self, index: int) -> None:
         """Apply level settings by index from self.levels."""
@@ -963,7 +1064,11 @@ class RLDungeonGenerator:
                     'type': mt,
                     'row': r,
                     'col': c,
-                    'health': mt['health']
+                    'health': mt['health'],
+                    # Pixel-precise position so monsters can move smoothly
+                    'x': (c + 0.5) * self.tile_size,
+                    'y': (r + 0.5) * self.tile_size,
+                    'alerted': False,
                 })
                 pos_idx += 1
 
@@ -975,30 +1080,24 @@ class RLDungeonGenerator:
                     'type': mt,
                     'row': r,
                     'col': c,
-                    'health': mt['health']
+                    'health': mt['health'],
+                    # Pixel-precise position so monsters can move smoothly
+                    'x': (c + 0.5) * self.tile_size,
+                    'y': (r + 0.5) * self.tile_size,
+                    'alerted': False,
                 })
                 pos_idx += 1
-
-    def print_map(self):
-        for r in range(self.height):
-            row = ''
-            for c in range(self.width):
-                row += self.dungeon[r][c].get_ch()
-            print(row)
-
-
 def render_with_tcod(dg: RLDungeonGenerator) -> None:
-    if tcod is None:
-        # Provide detailed diagnostic instead of exiting so debugger / logs show why import failed
-        info = (
-            f"tcod is not installed or failed to import.\n"
-            f"Python executable: {sys.executable}\n"
-            f"sys.version: {sys.version}\n"
-            f"sys.path: {sys.path}\n"
-            f"Import traceback:\n{_tcod_import_error}\n"
-        )
-        print(info)
-        raise ImportError(info)
+    # Provide detailed diagnostic instead of exiting so debugger / logs show why import failed
+    info = (
+        f"tcod is not installed or failed to import.\n"
+        f"Python executable: {sys.executable}\n"
+        f"sys.version: {sys.version}\n"
+        f"sys.path: {sys.path}\n"
+        f"Import traceback:\n{_tcod_import_error}\n"
+    )
+    print(info)
+    raise ImportError(info)
 
     # Prefer a project-local bitmap tileset first
     tileset = None
@@ -1102,6 +1201,8 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                 delta_time = 0.1
 
             dg.update_movement(delta_time, (0.0, 0.0))
+            # Update monster AI/movement after player moves
+            dg.update_monsters(delta_time)
             # Frame-based held-key single-pixel movement: if any directions are held,
             # compute a signed dx/dy and nudge the player by 1 pixel this frame.
             if held_directions:
@@ -1214,10 +1315,11 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
 
                 # Draw monsters as red squares
                 for monster in dg.monsters:
-                    monster_px = int((monster['col'] + 0.5) * dg.tile_size - cam_px)
-                    monster_py = int((monster['row'] + 0.5) * dg.tile_size - cam_py)
-                    mr = monster_py - dg.tile_size // 2
-                    mc = monster_px - dg.tile_size // 2
+                    # Use pixel-precise positions if available
+                    mpx = int(monster.get('x', (monster.get('col', 0) + 0.5) * dg.tile_size) - cam_px)
+                    mpy = int(monster.get('y', (monster.get('row', 0) + 0.5) * dg.tile_size) - cam_py)
+                    mr = mpy - dg.tile_size // 2
+                    mc = mpx - dg.tile_size // 2
                     # small red square for monsters
                     ms = max(2, dg.tile_size // 3)
                     y0 = mr - ms//2
@@ -1229,6 +1331,22 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                     if y1c > y0c and x1c > x0c:
                         buf[y0c:y1c, x0c:x1c, :3] = (255, 0, 0)
                         buf[y0c:y1c, x0c:x1c, 3] = 255
+                    # draw small alert marker above monster if alerted
+                    if monster.get('alerted'):
+                        try:
+                            ex_h = max(2, dg.tile_size // 4)
+                            ex_w = max(2, dg.tile_size // 8)
+                            ex_x0 = mpx - ex_w // 2
+                            ex_y0 = mr - ms//2 - ex_h - 2
+                            ex_x1 = ex_x0 + ex_w
+                            ex_y1 = ex_y0 + ex_h
+                            ex_x0c = max(0, ex_x0); ex_y0c = max(0, ex_y0)
+                            ex_x1c = min(pixel_view_w, ex_x1); ex_y1c = min(pixel_view_h, ex_y1)
+                            if ex_y1c > ex_y0c and ex_x1c > ex_x0c:
+                                buf[ex_y0c:ex_y1c, ex_x0c:ex_x1c, :3] = (255, 0, 0)
+                                buf[ex_y0c:ex_y1c, ex_x0c:ex_x1c, 3] = 255
+                        except Exception:
+                            pass
 
                 # Convert buffer to tcod image and present
                 try:
@@ -1313,6 +1431,8 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                     if 0 <= mr < view_h and 0 <= mc < view_w:
                         glyph_index = monster['type']['glyph_index']
                         console.print(mc, mr, chr(glyph_index), fg=(255, 0, 0))
+                        if monster.get('alerted') and mr - 1 >= 0:
+                            console.print(mc, mr - 1, '!', fg=(255, 0, 0))
 
                 context.present(console)
 
@@ -1637,6 +1757,7 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
             # Keep movement speed consistent in tiles/sec regardless of pixel tile size
             try:
                 dg.player_speed_pixels = dg.player_speed_tiles_per_sec * dg.tile_size
+                dg.player_radius = dg.tile_size * 0.375
             except Exception:
                 pass
             # Rescale tile surfaces if we have originals
@@ -1664,6 +1785,22 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
                 # Fallback: center player in its tile
                 dg.player_x = (dg.player_col + 0.5) * dg.tile_size
                 dg.player_y = (dg.player_row + 0.5) * dg.tile_size
+
+            # Rescale monster pixel positions to match new tile size
+            for monster in dg.monsters:
+                if 'x' in monster and 'y' in monster:
+                    try:
+                        m_frac_x = monster['x'] / old_tile_size - monster['col']
+                        m_frac_y = monster['y'] / old_tile_size - monster['row']
+                        monster['x'] = (monster['col'] + m_frac_x) * dg.tile_size
+                        monster['y'] = (monster['row'] + m_frac_y) * dg.tile_size
+                        monster['col'] = int(monster['x'] / dg.tile_size)
+                        monster['row'] = int(monster['y'] / dg.tile_size)
+                    except Exception:
+                        monster['x'] = (monster['col'] + 0.5) * dg.tile_size
+                        monster['y'] = (monster['row'] + 0.5) * dg.tile_size
+                        monster['col'] = monster['col']
+                        monster['row'] = monster['row']
 
         # Compute used pixel area for tiles and center it in the window if extra space exists
         used_w = view_w * dg.tile_size
@@ -1759,22 +1896,37 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
 
         # Draw monsters
         for monster in dg.monsters:
-            monster_row, monster_col = monster['row'], monster['col']
-            if (cam_ty <= monster_row < cam_ty + view_h and 
-                cam_tx <= monster_col < cam_tx + view_w):
-                x = offset_x + (monster_col - cam_tx) * dg.tile_size
-                y = offset_y + (monster_row - cam_ty) * dg.tile_size
-                
-                # Use monster glyph from tileset
-                glyph_index = monster['type']['glyph_index']
-                if tile_surfaces is not None and glyph_index < len(tile_surfaces):
-                    # Don't draw background for monsters to preserve transparency
-                    screen.blit(tile_surfaces[glyph_index], (x, y))
-                else:
-                    # Fallback: draw red circle
-                    monster_px = (monster_col - cam_tx + 0.5) * dg.tile_size + offset_x
-                    monster_py = (monster_row - cam_ty + 0.5) * dg.tile_size + offset_y
-                    pygame.draw.circle(screen, (255, 0, 0), (int(monster_px), int(monster_py)), max(2, dg.tile_size // 4))
+                    # Compute integer tile coords for visibility check
+                    monster_row = monster.get('row', int(monster.get('y', 0) / dg.tile_size))
+                    monster_col = monster.get('col', int(monster.get('x', 0) / dg.tile_size))
+                    if (cam_ty <= monster_row < cam_ty + view_h and 
+                        cam_tx <= monster_col < cam_tx + view_w):
+                        # Pixel position for smooth movement
+                        monster_px = monster.get('x', (monster_col + 0.5) * dg.tile_size) - cam_tx * dg.tile_size + offset_x
+                        monster_py = monster.get('y', (monster_row + 0.5) * dg.tile_size) - cam_ty * dg.tile_size + offset_y
+                        x = int(monster_px - 0.5 * dg.tile_size)
+                        y = int(monster_py - 0.5 * dg.tile_size)
+
+                        # Use monster glyph from tileset
+                        glyph_index = monster['type']['glyph_index']
+                        if tile_surfaces is not None and glyph_index < len(tile_surfaces):
+                            # Draw monster sprite centered on tile
+                            screen.blit(tile_surfaces[glyph_index], (x, y))
+                        else:
+                            # Fallback: draw red circle
+                            pygame.draw.circle(screen, (255, 0, 0), (int(monster_px), int(monster_py)), max(2, dg.tile_size // 4))
+
+                        # Draw alert indicator if alerted
+                        if monster.get('alerted'):
+                            try:
+                                ex_surf = popup_font.render('!', True, (255, 0, 0))
+                                ex_rect = ex_surf.get_rect(center=(int(monster_px), int(monster_py - dg.tile_size * 0.5 - 6)))
+                                screen.blit(ex_surf, ex_rect)
+                            except Exception:
+                                # fallback to a small red rectangle
+                                rx = int(monster_px) - 2
+                                ry = int(monster_py - dg.tile_size * 0.5 - 8)
+                                pygame.draw.rect(screen, (255, 0, 0), (rx, ry, 4, 6))
 
         # Draw damage popups (float up and fade over their lifetime)
         for popup in dg.damage_popups:
