@@ -778,18 +778,14 @@ class RLDungeonGenerator:
         c = int(px / self.tile_size)
         # Debug: check bounds
         if r < 0 or r >= self.height or c < 0 or c >= self.width:
-            print(f"Out of bounds: r={r}, c={c}")  # Debug
             return False
         if not self.is_walkable(r, c, monster):
-            tile = self.dungeon[r][c]
-            print(f"Not walkable: r={r}, c={c}, tile_type={tile.tile_type}")  # Debug
             return False
         # Check if another monster occupies this tile
         for m in self.monsters:
             if m is monster:
                 continue
             if m.get('row') == r and m.get('col') == c:
-                print(f"Monster blocked by another at r={r}, c={c}")  # Debug
                 return False
         return True
 
@@ -876,6 +872,7 @@ class RLDungeonGenerator:
             return
 
         for monster in list(self.monsters):
+            mt = monster.get('type', {})
             # Ensure monster has pixel position
             if 'x' not in monster or 'y' not in monster:
                 monster['x'] = (monster.get('col', 0) + 0.5) * self.tile_size
@@ -890,7 +887,6 @@ class RLDungeonGenerator:
             monster['alerted'] = alerted
 
             if alerted:
-                print(f"Monster alerted, dist={dist_tiles:.1f}, aggro={aggro}")  # Debug
                 # Movement towards player in pixels/sec
                 speed_tiles = float(mt.get('movement_speed', 0))
                 if speed_tiles <= 0:
@@ -898,7 +894,6 @@ class RLDungeonGenerator:
                 speed_px = speed_tiles * self.tile_size
 
                 next_step = self._find_monster_next_step(monster)
-                print(f"Next step: {next_step}")  # Debug
                 if next_step is not None:
                     target_r, target_c = next_step
                     target_x = (target_c + 0.5) * self.tile_size
@@ -929,18 +924,13 @@ class RLDungeonGenerator:
                 if can_move_diag:
                     monster['x'] = new_x
                     monster['y'] = new_y
-                    print(f"Monster moved to {monster['x']:.1f}, {monster['y']:.1f}")  # Debug
                 else:
                     can_move_x = self._can_move_monster_to(monster['x'] + move_x, monster['y'], monster)
                     can_move_y = self._can_move_monster_to(monster['x'], monster['y'] + move_y, monster)
                     if can_move_x:
                         monster['x'] += move_x
-                        print(f"Monster moved X to {monster['x']:.1f}")  # Debug
                     elif can_move_y:
                         monster['y'] += move_y
-                        print(f"Monster moved Y to {monster['y']:.1f}")  # Debug
-                    else:
-                        print(f"Monster blocked at {monster['x']:.1f}, {monster['y']:.1f}")  # Debug
 
                 # Update integer tile coords
                 monster['col'] = int(monster['x'] / self.tile_size)
