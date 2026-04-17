@@ -55,6 +55,14 @@
         "/^\\.\\\\env\\\\Scripts\\\\python\\.exe -m py_compile RLDungeonGenerator\\.py$/": {
             "approve": true,
             "matchCommandLine": true
+        },
+        "/^Start-Process -FilePath \"\\.\\\\env\\\\Scripts\\\\python\\.exe\" -ArgumentList \"RLDungeonGenerator\\.py\" -NoNewWindow -RedirectStandardOutput \"\\.\\\\game_output\\.log\" -RedirectStandardError \"\\.\\\\game_error\\.log\"; Start-Sleep -Seconds 5; Get-Content \"\\.\\\\game_output\\.log\" \\| Select-Object -Last 50$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^python RLDungeonGenerator\\.py --level 0$/": {
+            "approve": true,
+            "matchCommandLine": true
         }
     }
 }

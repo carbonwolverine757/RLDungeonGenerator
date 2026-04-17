@@ -1,8 +1,36 @@
-*Make map movement less chunky
+* Make map movement less chunky
 * COINS, WEAPON DROPS, ETC ACTUALLY SHOW UP!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     * Different gyphs for different weapon types, different colors for different materials.
 * Add key for attack/use
 * Add monsters and damage dealing
+    * Damage :
+        Slash
+            **Physical**
+            Deals immediate damage.
+        Blunt
+            **Physical**
+            Deals immediate damage.
+        Pierce
+            **Physical**
+            Deals immediate damage.
+        Fire
+            **Elemental**
+            Deals no immediate damage. Instead, spreads the damage overs 5s (damage/5 per 1s). Taking subsequent fire damage recalculates the tick damage and resets the duration. ((remaining tick damage + new damage)/5 = reevaluated tick damage (per 1s)).
+            **Inflicted Effect** : Burning
+                Duration : 5s
+        Frost
+            **Elemental**
+            Deals immediate damage. Inflicts a slow effect, decreasing movement speed by % for 5s. Taking subsequent Frost damage resets the duration of the effect (but doesn't stack).
+            **Inflicted Effect** : Frost
+                Duration : 5s
+        Lightning
+            **Elemental**
+            Deals immediate damage. Inflicts Electricity effect. Electricity doesn't have any 
+        Poison
+        Spirit
+        Chop
+        Pickaxe
+        Pure
     * Monsters :
         * Meadows :
             * Greyling

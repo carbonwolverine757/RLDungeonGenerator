@@ -9,6 +9,7 @@ import sys
 import time
 import traceback
 import logging
+from collections import deque
 
 # Glyph index for walls & floors in the generated Unicode tilesheet.
 # The tilesheet is built by `generate_unicode_tileset.py` with `cols=32`,
@@ -427,7 +428,7 @@ class RLDungeonGenerator:
         self.place_monsters()
         self.reveal_current_area()
 
-    def is_walkable(self, r, c):
+    def is_walkable(self, r, c, ignore_monster=None):
         """Return True if the tile at the given coordinates can be entered.
 
         Walkable tiles are floors, doors, and exits. Walls and monsters are not walkable.
@@ -438,6 +439,8 @@ class RLDungeonGenerator:
             return False
         # Check if there's a monster at this position
         for monster in self.monsters:
+            if monster is ignore_monster:
+                continue
             if monster['row'] == r and monster['col'] == c:
                 return False
         tile = self.dungeon[r][c]
@@ -770,52 +773,71 @@ class RLDungeonGenerator:
         return True
 
     def _can_move_monster_to(self, px, py, monster, radius=None):
-        """Check whether a monster can move to pixel coords (px,py).
-
-        This is similar to _can_move_to but ignores the monster itself when
-        checking for blocking monsters and uses a smaller collision radius.
-        """
-        if radius is None:
-            radius = max(2, int(self.tile_size * 0.3))
-
-        min_col = int((px - radius) / self.tile_size)
-        max_col = int((px + radius) / self.tile_size)
-        min_row = int((py - radius) / self.tile_size)
-        max_row = int((py + radius) / self.tile_size)
-        min_dist_sq = radius * radius
-
-        for r in range(min_row, max_row + 1):
-            for c in range(min_col, max_col + 1):
-                # Out-of-bounds tiles are not walkable
-                if r < 0 or c < 0 or r >= self.height or c >= self.width:
-                    return False
-
-                # Tile must be walkable terrain
-                tile = self.dungeon[r][c]
-                if tile.tile_type not in (DungeonSqr.FLOOR, DungeonSqr.DOOR, DungeonSqr.EXIT):
-                    return False
-
-                # If another monster occupies the tile, block movement.
-                for m in self.monsters:
-                    if m is monster:
-                        continue
-                    if m.get('row') == r and m.get('col') == c:
-                        return False
-
-                # Precise circle vs rect test (closest point on tile rect)
-                tx0 = c * self.tile_size
-                ty0 = r * self.tile_size
-                tx1 = tx0 + self.tile_size
-                ty1 = ty0 + self.tile_size
-
-                closest_x = min(max(px, tx0), tx1)
-                closest_y = min(max(py, ty0), ty1)
-                dx = px - closest_x
-                dy = py - closest_y
-                if dx * dx + dy * dy < min_dist_sq:
-                    return False
-
+        """Check if monster can move its center to (px, py)."""
+        r = int(py / self.tile_size)
+        c = int(px / self.tile_size)
+        # Debug: check bounds
+        if r < 0 or r >= self.height or c < 0 or c >= self.width:
+            print(f"Out of bounds: r={r}, c={c}")  # Debug
+            return False
+        if not self.is_walkable(r, c, monster):
+            tile = self.dungeon[r][c]
+            print(f"Not walkable: r={r}, c={c}, tile_type={tile.tile_type}")  # Debug
+            return False
+        # Check if another monster occupies this tile
+        for m in self.monsters:
+            if m is monster:
+                continue
+            if m.get('row') == r and m.get('col') == c:
+                print(f"Monster blocked by another at r={r}, c={c}")  # Debug
+                return False
         return True
+
+    def _find_monster_next_step(self, monster):
+        """Find the next tile along a walkable path from a monster to the player."""
+        start_r = monster.get('row', int(monster.get('y', 0) / self.tile_size))
+        start_c = monster.get('col', int(monster.get('x', 0) / self.tile_size))
+        target_r = self.player_row
+        target_c = self.player_col
+
+        if (start_r, start_c) == (target_r, target_c):
+            return None
+
+        queue = deque()
+        queue.append((start_r, start_c))
+        came_from = {(start_r, start_c): None}
+        while queue:
+            r, c = queue.popleft()
+            if (r, c) == (target_r, target_c):
+                break
+
+            for dr, dc in ((0, 1), (1, 0), (0, -1), (-1, 0)):
+                nr, nc = r + dr, c + dc
+                if (nr, nc) in came_from:
+                    continue
+                if nr < 0 or nc < 0 or nr >= self.height or nc >= self.width:
+                    continue
+                if (nr, nc) != (target_r, target_c) and not self.is_walkable(nr, nc):
+                    continue
+                if (nr, nc) != (target_r, target_c):
+                    blocked_by_monster = any(
+                        m is not monster and m.get('row') == nr and m.get('col') == nc
+                        for m in self.monsters
+                    )
+                    if blocked_by_monster:
+                        continue
+                came_from[(nr, nc)] = (r, c)
+                queue.append((nr, nc))
+
+        if (target_r, target_c) not in came_from:
+            return None
+
+        current = (target_r, target_c)
+        while came_from[current] != (start_r, start_c):
+            current = came_from[current]
+            if current is None:
+                return None
+        return current
 
     def reveal_current_area(self):
         # Reveal the entire room when inside one; otherwise reveal a small radius (corridor)
@@ -854,7 +876,6 @@ class RLDungeonGenerator:
             return
 
         for monster in list(self.monsters):
-            mt = monster.get('type', {})
             # Ensure monster has pixel position
             if 'x' not in monster or 'y' not in monster:
                 monster['x'] = (monster.get('col', 0) + 0.5) * self.tile_size
@@ -869,13 +890,25 @@ class RLDungeonGenerator:
             monster['alerted'] = alerted
 
             if alerted:
+                print(f"Monster alerted, dist={dist_tiles:.1f}, aggro={aggro}")  # Debug
                 # Movement towards player in pixels/sec
                 speed_tiles = float(mt.get('movement_speed', 0))
                 if speed_tiles <= 0:
                     continue
                 speed_px = speed_tiles * self.tile_size
-                dx = self.player_x - monster['x']
-                dy = self.player_y - monster['y']
+
+                next_step = self._find_monster_next_step(monster)
+                print(f"Next step: {next_step}")  # Debug
+                if next_step is not None:
+                    target_r, target_c = next_step
+                    target_x = (target_c + 0.5) * self.tile_size
+                    target_y = (target_r + 0.5) * self.tile_size
+                else:
+                    target_x = self.player_x
+                    target_y = self.player_y
+
+                dx = target_x - monster['x']
+                dy = target_y - monster['y']
                 dist = sqrt(dx * dx + dy * dy)
                 if dist == 0:
                     continue
@@ -884,18 +917,30 @@ class RLDungeonGenerator:
                 move_x = dir_x * speed_px * delta_time
                 move_y = dir_y * speed_px * delta_time
 
-                # Try full move; if blocked, try axis-aligned moves
+                # Don't overshoot the target tile center.
+                if abs(move_x) > abs(target_x - monster['x']):
+                    move_x = target_x - monster['x']
+                if abs(move_y) > abs(target_y - monster['y']):
+                    move_y = target_y - monster['y']
+
                 new_x = monster['x'] + move_x
                 new_y = monster['y'] + move_y
-                if self._can_move_monster_to(new_x, new_y, monster):
+                can_move_diag = self._can_move_monster_to(new_x, new_y, monster)
+                if can_move_diag:
                     monster['x'] = new_x
                     monster['y'] = new_y
+                    print(f"Monster moved to {monster['x']:.1f}, {monster['y']:.1f}")  # Debug
                 else:
-                    # try x only
-                    if self._can_move_monster_to(monster['x'] + move_x, monster['y'], monster):
+                    can_move_x = self._can_move_monster_to(monster['x'] + move_x, monster['y'], monster)
+                    can_move_y = self._can_move_monster_to(monster['x'], monster['y'] + move_y, monster)
+                    if can_move_x:
                         monster['x'] += move_x
-                    elif self._can_move_monster_to(monster['x'], monster['y'] + move_y, monster):
+                        print(f"Monster moved X to {monster['x']:.1f}")  # Debug
+                    elif can_move_y:
                         monster['y'] += move_y
+                        print(f"Monster moved Y to {monster['y']:.1f}")  # Debug
+                    else:
+                        print(f"Monster blocked at {monster['x']:.1f}, {monster['y']:.1f}")  # Debug
 
                 # Update integer tile coords
                 monster['col'] = int(monster['x'] / self.tile_size)
@@ -1575,7 +1620,29 @@ def show_level_selection_menu(screen: 'pygame.Surface', dg: RLDungeonGenerator, 
     return selected_level
 
 
-def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_menu: bool = False) -> None:
+def parse_start_level(dg: RLDungeonGenerator, start_level: str | None) -> int | None:
+    if start_level is None:
+        return None
+
+    # Allow numeric level indices or exact level names.
+    try:
+        idx = int(start_level)
+        if 0 <= idx < len(dg.levels):
+            return idx
+        print(f"Warning: requested level index {idx} is out of range.")
+        return None
+    except ValueError:
+        pass
+
+    for idx, level_def in enumerate(dg.levels):
+        if str(level_def.get('name', '')).lower() == start_level.strip().lower():
+            return idx
+
+    print(f"Warning: requested level '{start_level}' was not found.")
+    return None
+
+
+def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_menu: bool = False, start_level: str | None = None) -> None:
     import os
     
     if pygame is None:
@@ -1689,13 +1756,17 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
     held_directions = []
     shift_held = False
 
-    # Always show level selection menu when using the GUI
-    selected_level_idx = show_level_selection_menu(screen, dg, clock, font)
-    if selected_level_idx == -1:
-        pygame.quit()
-        return
-    # Apply selected level and generate map
-    dg.apply_level(selected_level_idx)
+    selected_level_idx = None
+    if dg.levels:
+        selected_level_idx = parse_start_level(dg, start_level)
+        if selected_level_idx is None or force_menu:
+            selected_level_idx = show_level_selection_menu(screen, dg, clock, font)
+            if selected_level_idx == -1:
+                pygame.quit()
+                return
+    
+    if selected_level_idx is not None:
+        dg.apply_level(selected_level_idx)
     dg.generate_map()
     pygame.display.set_caption(f"RLDungeonGenerator - {dg.get_current_level_name()}")
 
@@ -1727,6 +1798,8 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
         else:
             dg.update_movement(delta_time, (0.0, 0.0))
 
+        # Update monsters (aggro & movement)
+        dg.update_monsters(delta_time)
 
         # Update viewport to keep tile count fixed and instead adjust tile size
         pixel_view_w, pixel_view_h = screen.get_size()
@@ -2085,15 +2158,19 @@ def main() -> None:
     parser.add_argument("--ascii", action="store_true", help="Print ASCII map to console instead of opening a window")
     parser.add_argument("--gui", action="store_true", help="Force GUI mode even in headless environments")
     parser.add_argument("--menu", action="store_true", help="Always show level selection menu (even in VS Code)")
+    parser.add_argument("--level", type=str, help="Select a level by index or name and skip the level menu.")
     args = parser.parse_args()
 
     dg = RLDungeonGenerator(args.width, args.height)
     
     try:
         if args.ascii:
-            # Go straight to levels list if available, otherwise generate procedurally
+            # Go straight to a level if available, otherwise generate procedurally
             if dg.levels:
-                dg.apply_level(0)
+                selected_level_idx = parse_start_level(dg, args.level)
+                if selected_level_idx is None:
+                    selected_level_idx = 0
+                dg.apply_level(selected_level_idx)
                 dg.generate_map()
             else:
                 dg.generate_map()
@@ -2101,7 +2178,7 @@ def main() -> None:
         else:
             # Prefer pygame renderer if available
             if pygame is not None:
-                render_with_pygame(dg, args.gui, args.menu)
+                render_with_pygame(dg, args.gui, args.menu, args.level)
             else:
                 render_with_tcod(dg)
     except Exception:

@@ -1,0 +1,4 @@
+2026-04-14 09:27:09,059 INFO: pygame imported from: C:\Users\Kazoku\source\repos\carbonwolverine757\RLDungeonGenerator\env\Lib\site-packages\pygame\__init__.py
+2026-04-14 09:27:09,060 INFO: pygame version: 2.6.1
+2026-04-14 09:27:09,060 INFO: pygame.get_init()=False
+2026-04-14 09:27:09,119 INFO: pygame.init() returned: (5, 0)
