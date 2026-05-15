@@ -169,7 +169,7 @@ class RLDungeonGenerator:
         # Movement speed expressed as tiles per second; converted to pixels/sec below
         self.player_speed_tiles_per_sec = 3.0
         self.player_speed_pixels = self.player_speed_tiles_per_sec * self.tile_size
-        self.player_radius = self.tile_size * 0.375
+        self.player_radius = self.tile_size * 0.5
         self.last_revealed_tile = (-1, -1)
         # Levels and current index
         self.levels = LEVELS or []
@@ -657,6 +657,9 @@ class RLDungeonGenerator:
         tiles = self._compute_attack_tiles(target_center_row, target_center_col, dir_row, dir_col, weapon)
         self._add_attack_effect(tiles)
 
+        # Track which monsters were hit for knockback
+        hit_monsters = []
+
         # Deal damage to monsters in the attack area
         try:
             damage = float(weapon.get('damage', 0))
@@ -666,6 +669,8 @@ class RLDungeonGenerator:
                     monster_col = monster['col']
                     if (monster_row, monster_col) in tiles:
                         monster['health'] -= damage
+                        hit_monsters.append(monster)
+                        monster['damage_aggro_timer'] = max(0.0, float(monster['type'].get('damage_aggro_time', 0)))
                         # Add damage popup
                         created = time.time()
                         self.damage_popups.append({
@@ -675,6 +680,58 @@ class RLDungeonGenerator:
                             'created_at': created,
                             'expires_at': created + 2.0,  # Show for 2 seconds
                         })
+        except Exception:
+            pass
+
+        # Apply knockback to hit monsters
+        try:
+            knockback = float(weapon.get('knockback', 0))
+            if knockback > 0 and hit_monsters:
+                for monster in hit_monsters:
+                    # Get monster's knockback resistance (0-1; higher = less knockback)
+                    monster_type = monster.get('type', {})
+                    resistance = float(monster_type.get('knockback_resistance', 0.5))
+                    resistance = max(0.0, min(1.0, resistance))  # Clamp to [0, 1]
+
+                    # Calculate knockback distance in tiles
+                    knockback_tiles = knockback * resistance
+
+                    if knockback_tiles > 0:
+                        # Calculate direction away from player (from player to monster)
+                        mx = monster.get('x', (monster['col'] + 0.5) * self.tile_size)
+                        my = monster.get('y', (monster['row'] + 0.5) * self.tile_size)
+                        dx = mx - self.player_x
+                        dy = my - self.player_y
+                        dist = sqrt(dx * dx + dy * dy)
+
+                        if dist > 0:
+                            # Normalize direction
+                            dir_x = dx / dist
+                            dir_y = dy / dist
+                        else:
+                            # Monster is at player center; push in a default direction
+                            dir_x, dir_y = 1.0, 0.0
+
+                        # Move monster away by knockback_tiles * tile_size pixels
+                        knockback_px = knockback_tiles * self.tile_size
+                        new_x = mx + dir_x * knockback_px
+                        new_y = my + dir_y * knockback_px
+
+                        # Check if the new position is valid; if not, try axis-by-axis
+                        if self._can_move_monster_to(new_x, new_y, monster):
+                            monster['x'] = new_x
+                            monster['y'] = new_y
+                        else:
+                            # Try moving only in x direction
+                            if self._can_move_monster_to(new_x, monster['y'], monster):
+                                monster['x'] = new_x
+                            # Try moving only in y direction
+                            elif self._can_move_monster_to(monster['x'], new_y, monster):
+                                monster['y'] = new_y
+
+                        # Update tile position
+                        monster['col'] = int(monster['x'] / self.tile_size)
+                        monster['row'] = int(monster['y'] / self.tile_size)
         except Exception:
             pass
 
@@ -772,6 +829,48 @@ class RLDungeonGenerator:
 
         return True
 
+    def _tile_overlaps_player(self, r, c) -> bool:
+        """Return True if the tile at (r,c) intersects the player's hitbox."""
+        if r < 0 or c < 0 or r >= self.height or c >= self.width:
+            return False
+        tx0 = c * self.tile_size
+        ty0 = r * self.tile_size
+        tx1 = tx0 + self.tile_size
+        ty1 = ty0 + self.tile_size
+
+        # Closest point on tile rect to player's center
+        closest_x = min(max(self.player_x, tx0), tx1)
+        closest_y = min(max(self.player_y, ty0), ty1)
+
+        dx = self.player_x - closest_x
+        dy = self.player_y - closest_y
+        return (dx * dx + dy * dy) < (self.player_radius * self.player_radius)
+
+    def _is_tile_enterable_by_monster(self, r, c, monster=None) -> bool:
+        """Return True if a monster may occupy tile (r,c).
+
+        This enforces: in-bounds, walkable tile (respecting other monsters),
+        and not overlapping the player's hitbox.
+        """
+        if r < 0 or c < 0 or r >= self.height or c >= self.width:
+            return False
+        # Block tiles that overlap the player's hitbox so monsters cannot move into it
+        if self._tile_overlaps_player(r, c):
+            return False
+
+        # Use existing walkability check (pass through monster ignore so tile type is checked)
+        if not self.is_walkable(r, c, monster):
+            return False
+
+        # Check whether another monster already occupies the tile
+        for m in self.monsters:
+            if m is monster:
+                continue
+            if m.get('row') == r and m.get('col') == c:
+                return False
+
+        return True
+
     def _can_move_monster_to(self, px, py, monster, radius=None):
         """Check if monster can move its center to (px, py)."""
         r = int(py / self.tile_size)
@@ -779,15 +878,7 @@ class RLDungeonGenerator:
         # Debug: check bounds
         if r < 0 or r >= self.height or c < 0 or c >= self.width:
             return False
-        if not self.is_walkable(r, c, monster):
-            return False
-        # Check if another monster occupies this tile
-        for m in self.monsters:
-            if m is monster:
-                continue
-            if m.get('row') == r and m.get('col') == c:
-                return False
-        return True
+        return self._is_tile_enterable_by_monster(r, c, monster)
 
     def _find_monster_next_step(self, monster):
         """Find the next tile along a walkable path from a monster to the player."""
@@ -807,23 +898,18 @@ class RLDungeonGenerator:
             if (r, c) == (target_r, target_c):
                 break
 
-            for dr, dc in ((0, 1), (1, 0), (0, -1), (-1, 0)):
-                nr, nc = r + dr, c + dc
-                if (nr, nc) in came_from:
-                    continue
-                if nr < 0 or nc < 0 or nr >= self.height or nc >= self.width:
-                    continue
-                if (nr, nc) != (target_r, target_c) and not self.is_walkable(nr, nc):
-                    continue
-                if (nr, nc) != (target_r, target_c):
-                    blocked_by_monster = any(
-                        m is not monster and m.get('row') == nr and m.get('col') == nc
-                        for m in self.monsters
-                    )
-                    if blocked_by_monster:
+                for dr, dc in ((0, 1), (1, 0), (0, -1), (-1, 0)):
+                    nr, nc = r + dr, c + dc
+                    if (nr, nc) in came_from:
                         continue
-                came_from[(nr, nc)] = (r, c)
-                queue.append((nr, nc))
+                    if nr < 0 or nc < 0 or nr >= self.height or nc >= self.width:
+                        continue
+                    # For monster pathfinding, require tiles to be enterable by monsters.
+                    # This also prevents monsters from pathing into the player's hitbox.
+                    if not self._is_tile_enterable_by_monster(nr, nc, monster):
+                        continue
+                    came_from[(nr, nc)] = (r, c)
+                    queue.append((nr, nc))
 
         if (target_r, target_c) not in came_from:
             return None
@@ -882,8 +968,22 @@ class RLDungeonGenerator:
             dx_tiles = (monster['x'] - self.player_x) / self.tile_size
             dy_tiles = (monster['y'] - self.player_y) / self.tile_size
             dist_tiles = sqrt(dx_tiles * dx_tiles + dy_tiles * dy_tiles)
-            aggro = float(mt.get('aggro_distance', 0))
-            alerted = dist_tiles <= aggro if aggro > 0 else False
+            aggro = max(0.0, float(mt.get('aggro_distance', 0)))
+            aggro_time = max(0.0, float(mt.get('aggro_time', 0)))
+            damage_aggro_time = max(0.0, float(mt.get('damage_aggro_time', 0)))
+
+            monster.setdefault('aggro_timer', 0.0)
+            monster.setdefault('damage_aggro_timer', 0.0)
+
+            within_aggro_distance = dist_tiles <= aggro if aggro > 0 else False
+            if within_aggro_distance:
+                monster['aggro_timer'] = aggro_time
+
+            monster['damage_aggro_timer'] = max(0.0, monster['damage_aggro_timer'] - delta_time)
+            if not within_aggro_distance:
+                monster['aggro_timer'] = max(0.0, monster['aggro_timer'] - delta_time)
+
+            alerted = within_aggro_distance or monster['aggro_timer'] > 0.0 or monster['damage_aggro_timer'] > 0.0
             monster['alerted'] = alerted
 
             if alerted:
@@ -1104,6 +1204,8 @@ class RLDungeonGenerator:
                     'x': (c + 0.5) * self.tile_size,
                     'y': (r + 0.5) * self.tile_size,
                     'alerted': False,
+                    'aggro_timer': 0.0,
+                    'damage_aggro_timer': 0.0,
                 })
                 pos_idx += 1
 
@@ -1120,6 +1222,8 @@ class RLDungeonGenerator:
                     'x': (c + 0.5) * self.tile_size,
                     'y': (r + 0.5) * self.tile_size,
                     'alerted': False,
+                    'aggro_timer': 0.0,
+                    'damage_aggro_timer': 0.0,
                 })
                 pos_idx += 1
 def render_with_tcod(dg: RLDungeonGenerator) -> None:

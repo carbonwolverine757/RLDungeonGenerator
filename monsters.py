@@ -12,7 +12,10 @@ MONSTER_TYPES = [
         'health': 10,
         'levels': ['Meadows'],
         'aggro_distance': 5,
+        'aggro_time': 3.0,  # seconds monster stays aggroed after losing sight of player
+        'damage_aggro_time': 2.0,  # seconds monster stays aggroed after taking damage
         'movement_speed': 1.0,  # tiles per second
+        'knockback_resistance': 0.7,  # 0-1; higher = less knockback
     },
     {
         'name': 'Greyling',
@@ -20,6 +23,9 @@ MONSTER_TYPES = [
         'health': 20,
         'levels': ['Meadows', 'Black Forest'],
         'aggro_distance': 7,
+        'aggro_time': 3.0,  # seconds monster stays aggroed after losing sight of player
+        'damage_aggro_time': 2.5,  # seconds monster stays aggroed after taking damage
         'movement_speed': 1.5,
+        'knockback_resistance': 0.5,  # 0-1; higher = less knockback
     },
 ]
