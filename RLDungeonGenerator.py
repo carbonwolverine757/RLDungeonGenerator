@@ -84,7 +84,7 @@ except Exception as e:
     _tcod_import_error = _tb.format_exc()
 
 # Configure simple console logging so import/initialization diagnostics are visible
-logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s')
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s: %(message)s')
 
 def _print_pygame_diagnostics():
     if pygame is None:
@@ -504,6 +504,11 @@ class RLDungeonGenerator:
         speed = self.player_speed_pixels
         move_x = dx * speed * delta_time
         move_y = dy * speed * delta_time
+        
+        # Store intended direction for knockback
+        intended_dx = 1 if dx > 0 else (-1 if dx < 0 else 0)
+        intended_dy = 1 if dy > 0 else (-1 if dy < 0 else 0)
+        
         if move_x != 0.0:
             nx = self.player_x + move_x
             if self._can_move_to(nx, self.player_y):
@@ -513,6 +518,11 @@ class RLDungeonGenerator:
             if self._can_move_to(self.player_x, ny):
                 self.player_y = ny
         self._update_tile_position()
+        
+        # Apply melee knockback based on intended movement direction
+        # This applies even if the player couldn't move due to collision
+        if intended_dx != 0 or intended_dy != 0:
+            self.apply_melee_knockback(intended_dx, intended_dy)
 
     def move_by_pixels(self, dx, dy, pixels=1):
         """
@@ -521,6 +531,10 @@ class RLDungeonGenerator:
         """
         if pixels == 0:
             return
+        # Store old position to detect actual movement
+        old_x = self.player_x
+        old_y = self.player_y
+        
         # Apply horizontal nudge
         if dx != 0:
             nx = self.player_x + dx * pixels
@@ -532,6 +546,155 @@ class RLDungeonGenerator:
             if self._can_move_to(self.player_x, ny):
                 self.player_y = ny
         self._update_tile_position()
+        
+        # Apply melee knockback if player actually moved
+        actual_dx = 1 if self.player_x > old_x else (-1 if self.player_x < old_x else 0)
+        actual_dy = 1 if self.player_y > old_y else (-1 if self.player_y < old_y else 0)
+        if actual_dx != 0 or actual_dy != 0:
+            self.apply_melee_knockback(actual_dx, actual_dy)
+
+    def apply_melee_knockback(self, move_dx, move_dy):
+        """
+        Apply knockback to monsters in melee range when the player moves.
+        
+        Monsters adjacent to the player (within ~1.5 tiles) are pushed away
+        in the direction of the player's movement, scaled by their
+        knockback resistance.
+        
+        Args:
+            move_dx, move_dy: The direction the player actually moved (-1, 0, or 1 per axis)
+        """
+        if not self.monsters:
+            return
+        
+        # Base knockback distance in tiles when player moves into melee
+        MELEE_KNOCKBACK_BASE = 2.0
+        # Melee range in tiles (approximately 1.5 tiles = 1.5 diagonal distance)
+        MELEE_RANGE = 1.5
+        
+        try:
+            for i, monster in enumerate(self.monsters):
+                # Get monster's position
+                mx = monster.get('x', (monster.get('col', 0) + 0.5) * self.tile_size)
+                my = monster.get('y', (monster.get('row', 0) + 0.5) * self.tile_size)
+                
+                # Calculate distance from player to monster (in tiles)
+                dx_tiles = (mx - self.player_x) / self.tile_size
+                dy_tiles = (my - self.player_y) / self.tile_size
+                dist_tiles = sqrt(dx_tiles * dx_tiles + dy_tiles * dy_tiles)
+                
+                # Check if monster is in melee range
+                if dist_tiles <= MELEE_RANGE:
+                    # Skip monsters behind the player — pushing them in the movement direction
+                    # would shove them through the player to the opposite side.
+                    dot = dx_tiles * move_dx + dy_tiles * move_dy
+                    if dot <= 0:
+                        continue
+
+                    # Get monster's knockback resistance (0-1; 1 = full knockback, 0 = immune)
+                    monster_type = monster.get('type', {})
+                    resistance = float(monster_type.get('knockback_resistance', 0.5))
+                    resistance = max(0.0, min(1.0, resistance))  # Clamp to [0, 1]
+                    
+                    # Calculate knockback distance based on resistance
+                    knockback_tiles = MELEE_KNOCKBACK_BASE * resistance
+                    
+                    if knockback_tiles > 0:
+                        # Direction: along player's movement axis
+                        if move_dx != 0 or move_dy != 0:
+                            dir_x = float(move_dx)
+                            dir_y = float(move_dy)
+                            # Normalize if diagonal
+                            dist = sqrt(dir_x * dir_x + dir_y * dir_y)
+                            if dist > 0:
+                                dir_x /= dist
+                                dir_y /= dist
+                        else:
+                            # No movement direction; use direction away from player
+                            dir_x = dx_tiles
+                            dir_y = dy_tiles
+                            dist = sqrt(dir_x * dir_x + dir_y * dir_y)
+                            if dist > 0:
+                                dir_x /= dist
+                                dir_y /= dist
+                            else:
+                                # Monster at player center; default push
+                                dir_x, dir_y = 1.0, 0.0
+                        
+                        # Apply knockback in pixels
+                        knockback_px = knockback_tiles * self.tile_size
+                        new_x = mx + dir_x * knockback_px
+                        new_y = my + dir_y * knockback_px
+                        
+                        # Check if new position is valid (walkable, not in bounds)
+                        new_r = int(new_y / self.tile_size)
+                        new_c = int(new_x / self.tile_size)
+                        
+                        # Bounds check
+                        if new_r < 0 or new_r >= self.height or new_c < 0 or new_c >= self.width:
+                            continue
+
+                        # Don't land on the player's tile
+                        player_r = int(self.player_y / self.tile_size)
+                        player_c = int(self.player_x / self.tile_size)
+                        if new_r == player_r and new_c == player_c:
+                            continue
+
+                        # Check for other monsters at the target position
+                        other_monster_there = False
+                        for other_m in self.monsters:
+                            if other_m is monster:
+                                continue
+                            if other_m.get('row') == new_r and other_m.get('col') == new_c:
+                                other_monster_there = True
+                                break
+                        
+                        # Check walkability (ignore other monsters and player overlap for knockback)
+                        tile = self.dungeon[new_r][new_c]
+                        if tile.tile_type not in (DungeonSqr.FLOOR, DungeonSqr.DOOR, DungeonSqr.EXIT) or other_monster_there:
+                            # Can't move to a wall or occupied tile, try axis-by-axis
+                            new_r_x = int(new_x / self.tile_size)
+                            new_r_y = int(monster['y'] / self.tile_size)
+                            if (0 <= new_r_x < self.width and 0 <= new_r_y < self.height):
+                                tile_x = self.dungeon[new_r_y][new_r_x]
+                                # Check if another monster is there
+                                x_occupied = False
+                                for other_m in self.monsters:
+                                    if other_m is monster:
+                                        continue
+                                    if other_m.get('row') == new_r_y and other_m.get('col') == new_r_x:
+                                        x_occupied = True
+                                        break
+                                
+                                if tile_x.tile_type in (DungeonSqr.FLOOR, DungeonSqr.DOOR, DungeonSqr.EXIT) and not x_occupied:
+                                    monster['x'] = new_x
+                            
+                            new_r_x = int(monster['x'] / self.tile_size)
+                            new_r_y = int(new_y / self.tile_size)
+                            if (0 <= new_r_x < self.width and 0 <= new_r_y < self.height):
+                                tile_y = self.dungeon[new_r_y][new_r_x]
+                                # Check if another monster is there
+                                y_occupied = False
+                                for other_m in self.monsters:
+                                    if other_m is monster:
+                                        continue
+                                    if other_m.get('row') == new_r_y and other_m.get('col') == new_r_x:
+                                        y_occupied = True
+                                        break
+                                
+                                if tile_y.tile_type in (DungeonSqr.FLOOR, DungeonSqr.DOOR, DungeonSqr.EXIT) and not y_occupied:
+                                    monster['y'] = new_y
+                        else:
+                            # Full diagonal movement is OK
+                            monster['x'] = new_x
+                            monster['y'] = new_y
+                        
+                        # Update tile position
+                        monster['col'] = int(monster['x'] / self.tile_size)
+                        monster['row'] = int(monster['y'] / self.tile_size)
+        except Exception as e:
+            logging.exception(f"Error in apply_melee_knockback: {e}")
+
 
     def _update_tile_position(self):
         # Use float division to preserve sub-tile positions when converting to tile indices

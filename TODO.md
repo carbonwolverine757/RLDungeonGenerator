@@ -25,7 +25,7 @@
                 Duration : 5s
         Lightning
             **Elemental**
-            Deals immediate damage. Inflicts Electricity effect. Electricity doesn't have any 
+            Deals immediate damage. Inflicts Electricity effect. Electricity is purely cosmetic.
         Poison
         Spirit
         Chop
@@ -399,51 +399,51 @@
 * Add more foood
     * Food
         * Meadows
-            Mushroom            Health:15  Stamina:15
-            Raspberry           Health:7   Stamina:20
-            Cooked Neck Tail    Health:25  Stamina:8
-            Cooked Boar Meat    Health:30  Stamina:10
-            Cooked Deer Meat    Health:35  Stamina:12
-            Honey               Health:8   Stamina:35
+            Mushroom            Health:15  Stamina:15  Regen:+1
+            Raspberry           Health:7   Stamina:20  Regen:+
+            Cooked Neck Tail    Health:25  Stamina:8   Regen:+
+            Cooked Boar Meat    Health:30  Stamina:10  Regen:+
+            Cooked Deer Meat    Health:35  Stamina:12  Regen:+
+            Honey               Health:8   Stamina:35  Regen:+
         * Black Forest
-            Blueberries         Health:8   Stamina:25
-            Yellow Mushroom     Health:10  Stamina:30
-            Carrot              Health:13  Stamina:40
-            Cooked Bear Meat    Health:40  Stamina:13
-            Carrot Soup         Health:17  Stamina:50
-            Queen's Jam         Health:15  Stamina:45
-            Deer Stew           Health:50  Stamina:17
-            Minced Meat Sauce   Health:45  Stamina:15
-            Boar Jerky          Health:23  Stamina:23
+            Blueberries         Health:8   Stamina:25  Regen:+
+            Yellow Mushroom     Health:10  Stamina:30  Regen:+
+            Carrot              Health:13  Stamina:40  Regen:+
+            Cooked Bear Meat    Health:40  Stamina:13  Regen:+
+            Carrot Soup         Health:17  Stamina:50  Regen:+
+            Queen's Jam         Health:15  Stamina:45  Regen:+
+            Deer Stew           Health:50  Stamina:17  Regen:+
+            Minced Meat Sauce   Health:45  Stamina:15  Regen:+
+            Boar Jerky          Health:23  Stamina:23  Regen:+
         * Swamp
-            Muckshake           Health:17  Stamina:50
-            Turnip Stew         Health:19  Stamina:55
-            Black Soup          Health:50  Stamina:17
-            Sausages            Health:55  Stamina:19
-            Cooked Fish         Health:50  Stamina:17
-            Cooked Serpent Meat Health:70  Stamina:24
-            Serpent Stew        Health:80  Stamina:27
+            Muckshake           Health:17  Stamina:50  Regen:+
+            Turnip Stew         Health:19  Stamina:55  Regen:+
+            Black Soup          Health:50  Stamina:17  Regen:+
+            Sausages            Health:55  Stamina:19  Regen:+
+            Cooked Fish         Health:50  Stamina:17  Regen:+
+            Cooked Serpent Meat Health:70  Stamina:24  Regen:+
+            Serpent Stew        Health:80  Stamina:27  Regen:+
         * Mountain
-            Cooked Wolf Meat    Health:40  Stamina:14
-            Onion               Health:14  Stamina:40
-            Wolf Skewer         Health:65  Stamina:22
-            Onion Soup          Health:20  Stamina:60
-            Eyescream           Health:22  Stamina:65
-            Wolf Jerky          Health:31  Stamina:31
-            Cooked Serpent Meat Health:70  Stamina:24
-            Serpent Stew        Health:80  Stamina:27
+            Cooked Wolf Meat    Health:40  Stamina:14  Regen:+
+            Onion               Health:14  Stamina:40  Regen:+
+            Wolf Skewer         Health:65  Stamina:22  Regen:+
+            Onion Soup          Health:20  Stamina:60  Regen:+
+            Eyescream           Health:22  Stamina:65  Regen:+
+            Wolf Jerky          Health:31  Stamina:31  Regen:+
+            Cooked Serpent Meat Health:70  Stamina:24  Regen:+
+            Serpent Stew        Health:80  Stamina:27  Regen:+
         * Plains
-            Cloudberries        Health:15  Stamina:45
-            Cooked Lox Meat     Health:50  Stamina:17
-            Bread               Health:23  Stamina:70
-            Blood Pudding       Health:25  Stamina:75
-            Lox Meat Pie        Health:75  Stamina:25
-            Fish Wraps          Health:70  Stamina:24
-            Frosted Sweetbread  Health:43  Stamina:43
-            Cooked Serpent Meat Health:70  Stamina:24
-            Serpent Stew        Health:80  Stamina:27
-            Cooked Egg          Health:35  Stamina:12
-            Cooked Chicken Meat Health:60  Stamina:20
+            Cloudberries        Health:15  Stamina:45  Regen:+
+            Cooked Lox Meat     Health:50  Stamina:17  Regen:+
+            Bread               Health:23  Stamina:70  Regen:+
+            Blood Pudding       Health:25  Stamina:75  Regen:+
+            Lox Meat Pie        Health:75  Stamina:25  Regen:+
+            Fish Wraps          Health:70  Stamina:24  Regen:+
+            Frosted Sweetbread  Health:43  Stamina:43  Regen:+
+            Cooked Serpent Meat Health:70  Stamina:24  Regen:+
+            Serpent Stew        Health:80  Stamina:27  Regen:+
+            Cooked Egg          Health:35  Stamina:12  Regen:+
+            Cooked Chicken Meat Health:60  Stamina:20  Regen:+
         * Mistlands
             Cooked Egg          Health:
             Cooked Chicken Meat 
