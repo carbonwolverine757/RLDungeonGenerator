@@ -72,6 +72,15 @@ except Exception:
     except Exception:
         WEAPONS = []
 
+# Object type configurations live in `objects.py`
+try:
+    from .objects import OBJECT_TYPES
+except Exception:
+    try:
+        from objects import OBJECT_TYPES
+    except Exception:
+        OBJECT_TYPES = []
+
 # Prefer tcod for alternative rendering when available (import after pygame to avoid SDL DLL conflicts)
 try:
     import tcod
@@ -185,6 +194,8 @@ class RLDungeonGenerator:
         self.stamina = self.max_stamina
         # Monsters list (each monster is a dict with 'type', 'row', 'col', 'health')
         self.monsters = []
+        # Objects list (each object is a dict with 'type', 'row', 'col', 'health')
+        self.objects = []
         # Equipped weapon (defaults to first weapon in WEAPONS)
         self.equipped_weapon = WEAPONS[0] if WEAPONS else None
         # Active attack effects (visual only)
@@ -400,6 +411,7 @@ class RLDungeonGenerator:
         self.leaves = []
         self.rooms = []
         self.monsters = []  # Reset monsters list
+        self.objects = []   # Reset objects list
         # Recreate dungeon filled with walls
         self.dungeon = []
         for h in range(self.height):
@@ -426,6 +438,8 @@ class RLDungeonGenerator:
         self.spawn_player()
         # Place monsters scattered across the map
         self.place_monsters()
+        # Place static objects across the map
+        self.place_objects()
         self.reveal_current_area()
 
     def is_walkable(self, r, c, ignore_monster=None):
@@ -442,6 +456,10 @@ class RLDungeonGenerator:
             if monster is ignore_monster:
                 continue
             if monster['row'] == r and monster['col'] == c:
+                return False
+        # Check if there's an object at this position
+        for obj in self.objects:
+            if obj['row'] == r and obj['col'] == c:
                 return False
         tile = self.dungeon[r][c]
         return tile.tile_type in (DungeonSqr.FLOOR, DungeonSqr.DOOR, DungeonSqr.EXIT)
@@ -1389,6 +1407,41 @@ class RLDungeonGenerator:
                     'damage_aggro_timer': 0.0,
                 })
                 pos_idx += 1
+
+    def place_objects(self):
+        """Place static objects on walkable floor tiles."""
+        import random
+        current_level_name = self.get_current_level_name()
+        available = [
+            ot for ot in OBJECT_TYPES
+            if not ot.get('levels') or current_level_name in ot.get('levels', [])
+        ]
+        if not available:
+            return
+
+        walkable = [
+            (r, c)
+            for r in range(self.height)
+            for c in range(self.width)
+            if self.is_walkable(r, c)
+            and (r, c) != (self.player_row, self.player_col)
+            and (self.exit_pos is None or (r, c) != self.exit_pos)
+        ]
+        random.shuffle(walkable)
+
+        pos_idx = 0
+        for ot in available:
+            count = min(ot['spawn_count'], len(walkable) - pos_idx)
+            for _ in range(count):
+                r, c = walkable[pos_idx]
+                self.objects.append({
+                    'type': ot,
+                    'row': r,
+                    'col': c,
+                    'health': ot['health'],
+                })
+                pos_idx += 1
+
 def render_with_tcod(dg: RLDungeonGenerator) -> None:
     # Provide detailed diagnostic instead of exiting so debugger / logs show why import failed
     info = (
@@ -2012,6 +2065,7 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
     }
     held_directions = []
     shift_held = False
+    inventory_open = False
 
     selected_level_idx = None
     if dg.levels:
@@ -2219,6 +2273,22 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
                     sw, sh = surf.get_size()
                     screen.blit(surf, (x + (dg.tile_size - sw)//2, y + (dg.tile_size - sh)//2))
 
+        # Draw objects
+        for obj in dg.objects:
+            obj_row = obj['row']
+            obj_col = obj['col']
+            if (cam_ty <= obj_row < cam_ty + view_h and
+                    cam_tx <= obj_col < cam_tx + view_w):
+                obj_px = (obj_col + 0.5) * dg.tile_size - cam_tx * dg.tile_size + offset_x
+                obj_py = (obj_row + 0.5) * dg.tile_size - cam_ty * dg.tile_size + offset_y
+                x = int(obj_px - 0.5 * dg.tile_size)
+                y = int(obj_py - 0.5 * dg.tile_size)
+                glyph_index = obj['type']['glyph_index']
+                if tile_surfaces is not None and glyph_index < len(tile_surfaces):
+                    screen.blit(tile_surfaces[glyph_index], (x, y))
+                else:
+                    pygame.draw.rect(screen, (80, 60, 40), (x, y, dg.tile_size, dg.tile_size))
+
         # Draw player as a white circle at sub-tile position
         player_px = dg.player_x - cam_tx * dg.tile_size + offset_x
         player_py = dg.player_y - cam_ty * dg.tile_size + offset_y
@@ -2309,8 +2379,8 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
         # Each tile represents 25 health, so 1 full tile
         health_tiles = max(1, (dg.health + 24) // 25)  # Round up
         max_health_tiles = max(1, (dg.max_health + 24) // 25)
-        health_bar_x = 10
-        health_bar_y = pixel_view_h - (max_health_tiles * bar_tile_size) - 10
+        health_bar_x = offset_x + 10
+        health_bar_y = offset_y + used_h - (max_health_tiles * bar_tile_size) - 10
         for i in range(max_health_tiles):
             tile_y = health_bar_y + i * bar_tile_size
             if i < health_tiles:
@@ -2327,8 +2397,8 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
         # Each tile represents 25 stamina, so 2 full tiles
         stamina_tiles = max(1, (dg.stamina + 24) // 25)  # Round up
         max_stamina_tiles = max(1, (dg.max_stamina + 24) // 25)
-        stamina_bar_x = (pixel_view_w - (max_stamina_tiles * bar_tile_size)) // 2
-        stamina_bar_y = pixel_view_h - (2 * bar_tile_size) - 10
+        stamina_bar_x = offset_x + (used_w - (max_stamina_tiles * bar_tile_size)) // 2
+        stamina_bar_y = offset_y + used_h - (2 * bar_tile_size) - 10
         for i in range(max_stamina_tiles):
             tile_x = stamina_bar_x + i * bar_tile_size
             if i < stamina_tiles:
@@ -2339,6 +2409,23 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
         stamina_text = health_font.render(f'{dg.stamina}', True, (255, 255, 255))
         stamina_text_rect = stamina_text.get_rect(center=(stamina_bar_x + (max_stamina_tiles * bar_tile_size) // 2, stamina_bar_y + bar_tile_size // 2))
         screen.blit(stamina_text, stamina_text_rect)
+
+        # Draw inventory (hotbar always; full inventory when inventory_open)
+        INV_SLOT_SIZE = 32
+        INV_SLOT_PAD = 3
+        INV_MARGIN = 8
+        INV_COLS = 8
+        inv_slot_font = pygame.font.SysFont('consolas', 10)
+        inv_rows = 4 if inventory_open else 1
+        for row in range(inv_rows):
+            for col in range(INV_COLS):
+                sx = offset_x + INV_MARGIN + col * (INV_SLOT_SIZE + INV_SLOT_PAD)
+                sy = offset_y + INV_MARGIN + row * (INV_SLOT_SIZE + INV_SLOT_PAD)
+                pygame.draw.rect(screen, (30, 30, 30), (sx, sy, INV_SLOT_SIZE, INV_SLOT_SIZE))
+                pygame.draw.rect(screen, (110, 110, 110), (sx, sy, INV_SLOT_SIZE, INV_SLOT_SIZE), 1)
+                if row == 0:
+                    num_surf = inv_slot_font.render(str(col + 1), True, (180, 180, 180))
+                    screen.blit(num_surf, (sx + INV_SLOT_SIZE - num_surf.get_width() - 2, sy + 2))
 
         pygame.display.flip()
         # Update window title with current level
@@ -2383,6 +2470,8 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
                 elif event.key == pygame.K_LSHIFT or event.key == pygame.K_RSHIFT:
                     shift_held = True
                     dg.player_speed_pixels = 7.0 * dg.tile_size
+                elif event.key == pygame.K_TAB:
+                    inventory_open = not inventory_open
                 else:
                     direction = movement_key_map.get(event.key)
                     if direction is not None and direction not in held_directions:

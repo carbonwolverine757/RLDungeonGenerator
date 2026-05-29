@@ -1,7 +1,7 @@
 * Make map movement less chunky
-* COINS, WEAPON DROPS, ETC ACTUALLY SHOW UP!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    * Different gyphs for different weapon types, different colors for different materials.
-* Add key for attack/use
+* Add Drops
+    * Different glyphs for different weapon types, different colors for different materials.
+* Add key for use item/pick up
 * Add monsters and damage dealing
     * Damage :
         Slash
@@ -317,7 +317,6 @@
             * Royal Jelly
             * Black Marble
             * Soft Tissue
-            * **Hildir's Carapace Chest**
             * **Majestic Carapace**
             * Charred Bone
             * Volture Meat
