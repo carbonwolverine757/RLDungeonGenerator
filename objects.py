@@ -15,10 +15,22 @@ OBJECT_TYPES = [
         'spawn_count': 8,
     },
     {
-        'name': 'Rock',
+        'name': 'Outdoor Rock',
         'health': 30,
         'glyph_index': 4 * 32 + 1,  # Row 4, Column 1
-        'levels': [],  # empty = all levels
+        'levels': ['Meadows', 'Black Forest', 'Swamps', 'Plains',
+                   'Fuling Village', 'Ashlands', 'Ashlands (Inland)', 'Ashlands Coast'],
+        'spawn_count': 5,
+    },
+    {
+        'name': 'Cave Rock',
+        'health': 30,
+        'glyph_index': 4 * 32 + 2,  # Row 4, Column 2 — adjust once tileset glyph confirmed
+        'levels': ['Burial Chambers', 'Troll Cave', 'Smoldering Tomb', 'Sunken Crypts',
+                   'Mountains', 'Ice Caves', 'Howling Caverns', 'Mistlands',
+                   'Mistlands Coast', 'Dvergr Outpost', 'Giant Remains', 'Infested Mines',
+                   'Sealed Tower', 'Putrid Hole', 'Charred Fortress',
+                   'First Mysterious Location', 'Second Mysterious Location', 'Tomb of Lord Reto'],
         'spawn_count': 5,
     },
 ]

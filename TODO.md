@@ -15,7 +15,7 @@
             Deals immediate damage.
         Fire
             **Elemental**
-            Deals no immediate damage. Instead, spreads the damage overs 5s (damage/5 per 1s). Taking subsequent fire damage recalculates the tick damage and resets the duration. ((remaining tick damage + new damage)/5 = reevaluated tick damage (per 1s)).
+            Deals no immediate damage. Instead, spreads the damage over 5s (damage/5 per 1s). Taking subsequent fire damage recalculates the tick damage and resets the duration. ((remaining tick damage + new damage)/5 = reevaluated tick damage (per 1s)).
             **Inflicted Effect** : Burning
                 Duration : 5s
         Frost
@@ -26,7 +26,13 @@
         Lightning
             **Elemental**
             Deals immediate damage. Inflicts Electricity effect. Electricity is purely cosmetic.
+            **Inflicted Effect** : Electricity
+                Duration : 3s
         Poison
+            **Elemental**
+            Deals no immediate damage. Instead, spreads the damage over a duration (1+sqrt(3*damage)). Deals damage over time (damage/duration per 1s). Taking subsequent poison damage resets the duration but does not stack.
+            **Inflicted Effect** : Poison
+                Duration : Varies
         Spirit
         Chop
         Pickaxe
