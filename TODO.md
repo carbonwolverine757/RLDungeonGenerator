@@ -3,6 +3,12 @@
     * Different glyphs for different weapon types, different colors for different materials.
 * Add key for use item/pick up
 * Add monsters and damage dealing
+    * **LARGE MONSTER MECHANICS** *Option 2*
+        * Multi-tile occupancy — The creature owns a N×N block of tiles. Movement, collision, and pathfinding all operate on the bounding box. Correct behavior, but touches is_walkable, _find_monster_next_step (BFS needs to check all leading edges), and the rendering loop. Most work, most correct.
+    * Monster Spawning Mechanics
+        * By level (random distribution)
+        * Spawner-like (set frequency within biome, max spawns per map)
+        * By chunk (spawn frequency per chunk, max spawns for chunk and for map)
     * Damage :
         Slash
             **Physical**
@@ -34,6 +40,8 @@
             **Inflicted Effect** : Poison
                 Duration : Varies
         Spirit
+            **Elemental**
+            Deals no immediate damage. Instead
         Chop
         Pickaxe
         Pure
