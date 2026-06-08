@@ -2195,21 +2195,28 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
         # Draw background (fill entire window)
         screen.fill((10, 10, 10))
 
-        # Camera top-left in tiles (clamped so camera doesn't go out of bounds)
-        cam_ty = int(dg.player_y / dg.tile_size) - view_h // 2
-        cam_tx = int(dg.player_x / dg.tile_size) - view_w // 2
-        if cam_ty < 0: cam_ty = 0
-        if cam_tx < 0: cam_tx = 0
-        if cam_ty > dg.height - view_h: cam_ty = max(0, dg.height - view_h)
-        if cam_tx > dg.width - view_w: cam_tx = max(0, dg.width - view_w)
+        # Smooth camera: exact float pixel origin of the viewport, clamped to world bounds
+        cam_px_f = dg.player_x - view_w * dg.tile_size / 2
+        cam_py_f = dg.player_y - view_h * dg.tile_size / 2
+        cam_px_f = max(0.0, min(cam_px_f, dg.width * dg.tile_size - view_w * dg.tile_size))
+        cam_py_f = max(0.0, min(cam_py_f, dg.height * dg.tile_size - view_h * dg.tile_size))
+        cam_tx = int(cam_px_f) // dg.tile_size   # top-left tile
+        cam_ty = int(cam_py_f) // dg.tile_size
+        ox = int(cam_px_f) % dg.tile_size         # sub-tile pixel shift (0..tile_size-1)
+        oy = int(cam_py_f) % dg.tile_size
+        cam_pixel_x = cam_tx * dg.tile_size + ox  # integer world-pixel left edge of viewport
+        cam_pixel_y = cam_ty * dg.tile_size + oy
 
-        for ty in range(view_h):
+        for ty in range(view_h + 1):
             wr = cam_ty + ty
-            for tx in range(view_w):
+            for tx in range(view_w + 1):
                 wc = cam_tx + tx
-                x = offset_x + tx * dg.tile_size
-                y = offset_y + ty * dg.tile_size
-                
+                x = offset_x + tx * dg.tile_size - ox
+                y = offset_y + ty * dg.tile_size - oy
+                # Skip tiles that start at or past the viewport edge
+                if x >= offset_x + view_w * dg.tile_size or y >= offset_y + view_h * dg.tile_size:
+                    continue
+
                 # Handle out-of-bounds areas
                 if wr < 0 or wr >= dg.height or wc < 0 or wc >= dg.width:
                     pygame.draw.rect(screen, (10, 10, 10), (x, y, dg.tile_size, dg.tile_size))
@@ -2277,10 +2284,10 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
         for obj in dg.objects:
             obj_row = obj['row']
             obj_col = obj['col']
-            if (cam_ty <= obj_row < cam_ty + view_h and
-                    cam_tx <= obj_col < cam_tx + view_w):
-                obj_px = (obj_col + 0.5) * dg.tile_size - cam_tx * dg.tile_size + offset_x
-                obj_py = (obj_row + 0.5) * dg.tile_size - cam_ty * dg.tile_size + offset_y
+            if (cam_ty <= obj_row < cam_ty + view_h + 1 and
+                    cam_tx <= obj_col < cam_tx + view_w + 1):
+                obj_px = (obj_col + 0.5) * dg.tile_size - cam_pixel_x + offset_x
+                obj_py = (obj_row + 0.5) * dg.tile_size - cam_pixel_y + offset_y
                 x = int(obj_px - 0.5 * dg.tile_size)
                 y = int(obj_py - 0.5 * dg.tile_size)
                 glyph_index = obj['type']['glyph_index']
@@ -2290,8 +2297,8 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
                     pygame.draw.rect(screen, (80, 60, 40), (x, y, dg.tile_size, dg.tile_size))
 
         # Draw player as a white circle at sub-tile position
-        player_px = dg.player_x - cam_tx * dg.tile_size + offset_x
-        player_py = dg.player_y - cam_ty * dg.tile_size + offset_y
+        player_px = dg.player_x - cam_pixel_x + offset_x
+        player_py = dg.player_y - cam_pixel_y + offset_y
         pygame.draw.circle(screen, (255, 255, 255), (int(player_px), int(player_py)), max(2, dg.tile_size // 3))
 
         # Draw monsters
@@ -2299,11 +2306,11 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
                     # Compute integer tile coords for visibility check
                     monster_row = monster.get('row', int(monster.get('y', 0) / dg.tile_size))
                     monster_col = monster.get('col', int(monster.get('x', 0) / dg.tile_size))
-                    if (cam_ty <= monster_row < cam_ty + view_h and 
-                        cam_tx <= monster_col < cam_tx + view_w):
+                    if (cam_ty <= monster_row < cam_ty + view_h + 1 and
+                        cam_tx <= monster_col < cam_tx + view_w + 1):
                         # Pixel position for smooth movement
-                        monster_px = monster.get('x', (monster_col + 0.5) * dg.tile_size) - cam_tx * dg.tile_size + offset_x
-                        monster_py = monster.get('y', (monster_row + 0.5) * dg.tile_size) - cam_ty * dg.tile_size + offset_y
+                        monster_px = monster.get('x', (monster_col + 0.5) * dg.tile_size) - cam_pixel_x + offset_x
+                        monster_py = monster.get('y', (monster_row + 0.5) * dg.tile_size) - cam_pixel_y + offset_y
                         x = int(monster_px - 0.5 * dg.tile_size)
                         y = int(monster_py - 0.5 * dg.tile_size)
 
@@ -2331,11 +2338,11 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
         # Draw damage popups (float up and fade over their lifetime)
         for popup in dg.damage_popups:
             popup_row, popup_col = popup['row'], popup['col']
-            if (cam_ty <= popup_row < cam_ty + view_h and 
-                cam_tx <= popup_col < cam_tx + view_w):
-                popup_px = (popup_col - cam_tx + 0.5) * dg.tile_size + offset_x
+            if (cam_ty <= popup_row < cam_ty + view_h + 1 and
+                cam_tx <= popup_col < cam_tx + view_w + 1):
+                popup_px = (popup_col + 0.5) * dg.tile_size - cam_pixel_x + offset_x
                 # Base Y (just above the monster)
-                base_py = (popup_row - cam_ty + 0.5) * dg.tile_size + offset_y - dg.tile_size // 2
+                base_py = (popup_row + 0.5) * dg.tile_size - cam_pixel_y + offset_y - dg.tile_size // 2
                 created = popup.get('created_at', current_time)
                 expires = popup.get('expires_at', created + 2.0)
                 duration = max(0.0001, expires - created)
@@ -2367,9 +2374,9 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
             overlay.fill((255, 0, 0, 100))
             for effect in dg.attack_effects:
                 for (er, ec) in effect['tiles']:
-                    if cam_ty <= er < cam_ty + view_h and cam_tx <= ec < cam_tx + view_w:
-                        ex = offset_x + (ec - cam_tx) * dg.tile_size
-                        ey = offset_y + (er - cam_ty) * dg.tile_size
+                    if cam_ty <= er < cam_ty + view_h + 1 and cam_tx <= ec < cam_tx + view_w + 1:
+                        ex = offset_x + ec * dg.tile_size - cam_pixel_x
+                        ey = offset_y + er * dg.tile_size - cam_pixel_y
                         screen.blit(overlay, (ex, ey))
 
         # Draw health and stamina bars
@@ -2437,7 +2444,7 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
                 running = False
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:  # Left click
-                    target = dg.screen_to_tile(event.pos[0], event.pos[1], cam_tx, cam_ty, offset_x, offset_y, view_w, view_h)
+                    target = dg.screen_to_tile(event.pos[0], event.pos[1], cam_tx, cam_ty, offset_x - ox, offset_y - oy, view_w + 1, view_h + 1)
                     if target is not None:
                         tr, tc = target
                         # Trace a line of tiles from player to clicked tile and look
