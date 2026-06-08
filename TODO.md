@@ -1,4 +1,5 @@
 * Make map movement less chunky
+    * **JITTERY MAP MOVEMENT** Option 1 *sounds* like what we're looking for and seems like the most simple option. But, I'm not *sure*.
 * Add Drops
     * Different glyphs for different weapon types, different colors for different materials.
 * Add key for use item/pick up
@@ -12,16 +13,19 @@
     * Damage :
         Slash
             **Physical**
-            Deals immediate damage.
+            Deals immediate damage. Inflicts Staggering.
+            **Staggering** : (damage * stagger modifier)
         Blunt
             **Physical**
-            Deals immediate damage.
+            Deals immediate damage. Inflicts Staggering.
+            **Staggering** : (damage * stagger modifier)
         Pierce
             **Physical**
-            Deals immediate damage.
+            Deals immediate damage. Inflicts Staggering.
+            **Staggering** : (damage * stagger modifier)
         Fire
             **Elemental**
-            Deals no immediate damage. Instead, spreads the damage over 5s (damage/5 per 1s). Taking subsequent fire damage recalculates the tick damage and resets the duration. ((remaining tick damage + new damage)/5 = reevaluated tick damage (per 1s)).
+            Deals no immediate damage. Instead, spreads the damage over 5s (damage/5 per 1s). Taking subsequent Fire damage recalculates the tick damage and resets the duration. ((remaining tick damage + new damage)/5 = reevaluated tick damage (per 1s)).
             **Inflicted Effect** : Burning
                 Duration : 5s
         Frost
@@ -31,20 +35,34 @@
                 Duration : 5s
         Lightning
             **Elemental**
-            Deals immediate damage. Inflicts Electricity effect. Electricity is purely cosmetic.
+            Deals immediate damage. Inflicts Electricity effect. Electricity is purely cosmetic. Inflicts Staggering.
             **Inflicted Effect** : Electricity
                 Duration : 3s
+            **Staggering** : (damage * stagger modifier)
         Poison
             **Elemental**
-            Deals no immediate damage. Instead, spreads the damage over a duration (1+sqrt(3*damage)). Deals damage over time (damage/duration per 1s). Taking subsequent poison damage resets the duration but does not stack.
+            Deals no immediate damage. Instead, spreads the damage over a duration (1+sqrt(3*damage)). Deals damage over time (damage/duration per 1s). Taking subsequent Poison damage resets the duration but does not stack.
             **Inflicted Effect** : Poison
                 Duration : Varies
         Spirit
             **Elemental**
-            Deals no immediate damage. Instead
+            Deals no immediate damage. Instead, spreads the damage over 3s (damage/6 per 0.5s). Taking subsequent Spirit damage recalculates the tick damage and resets the duration. ((remaining tick damage + new damage)/6 = reevaluated tick damage (per 0.5s)).
+            **Inflicted Effect** : Spirit
+                Duration : 3s
+            **Damage Modifier Notes** : Players are Immune to Spirit damage.
         Chop
+            **Terrain**
+            Deals immediate damage. Only damages certain objects and a few creatures. Most creatures are immune to Chop damage.
+            **Damage Modifier Notes** : Almost all creatures are immune to Chop damage.
         Pickaxe
+            **Terrain**
+            Deals immediate damage. Only damages certain objects and a few creatures. Most creatures are immune to Pickaxe damage.
+            **Damage Modifier Notes** : Almost all creatures are immune to Pickaxe damage.
         Pure
+            **Pure**
+            Deals immediate damage. Pure damage ignores armor, blocking, and damage resistance. Specific items can reduce Pure damage from certain sources (lava, falling, etc.).
+            **Damage Modifier Notes** : Nothing is resistant to Pure damage!
+            **Damage Modifier Notes** : Some creatures can be resistant to certain sources of Pure damage.
     * Monsters :
         * Meadows :
             * Greyling
@@ -413,21 +431,21 @@
     * Food
         * Meadows
             Mushroom            Health:15  Stamina:15  Regen:+1
-            Raspberry           Health:7   Stamina:20  Regen:+
-            Cooked Neck Tail    Health:25  Stamina:8   Regen:+
-            Cooked Boar Meat    Health:30  Stamina:10  Regen:+
-            Cooked Deer Meat    Health:35  Stamina:12  Regen:+
-            Honey               Health:8   Stamina:35  Regen:+
+            Raspberry           Health:7   Stamina:20  Regen:+1
+            Cooked Neck Tail    Health:25  Stamina:8   Regen:+2
+            Cooked Boar Meat    Health:30  Stamina:10  Regen:+3
+            Cooked Deer Meat    Health:35  Stamina:12  Regen:+3
+            Honey               Health:8   Stamina:35  Regen:+1
         * Black Forest
-            Blueberries         Health:8   Stamina:25  Regen:+
-            Yellow Mushroom     Health:10  Stamina:30  Regen:+
-            Carrot              Health:13  Stamina:40  Regen:+
-            Cooked Bear Meat    Health:40  Stamina:13  Regen:+
-            Carrot Soup         Health:17  Stamina:50  Regen:+
-            Queen's Jam         Health:15  Stamina:45  Regen:+
-            Deer Stew           Health:50  Stamina:17  Regen:+
-            Minced Meat Sauce   Health:45  Stamina:15  Regen:+
-            Boar Jerky          Health:23  Stamina:23  Regen:+
+            Blueberries         Health:8   Stamina:25  Regen:+1
+            Yellow Mushroom     Health:10  Stamina:30  Regen:+1
+            Carrot              Health:13  Stamina:40  Regen:+2
+            Cooked Bear Meat    Health:40  Stamina:13  Regen:+4
+            Carrot Soup         Health:17  Stamina:50  Regen:+2
+            Queen's Jam         Health:15  Stamina:45  Regen:+2
+            Deer Stew           Health:50  Stamina:17  Regen:+4
+            Minced Meat Sauce   Health:45  Stamina:15  Regen:+3
+            Boar Jerky          Health:23  Stamina:23  Regen:+4
         * Swamp
             Muckshake           Health:17  Stamina:50  Regen:+
             Turnip Stew         Health:19  Stamina:55  Regen:+
