@@ -10,7 +10,7 @@ OBJECT_TYPES = [
     {
         'name': 'Beech Tree',
         'health': 20,
-        'glyph_index': 4 * 32 + 0,  # Row 4, Column 0
+        'glyph_index': 7 * 32 + 14,  # Row 7, Column 14
         'levels': ['Meadows', 'Black Forest'],
         'spawn_count': 8,
     },
