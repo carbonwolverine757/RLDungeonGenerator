@@ -52,13 +52,14 @@ if __name__ == '__main__':
         r"/System/Library/Fonts/Monaco.ttf",
     ]
     font_path = None
+    tile_size = 64
     for p in font_candidates:
         if os.path.exists(p):
             font_path = p
             break
     if font_path is None:
         raise SystemExit("No font found - install DejaVu/Noto or update font path in script.")
-    out = os.path.join('assets','tilesets','unicode_tileset.png')
+    out = os.path.join('assets', 'tilesets', f'unicode_tileset_{tile_size}.png')
     # Example: create tilesheet for Unicode block U+2500..U+257F plus ASCII and extended characters.
     codepoints = list(range(32, 127))  # printable ASCII
     codepoints += list(range(0x2500, 0x2580))  # box drawing block (128 chars)
@@ -69,4 +70,4 @@ if __name__ == '__main__':
     codepoints += list(range(0x2700, 0x27BF))  # dingbats
     # You can append any other codepoints you need:
     codepoints += [0x2588, 0x00B7, 0x2193]  # '█', '·', '↓' (duplicates okay, they'll just appear twice)
-    generate_tilesheet(out, font_path, tile_size=16, cols=32, codepoints=codepoints)
+    generate_tilesheet(out, font_path, tile_size=tile_size, cols=32, codepoints=codepoints)

@@ -172,7 +172,7 @@ class RLDungeonGenerator:
         self.rooms = []
         self.player_row = 0
         self.player_col = 0
-        self.tile_size = 16
+        self.tile_size = 64
         self.player_x = 0.0
         self.player_y = 0.0
         # Movement speed expressed as tiles per second; converted to pixels/sec below
@@ -407,6 +407,7 @@ class RLDungeonGenerator:
             self.find_closest_unconnect_groups(groups, room_dict)
 
     def generate_map(self):
+        print(f"[Level] {self.get_current_level_name()}")
         # Reset generation state so this can be called multiple times (e.g. when exiting)
         self.leaves = []
         self.rooms = []
@@ -723,7 +724,7 @@ class RLDungeonGenerator:
             self.player_col = new_col
             # If player stepped on the exit, generate a new map
             try:
-                if self.dungeon[new_row][new_col].get_ch() == self.exit_glyph:
+                if self.dungeon[new_row][new_col].tile_type == DungeonSqr.EXIT:
                     # Advance to next level configuration and regenerate
                     self.advance_level()
                     return
@@ -861,6 +862,17 @@ class RLDungeonGenerator:
                             'created_at': created,
                             'expires_at': created + 2.0,  # Show for 2 seconds
                         })
+        except Exception:
+            pass
+
+        # Deal damage to objects in the attack area and remove destroyed ones
+        try:
+            damage = float(weapon.get('damage', 0))
+            if damage > 0:
+                for obj in self.objects:
+                    if (obj['row'], obj['col']) in tiles:
+                        obj['health'] -= damage
+                self.objects = [o for o in self.objects if o['health'] > 0]
         except Exception:
             pass
 
@@ -2008,8 +2020,8 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
         return
     
     # Initial viewport in tiles (used to create starting window)
-    init_view_w = min(40, dg.width)
-    init_view_h = min(25, dg.height)
+    init_view_w = min(20, dg.width)
+    init_view_h = min(12, dg.height)
     pixel_view_w = init_view_w * dg.tile_size
     pixel_view_h = init_view_h * dg.tile_size
 
@@ -2021,22 +2033,26 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
     # Attempt to load a PNG tilesheet first (same path as tcod renderer)
     tile_surfaces_orig = None
     tile_surfaces = None
-    png_tileset_path = os.path.join(os.path.dirname(__file__), 'assets', 'tilesets', 'unicode_tileset.png')
+    png_tileset_path = os.path.join(os.path.dirname(__file__), 'assets', 'tilesets', 'unicode_tileset_64.png')
     if os.path.exists(png_tileset_path):
         try:
             sheet = pygame.image.load(png_tileset_path).convert_alpha()
             sheet_w, sheet_h = sheet.get_size()
-            cols = sheet_w // dg.tile_size
-            rows = sheet_h // dg.tile_size
+            native_tile_px = sheet_w // 32  # sheet is always 32 columns wide
+            cols = 32
+            rows = sheet_h // native_tile_px
             tile_surfaces_orig = []
             for ty in range(rows):
                 for tx in range(cols):
-                    rect = pygame.Rect(tx * dg.tile_size, ty * dg.tile_size, dg.tile_size, dg.tile_size)
-                    tile = pygame.Surface((dg.tile_size, dg.tile_size), pygame.SRCALPHA)
+                    rect = pygame.Rect(tx * native_tile_px, ty * native_tile_px, native_tile_px, native_tile_px)
+                    tile = pygame.Surface((native_tile_px, native_tile_px), pygame.SRCALPHA)
                     tile.blit(sheet, (0, 0), rect)
                     tile_surfaces_orig.append(tile)
-            # Start with a scaled copy equal to original tile size
-            tile_surfaces = list(tile_surfaces_orig)
+            # Scale to display tile size if different from the sheet's native resolution
+            if dg.tile_size != native_tile_px:
+                tile_surfaces = [pygame.transform.smoothscale(s, (dg.tile_size, dg.tile_size)) for s in tile_surfaces_orig]
+            else:
+                tile_surfaces = list(tile_surfaces_orig)
         except Exception:
             tile_surfaces_orig = None
             tile_surfaces = None
@@ -2050,8 +2066,8 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
         popup_font = pygame.font.SysFont(None, max(10, dg.tile_size // 2))
     glyph_cache = {}
     # Keep initial view size in tiles fixed; tile size will change on window resize
-    init_view_w = min(40, dg.width)
-    init_view_h = min(25, dg.height)
+    init_view_w = min(20, dg.width)
+    init_view_h = min(12, dg.height)
 
     movement_key_map = {
         pygame.K_UP: (0.0, -1.0),
@@ -2288,13 +2304,19 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
                     cam_tx <= obj_col < cam_tx + view_w + 1):
                 obj_px = (obj_col + 0.5) * dg.tile_size - cam_pixel_x + offset_x
                 obj_py = (obj_row + 0.5) * dg.tile_size - cam_pixel_y + offset_y
-                x = int(obj_px - 0.5 * dg.tile_size)
-                y = int(obj_py - 0.5 * dg.tile_size)
+                ds = obj['type'].get('display_size', 1)
+                render_px = ds * dg.tile_size
+                x = int(obj_px - render_px / 2)
+                y = int(obj_py - render_px / 2)
                 glyph_index = obj['type']['glyph_index']
                 if tile_surfaces is not None and glyph_index < len(tile_surfaces):
-                    screen.blit(tile_surfaces[glyph_index], (x, y))
+                    if ds != 1:
+                        surf = pygame.transform.scale(tile_surfaces[glyph_index], (render_px, render_px))
+                    else:
+                        surf = tile_surfaces[glyph_index]
+                    screen.blit(surf, (x, y))
                 else:
-                    pygame.draw.rect(screen, (80, 60, 40), (x, y, dg.tile_size, dg.tile_size))
+                    pygame.draw.rect(screen, (80, 60, 40), (x, y, render_px, render_px))
 
         # Draw player as a white circle at sub-tile position
         player_px = dg.player_x - cam_pixel_x + offset_x
@@ -2458,6 +2480,11 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
                                 if m.get('row') == lr and m.get('col') == lc:
                                     chosen = (lr, lc)
                                     break
+                            if not chosen:
+                                for obj in dg.objects:
+                                    if obj['row'] == lr and obj['col'] == lc:
+                                        chosen = (lr, lc)
+                                        break
                             if chosen:
                                 break
 

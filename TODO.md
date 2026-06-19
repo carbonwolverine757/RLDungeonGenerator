@@ -1,3 +1,4 @@
+* Expand tileset generator to run at any res, including adding full-res source in place
 * Make map movement less chunky
     * **JITTERY MAP MOVEMENT** Option 1 *sounds* like what we're looking for and seems like the most simple option. But, I'm not *sure*.
 * Add Drops
@@ -368,13 +369,13 @@
             * **Fader Relic**
         * Other
         * Trophies
-            * Boar Trophy                     (Common, 15%)         Common Spawn in Meadows
-            * Neck Trophy                     (Common, 5%)          Common Spawn in Meadows
-            * Deer Trophy                     (Common, 50%)         Common Spawn in Meadows
-            * **Eikthyr Trophy**              (Boss, 100%)          Meadows Boss
-            * Greydwarf Trophy                (Common, 5%) 		    Common Spawn in Black Forest
-            * Greydwarf Shaman Trophy         (Uncommon, 10%)       Uncommon Spawn from Greydwarf Nest, Uncommon 
-            * Greydwarf Brute Trophy          (Uncommon, 10%)       Uncommon Spawn in Black Forest
+            * Boar Trophy                     (Common, 15%)
+            * Neck Trophy                     (Common, 5%)
+            * Deer Trophy                     (Common, 50%)
+            * **Eikthyr Trophy**              (Boss, 100%)
+            * Greydwarf Trophy                (Common, 5%)
+            * Greydwarf Shaman Trophy         (Uncommon, 10%)
+            * Greydwarf Brute Trophy          (Uncommon, 10%)
             * Skeleton Trophy                 (Common, 10%)
             * Ghost Trophy                    (Very Rare, 10%)
             * Rancid Remains Trophy           (Very Rare, 10%)
@@ -447,34 +448,34 @@
             Minced Meat Sauce   Health:45  Stamina:15  Regen:+3
             Boar Jerky          Health:23  Stamina:23  Regen:+4
         * Swamp
-            Muckshake           Health:17  Stamina:50  Regen:+
-            Turnip Stew         Health:19  Stamina:55  Regen:+
-            Black Soup          Health:50  Stamina:17  Regen:+
-            Sausages            Health:55  Stamina:19  Regen:+
-            Cooked Fish         Health:50  Stamina:17  Regen:+
-            Cooked Serpent Meat Health:70  Stamina:24  Regen:+
-            Serpent Stew        Health:80  Stamina:27  Regen:+
+            Muckshake           Health:17  Stamina:50  Regen:+2
+            Turnip Stew         Health:19  Stamina:55  Regen:+3
+            Black Soup          Health:50  Stamina:17  Regen:+5
+            Sausages            Health:55  Stamina:19  Regen:+5
+            Cooked Fish         Health:50  Stamina:17  Regen:+4
+            Cooked Serpent Meat Health:70  Stamina:24  Regen:+6
+            Serpent Stew        Health:80  Stamina:27  Regen:+7
         * Mountain
-            Cooked Wolf Meat    Health:40  Stamina:14  Regen:+
-            Onion               Health:14  Stamina:40  Regen:+
-            Wolf Skewer         Health:65  Stamina:22  Regen:+
-            Onion Soup          Health:20  Stamina:60  Regen:+
-            Eyescream           Health:22  Stamina:65  Regen:+
-            Wolf Jerky          Health:31  Stamina:31  Regen:+
-            Cooked Serpent Meat Health:70  Stamina:24  Regen:+
-            Serpent Stew        Health:80  Stamina:27  Regen:+
+            Cooked Wolf Meat    Health:40  Stamina:14  Regen:+4
+            Onion               Health:14  Stamina:40  Regen:+2
+            Wolf Skewer         Health:65  Stamina:22  Regen:+5
+            Onion Soup          Health:20  Stamina:60  Regen:+3
+            Eyescream           Health:22  Stamina:65  Regen:+3
+            Wolf Jerky          Health:31  Stamina:31  Regen:+4
+            Cooked Serpent Meat Health:70  Stamina:24  Regen:+6
+            Serpent Stew        Health:80  Stamina:27  Regen:+7
         * Plains
-            Cloudberries        Health:15  Stamina:45  Regen:+
-            Cooked Lox Meat     Health:50  Stamina:17  Regen:+
-            Bread               Health:23  Stamina:70  Regen:+
-            Blood Pudding       Health:25  Stamina:75  Regen:+
-            Lox Meat Pie        Health:75  Stamina:25  Regen:+
-            Fish Wraps          Health:70  Stamina:24  Regen:+
-            Frosted Sweetbread  Health:43  Stamina:43  Regen:+
-            Cooked Serpent Meat Health:70  Stamina:24  Regen:+
-            Serpent Stew        Health:80  Stamina:27  Regen:+
-            Cooked Egg          Health:35  Stamina:12  Regen:+
-            Cooked Chicken Meat Health:60  Stamina:20  Regen:+
+            Cloudberries        Health:15  Stamina:45  Regen:+2
+            Cooked Lox Meat     Health:50  Stamina:17  Regen:+4
+            Bread               Health:23  Stamina:70  Regen:+3
+            Blood Pudding       Health:25  Stamina:75  Regen:+3
+            Lox Meat Pie        Health:75  Stamina:25  Regen:+5
+            Fish Wraps          Health:70  Stamina:24  Regen:+5
+            Frosted Sweetbread  Health:43  Stamina:43  Regen:+4
+            Cooked Serpent Meat Health:70  Stamina:24  Regen:+6
+            Serpent Stew        Health:80  Stamina:27  Regen:+7
+            Cooked Egg          Health:35  Stamina:12  Regen:+3
+            Cooked Chicken Meat Health:60  Stamina:20  Regen:+5
         * Mistlands
             Cooked Egg          Health:
             Cooked Chicken Meat 
@@ -512,54 +513,76 @@
     * Loot Tables
         * Meadows
             * Neck
-                * 1 Neck Tail
-                * 5% Neck Trophy
+                1 Neck Tail
+                5% Neck Trophy
             * Greyling
-                * 1 Resin
+                1 Resin
             * Boar
-                * 1 Boar Meat
-                * 1 Leather Scraps
-                * 15% Boar Trophy
+                1 Boar Meat
+                1 Leather Scraps
+                15% Boar Trophy
             * Deer
-                * 1 Deer Meat
-                * 1 Deer Hide
-                * 50% Deer Trophy
+                1 Deer Meat
+                1 Deer Hide
+                50% Deer Trophy
             * Beech Tree
-                * 3 rolls
+                3 rolls
                     50% 1 Wood
                     50% 2 Wood
-                * 2 rolls
+                2 rolls
                     50% 1 Resin
             * Birch Tree
-                * 3 rolls
+                3 rolls
                     50% 1 Wood
                     50% 2 Wood
-                * 2 rolls
+                2 rolls
                     50% 1 Finewood
                     50% 2 Finewood
-                * 2 rolls
+                2 rolls
                     50% Resin
             * Rock
-                * 2 rolls
-                    * 50% 1 Stone
-                    * 50% 2 Stone
-                    * 50% 3 Stone
+                2 rolls
+                    50% 1 Stone
+                    50% 2 Stone
+                    50% 3 Stone
             * Eikthyr
-                * 1 Eikthyr Trophy
-                * 3 Hard Antler
+                1 Eikthyr Trophy
+                3 Hard Antler
             * Fir Tree
-                * 3 rolls
-                    1-2 Wood
-                * 2 rolls
-                    1-2 Corewood
-                * 2 rolls
-                    50% Resin
+                3 rolls
+                    50% 1 Wood
+                    50% 2 Wood
+                2 rolls
+                    50% 1 Corewood
+                    50% 2 Corewood
+                2 rolls
+                    50% 1 Resin
             * Copper Deposit
-                * 2 rolls
-                    50
+                2 rolls
+                    50% 1 Copper Ore
+                    50% 2 Copper Ore
             * Tin Deposit
-
+                3 rolls
+                    25% 1 Tin Ore
+                    50% 2 Tin Ore
+                    25% 3 Tin Ore
             * Burial Chambers Chest
+                2 rolls
+                    50% 1 Amber Pearl
+                    25% 2 Amber Pearl
+                6 rolls
+                    10% 1 Coins
+                    15% 2 Coins
+                    30% 3 Coins
+                    25% 4 Coins
+                    10% 5 Coins
+                    10% 6 Coins
+                2 rolls
+                    50% 1 Ruby
+                    10% 2 Ruby
+                3 rolls
+                    60% 1 Amber
+                    10% 2 Amber
             * Troll Cave
             * *Smoldering Tomb*
             * Sunken Crypt

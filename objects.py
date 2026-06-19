@@ -12,15 +12,16 @@ OBJECT_TYPES = [
         'health': 20,
         'glyph_index': 7 * 32 + 14,  # Row 7, Column 14
         'levels': ['Meadows', 'Black Forest'],
-        'spawn_count': 8,
+        'spawn_count': 20,
+        'display_size': 2,  # renders as 2×2 tiles, centered on anchor tile
     },
     {
-        'name': 'Outdoor Rock',
+        'name': 'Rock',
         'health': 30,
         'glyph_index': 4 * 32 + 1,  # Row 4, Column 1
         'levels': ['Meadows', 'Black Forest', 'Swamps', 'Plains',
                    'Fuling Village', 'Ashlands', 'Ashlands (Inland)', 'Ashlands Coast'],
-        'spawn_count': 5,
+        'spawn_count': 10,
     },
     {
         'name': 'Cave Rock',
