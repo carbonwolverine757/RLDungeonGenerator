@@ -64,7 +64,21 @@
             Deals immediate damage. Pure damage ignores armor, blocking, and damage resistance. Specific items can reduce Pure damage from certain sources (lava, falling, etc.).
             **Damage Modifier Notes** : Nothing is resistant to Pure damage!
             **Damage Modifier Notes** : Some creatures can be resistant to certain sources of Pure damage.
-    * Monsters :
+
+
+* **Combat Mechancics : Spells/Powers/Abilities/Whatever**
+    Fire
+    Ice
+    Electricity
+    Force Blast
+    Psychic Blast
+    Earth Blast
+    Water Blast
+    Dark Blast
+    
+
+
+* Monsters :
         * Meadows :
             * Greyling
             * Boar

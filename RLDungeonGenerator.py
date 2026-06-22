@@ -188,9 +188,9 @@ class RLDungeonGenerator:
         # Whether current level uses openspace generation
         self.uses_openspace = False
         # Player health and stamina
-        self.max_health = 25
+        self.max_health = 100
         self.health = self.max_health
-        self.max_stamina = 50
+        self.max_stamina = 100
         self.stamina = self.max_stamina
         # Monsters list (each monster is a dict with 'type', 'row', 'col', 'health')
         self.monsters = []
@@ -2403,44 +2403,51 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
 
         # Draw health and stamina bars
         bar_tile_size = dg.tile_size
-        
-        # Health bar (vertical, red, bottom left)
-        # Each tile represents 25 health, so 1 full tile
-        health_tiles = max(1, (dg.health + 24) // 25)  # Round up
-        max_health_tiles = max(1, (dg.max_health + 24) // 25)
-        health_bar_x = offset_x + 10
-        health_bar_y = offset_y + used_h - (max_health_tiles * bar_tile_size) - 10
-        for i in range(max_health_tiles):
-            tile_y = health_bar_y + i * bar_tile_size
-            if i < health_tiles:
-                pygame.draw.rect(screen, (255, 0, 0), (health_bar_x, tile_y, bar_tile_size, bar_tile_size))
-            pygame.draw.rect(screen, (100, 100, 100), (health_bar_x, tile_y, bar_tile_size, bar_tile_size), 2)
-        
-        # Health number (centered in bar)
+        bar_h = bar_tile_size // 4
         health_font = pygame.font.SysFont('consolas', 16, bold=True)
-        health_text = health_font.render(f'{dg.health}', True, (255, 255, 255))
-        health_text_rect = health_text.get_rect(center=(health_bar_x + bar_tile_size // 2, health_bar_y + (max_health_tiles * bar_tile_size) // 2))
-        screen.blit(health_text, health_text_rect)
-        
-        # Stamina bar (horizontal, yellow, slightly above bottom center)
-        # Each tile represents 25 stamina, so 2 full tiles
+
+        # Stamina bar (horizontal, yellow, bottom center)
         stamina_tiles = max(1, (dg.stamina + 24) // 25)  # Round up
         max_stamina_tiles = max(1, (dg.max_stamina + 24) // 25)
         stamina_bar_x = offset_x + (used_w - (max_stamina_tiles * bar_tile_size)) // 2
-        stamina_bar_y = offset_y + used_h - (2 * bar_tile_size) - 10
+        stamina_bar_y = offset_y + used_h - bar_h - 10
         for i in range(max_stamina_tiles):
             tile_x = stamina_bar_x + i * bar_tile_size
             if i < stamina_tiles:
-                pygame.draw.rect(screen, (200, 200, 0), (tile_x, stamina_bar_y, bar_tile_size, bar_tile_size))
-            pygame.draw.rect(screen, (100, 100, 100), (tile_x, stamina_bar_y, bar_tile_size, bar_tile_size), 2)
-        
-        # Stamina number (centered in bar)
+                pygame.draw.rect(screen, (200, 200, 0), (tile_x, stamina_bar_y, bar_tile_size, bar_h))
         stamina_text = health_font.render(f'{dg.stamina}', True, (255, 255, 255))
-        stamina_text_rect = stamina_text.get_rect(center=(stamina_bar_x + (max_stamina_tiles * bar_tile_size) // 2, stamina_bar_y + bar_tile_size // 2))
+        stamina_text_rect = stamina_text.get_rect(center=(stamina_bar_x + (max_stamina_tiles * bar_tile_size) // 2, stamina_bar_y + bar_h // 2))
         screen.blit(stamina_text, stamina_text_rect)
 
+        # Health bar (horizontal, red, centered just above stamina bar)
+        health_tiles = max(1, (dg.health + 24) // 25)  # Round up
+        max_health_tiles = max(1, (dg.max_health + 24) // 25)
+        health_bar_x = offset_x + (used_w - (max_health_tiles * bar_tile_size)) // 2
+        health_bar_y = stamina_bar_y - bar_h - 4
+        for i in range(max_health_tiles):
+            tile_x = health_bar_x + i * bar_tile_size
+            if i < health_tiles:
+                pygame.draw.rect(screen, (255, 0, 0), (tile_x, health_bar_y, bar_tile_size, bar_h))
+        health_text = health_font.render(f'{dg.health}', True, (255, 255, 255))
+        health_text_rect = health_text.get_rect(center=(health_bar_x + (max_health_tiles * bar_tile_size) // 2, health_bar_y + bar_h // 2))
+        screen.blit(health_text, health_text_rect)
+
+        # XP pips and bar (decorative, purple, top right)
+        xp_tiles = 4
+        xp_bar_total_w = xp_tiles * bar_tile_size
+        xp_bar_x = offset_x + used_w - xp_bar_total_w - 10
+        xp_pip_size = (xp_bar_total_w - 9 * 2) // 10
+        xp_pip_y = offset_y + 10
+        for i in range(10):
+            pip_x = xp_bar_x + i * (xp_pip_size + 2)
+            pygame.draw.rect(screen, (150, 0, 200), (pip_x, xp_pip_y, xp_pip_size, xp_pip_size))
+        xp_bar_y = xp_pip_y + xp_pip_size + 4
+        for i in range(xp_tiles):
+            tile_x = xp_bar_x + i * bar_tile_size
+            pygame.draw.rect(screen, (150, 0, 200), (tile_x, xp_bar_y, bar_tile_size, bar_h))
+
         # Draw inventory (hotbar always; full inventory when inventory_open)
-        INV_SLOT_SIZE = 32
+        INV_SLOT_SIZE = 48
         INV_SLOT_PAD = 3
         INV_MARGIN = 8
         INV_COLS = 8
