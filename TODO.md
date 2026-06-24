@@ -70,12 +70,12 @@
     Fire
     Ice
     Electricity
-    Force Blast
-    Psychic Blast
-    Earth Blast
-    Water Blast
-    Dark Blast
-    
+    Force
+    Psychic
+    Earth
+    Water
+    Dark
+
 
 
 * Monsters :

@@ -2441,10 +2441,20 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
         for i in range(10):
             pip_x = xp_bar_x + i * (xp_pip_size + 2)
             pygame.draw.rect(screen, (150, 0, 200), (pip_x, xp_pip_y, xp_pip_size, xp_pip_size))
+        xp_pip_span = 10 * xp_pip_size + 9 * 2
         xp_bar_y = xp_pip_y + xp_pip_size + 4
-        for i in range(xp_tiles):
-            tile_x = xp_bar_x + i * bar_tile_size
-            pygame.draw.rect(screen, (150, 0, 200), (tile_x, xp_bar_y, bar_tile_size, bar_h))
+        pygame.draw.rect(screen, (150, 0, 200), (xp_bar_x, xp_bar_y, xp_pip_span, bar_h))
+
+        # Level number square (decorative, top right, left of XP area)
+        lvl_sq_size = xp_pip_size + 4 + bar_h
+        lvl_sq_x = xp_bar_x - lvl_sq_size - 6
+        lvl_sq_y = xp_pip_y
+        pygame.draw.rect(screen, (50, 50, 50), (lvl_sq_x, lvl_sq_y, lvl_sq_size, lvl_sq_size))
+        pygame.draw.rect(screen, (150, 0, 200), (lvl_sq_x, lvl_sq_y, lvl_sq_size, lvl_sq_size), 2)
+        lvl_font = pygame.font.SysFont('consolas', lvl_sq_size * 2 // 3, bold=True)
+        lvl_surf = lvl_font.render('1', True, (255, 255, 255))
+        lvl_rect = lvl_surf.get_rect(center=(lvl_sq_x + lvl_sq_size // 2, lvl_sq_y + lvl_sq_size // 2))
+        screen.blit(lvl_surf, lvl_rect)
 
         # Draw inventory (hotbar always; full inventory when inventory_open)
         INV_SLOT_SIZE = 48
