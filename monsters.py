@@ -10,7 +10,7 @@ MONSTER_TYPES = [
         'name': 'Boar',
         'glyph_index': 3 * 32 + 1,  # Row 3, Column 1
         'health': 10,
-        'xp_value': 25,
+        'xp_value': 18,
         'levels': ['Meadows'],
         'aggro_distance': 5,
         'aggro_time': 4.0,  # seconds monster stays aggroed after losing sight of player
@@ -22,9 +22,9 @@ MONSTER_TYPES = [
         'name': 'Greyling',
         'glyph_index': 3 * 32 + 2,  # Row 3, Column 2
         'health': 20,
-        'xp_value': 50,
+        'xp_value': 18,
         'levels': ['Meadows', 'Black Forest'],
-        'aggro_distance': 7,
+        'aggro_distance': 5,
         'aggro_time': 4.0,  # seconds monster stays aggroed after losing sight of player
         'damage_aggro_time': 10.0,  # seconds monster stays aggroed after taking damage
         'movement_speed': 1.5,

@@ -51,6 +51,13 @@
             **Inflicted Effect** : Spirit
                 Duration : 3s
             **Damage Modifier Notes** : Players are Immune to Spirit damage.
+        Energy
+            **Elemental**
+            Deals immediate damage.
+        Negative Energy
+            **Elemental**
+            Deals immediate damage.
+        Psychic
         Chop
             **Terrain**
             Deals immediate damage. Only damages certain objects and a few creatures. Most creatures are immune to Chop damage.
@@ -64,7 +71,7 @@
             Deals immediate damage. Pure damage ignores armor, blocking, and damage resistance. Specific items can reduce Pure damage from certain sources (lava, falling, etc.).
             **Damage Modifier Notes** : Nothing is resistant to Pure damage!
             **Damage Modifier Notes** : Some creatures can be resistant to certain sources of Pure damage.
-
+    **NOTE** : Maybe damage should all just be immediate damage, and additional effects can come with it.
 
 * **Combat Mechancics : Spells/Powers/Abilities/Whatever**
     Fire
@@ -75,6 +82,10 @@
     Earth
     Water
     Dark
+    Invulnerability
+    Regeneration
+    Ice Armor
+    Earth Armor
 
 
 

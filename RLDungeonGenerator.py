@@ -22,8 +22,8 @@ WALL_FLOOR_GLYPH_INDEX = 7 * 32 + 16
 # Use tile at row = 7, col = 15 (0-based). Index = 7 * 32 + 15 = 239.
 DOOR_GLYPH_INDEX = 7 * 32 + 15
 # Glyph index for exits in the generated Unicode tilesheet.
-# Use tile at row = 7, col = 17 (0-based). Index = 7 * 32 + 17 = 241.
-EXIT_GLYPH_INDEX = 7 * 32 + 17
+# Use tile at row = 9, col = 23 (0-based). Index = 9 * 32 + 23 = 303.
+EXIT_GLYPH_INDEX = 9 * 32 + 23
 
 # Visual tuning (higher contrast)
 # - Walls vs floors are differentiated primarily by background color.
@@ -80,6 +80,21 @@ except Exception:
         from objects import OBJECT_TYPES
     except Exception:
         OBJECT_TYPES = []
+
+# Player level configurations live in `player levels.py` (space in filename requires importlib)
+try:
+    import importlib.util as _ilu
+    _spec = _ilu.spec_from_file_location(
+        "player_levels",
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "player levels.py")
+    )
+    if _spec is None or _spec.loader is None:
+        raise ImportError("Could not load player levels.py")
+    _plmod = _ilu.module_from_spec(_spec)
+    _spec.loader.exec_module(_plmod)
+    PLAYER_LEVELS = _plmod.PLAYER_LEVELS
+except Exception:
+    PLAYER_LEVELS = [{'level': i + 1, 'xp_needed': 50 * (i + 1) * (i + 2)} for i in range(50)]
 
 # Prefer tcod for alternative rendering when available (import after pygame to avoid SDL DLL conflicts)
 try:
@@ -192,6 +207,14 @@ class RLDungeonGenerator:
         self.health = self.max_health
         self.max_stamina = 100
         self.stamina = self.max_stamina
+        # Player level / XP
+        self.player_level = 1
+        self.player_pips = 0           # filled pips (0–9)
+        self.player_xp_fraction = 0.0  # XP bar fill (0.0–1.0)
+        # Animated display counterparts
+        self.player_level_display = 1
+        self.player_pips_display = 0
+        self.player_xp_display_fraction = 0.0
         # Monsters list (each monster is a dict with 'type', 'row', 'col', 'health')
         self.monsters = []
         # Objects list (each object is a dict with 'type', 'row', 'col', 'health')
@@ -408,6 +431,8 @@ class RLDungeonGenerator:
 
     def generate_map(self):
         print(f"[Level] {self.get_current_level_name()}")
+        level_idx = min(self.player_level - 1, len(PLAYER_LEVELS) - 1)
+        print(f"You need {PLAYER_LEVELS[level_idx]['xp_needed']} xp")
         # Reset generation state so this can be called multiple times (e.g. when exiting)
         self.leaves = []
         self.rooms = []
@@ -940,8 +965,31 @@ class RLDungeonGenerator:
         self._cleanup_dead_monsters()
 
     def _cleanup_dead_monsters(self):
-        """Remove monsters with health <= 0 from the monsters list."""
+        """Remove monsters with health <= 0 from the monsters list, awarding XP."""
+        for m in self.monsters:
+            if m.get('health', 1) <= 0:
+                xp_val = m['type'].get('xp_value', 0)
+                if xp_val > 0:
+                    print(f"You gained {xp_val} experience.")
+                self._award_xp(xp_val)
         self.monsters = [m for m in self.monsters if m.get('health', 1) > 0]
+
+    def _award_xp(self, xp_value):
+        if xp_value <= 0:
+            return
+        level_idx = min(self.player_level - 1, len(PLAYER_LEVELS) - 1)
+        xp_needed = PLAYER_LEVELS[level_idx]['xp_needed']
+        self.player_xp_fraction += (xp_value * 10) / xp_needed
+        while self.player_xp_fraction >= 1.0:
+            self.player_xp_fraction -= 1.0
+            self.player_pips += 1
+            if self.player_pips >= 10:
+                self.player_pips = 0
+                if self.player_level < 50:
+                    self.player_level += 1
+                level_idx = min(self.player_level - 1, len(PLAYER_LEVELS) - 1)
+                xp_needed = PLAYER_LEVELS[level_idx]['xp_needed']
+                print(f"You need {xp_needed} xp")
 
     def screen_to_tile(self, pixel_x, pixel_y, cam_tx, cam_ty, offset_x, offset_y, view_w, view_h):
         """Convert screen pixel coordinates to a dungeon tile (row, col).
@@ -2128,6 +2176,26 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
         # Update monsters (aggro & movement)
         dg.update_monsters(delta_time)
 
+        # Animate XP bar display toward real values at a fixed fill speed.
+        # Compare using total accumulated pip-units to survive level-up resets.
+        XP_FILL_SPEED = 0.4  # bar fractions per second
+        real_total = (dg.player_level - 1) * 10 + dg.player_pips + dg.player_xp_fraction
+        disp_total = (dg.player_level_display - 1) * 10 + dg.player_pips_display + dg.player_xp_display_fraction
+        if disp_total < real_total:
+            dg.player_xp_display_fraction += XP_FILL_SPEED * delta_time
+            if dg.player_xp_display_fraction >= 1.0:
+                dg.player_xp_display_fraction -= 1.0
+                dg.player_pips_display += 1
+                if dg.player_pips_display >= 10:
+                    dg.player_pips_display = 0
+                    dg.player_level_display += 1
+            # Clamp if animation overshot the real total
+            disp_total_new = (dg.player_level_display - 1) * 10 + dg.player_pips_display + dg.player_xp_display_fraction
+            if disp_total_new > real_total:
+                dg.player_level_display = dg.player_level
+                dg.player_pips_display = dg.player_pips
+                dg.player_xp_display_fraction = dg.player_xp_fraction
+
         # Update viewport to keep tile count fixed and instead adjust tile size
         pixel_view_w, pixel_view_h = screen.get_size()
         view_w = init_view_w
@@ -2440,19 +2508,23 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
         xp_pip_y = offset_y + 10
         for i in range(10):
             pip_x = xp_bar_x + i * (xp_pip_size + 2)
-            pygame.draw.rect(screen, (150, 0, 200), (pip_x, xp_pip_y, xp_pip_size, xp_pip_size))
+            pip_color = (150, 0, 200) if i < dg.player_pips_display else (60, 60, 60)
+            pygame.draw.rect(screen, pip_color, (pip_x, xp_pip_y, xp_pip_size, xp_pip_size))
         xp_pip_span = 10 * xp_pip_size + 9 * 2
         xp_bar_y = xp_pip_y + xp_pip_size + 4
-        pygame.draw.rect(screen, (150, 0, 200), (xp_bar_x, xp_bar_y, xp_pip_span, bar_h))
+        pygame.draw.rect(screen, (60, 60, 60), (xp_bar_x, xp_bar_y, xp_pip_span, bar_h))
+        fill_w = int(xp_pip_span * dg.player_xp_display_fraction)
+        if fill_w > 0:
+            pygame.draw.rect(screen, (150, 0, 200), (xp_bar_x, xp_bar_y, fill_w, bar_h))
 
-        # Level number square (decorative, top right, left of XP area)
+        # Level number square (top right, left of XP area)
         lvl_sq_size = xp_pip_size + 4 + bar_h
         lvl_sq_x = xp_bar_x - lvl_sq_size - 6
         lvl_sq_y = xp_pip_y
         pygame.draw.rect(screen, (50, 50, 50), (lvl_sq_x, lvl_sq_y, lvl_sq_size, lvl_sq_size))
         pygame.draw.rect(screen, (150, 0, 200), (lvl_sq_x, lvl_sq_y, lvl_sq_size, lvl_sq_size), 2)
         lvl_font = pygame.font.SysFont('consolas', lvl_sq_size * 2 // 3, bold=True)
-        lvl_surf = lvl_font.render('1', True, (255, 255, 255))
+        lvl_surf = lvl_font.render(str(dg.player_level_display), True, (255, 255, 255))
         lvl_rect = lvl_surf.get_rect(center=(lvl_sq_x + lvl_sq_size // 2, lvl_sq_y + lvl_sq_size // 2))
         screen.blit(lvl_surf, lvl_rect)
 

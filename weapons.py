@@ -14,7 +14,7 @@ WEAPONS = [
         'damage': 20.0,
         'stamina_cost': 0,
         'range': 99.5,
-        'area': 5.0,
+        'area': 2.0,
         'angle': 360.0,
         'knockback': 10.0,  # tiles of knockback
         'glyph': None,
