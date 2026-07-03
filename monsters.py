@@ -11,8 +11,8 @@ MONSTER_TYPES = [
         'glyph_index': 3 * 32 + 1,  # Row 3, Column 1
         'health': 10,
         'xp_value': 18,
-        'levels': ['Meadows'],
-        'aggro_distance': 5,
+        'levels': ['Meadows', 'Eikthyr Bossfight'],
+        'aggro_distance': 5.0,  # tiles
         'aggro_time': 4.0,  # seconds monster stays aggroed after losing sight of player
         'damage_aggro_time': 10.0,  # seconds monster stays aggroed after taking damage
         'movement_speed': 1.0,  # tiles per second
@@ -23,8 +23,8 @@ MONSTER_TYPES = [
         'glyph_index': 3 * 32 + 2,  # Row 3, Column 2
         'health': 20,
         'xp_value': 18,
-        'levels': ['Meadows', 'Black Forest'],
-        'aggro_distance': 5,
+        'levels': ['Meadows', 'Eikthyr Bossfight', 'Black Forest', 'Troll Cave', 'The Elder Bossfight', 'Ocean'],
+        'aggro_distance': 5.0,  # tiles
         'aggro_time': 4.0,  # seconds monster stays aggroed after losing sight of player
         'damage_aggro_time': 10.0,  # seconds monster stays aggroed after taking damage
         'movement_speed': 1.5,

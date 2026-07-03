@@ -94,7 +94,8 @@ try:
     _spec.loader.exec_module(_plmod)
     PLAYER_LEVELS = _plmod.PLAYER_LEVELS
 except Exception:
-    PLAYER_LEVELS = [{'level': i + 1, 'xp_needed': 50 * (i + 1) * (i + 2)} for i in range(50)]
+    logging.warning("Failed to load player levels.py; using built-in fallback", exc_info=True)
+    PLAYER_LEVELS = [{'level': i + 1, 'xp_needed': 50 * (i + 1) * (i + 2), 'health': 100 + i * 25} for i in range(200)]
 
 # Prefer tcod for alternative rendering when available (import after pygame to avoid SDL DLL conflicts)
 try:
@@ -203,7 +204,7 @@ class RLDungeonGenerator:
         # Whether current level uses openspace generation
         self.uses_openspace = False
         # Player health and stamina
-        self.max_health = 100
+        self.max_health = PLAYER_LEVELS[0]['health']
         self.health = self.max_health
         self.max_stamina = 100
         self.stamina = self.max_stamina
@@ -985,10 +986,12 @@ class RLDungeonGenerator:
             self.player_pips += 1
             if self.player_pips >= 10:
                 self.player_pips = 0
-                if self.player_level < 50:
+                if self.player_level < len(PLAYER_LEVELS):
                     self.player_level += 1
                 level_idx = min(self.player_level - 1, len(PLAYER_LEVELS) - 1)
                 xp_needed = PLAYER_LEVELS[level_idx]['xp_needed']
+                self.max_health = PLAYER_LEVELS[level_idx]['health']
+                self.health = self.max_health
                 print(f"You need {xp_needed} xp")
 
     def screen_to_tile(self, pixel_x, pixel_y, cam_tx, cam_ty, offset_x, offset_y, view_w, view_h):
@@ -2176,25 +2179,21 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
         # Update monsters (aggro & movement)
         dg.update_monsters(delta_time)
 
-        # Animate XP bar display toward real values at a fixed fill speed.
-        # Compare using total accumulated pip-units to survive level-up resets.
-        XP_FILL_SPEED = 0.4  # bar fractions per second
-        real_total = (dg.player_level - 1) * 10 + dg.player_pips + dg.player_xp_fraction
-        disp_total = (dg.player_level_display - 1) * 10 + dg.player_pips_display + dg.player_xp_display_fraction
-        if disp_total < real_total:
-            dg.player_xp_display_fraction += XP_FILL_SPEED * delta_time
+        # Pips and level snap instantly; only the XP bar fraction animates.
+        dg.player_pips_display = dg.player_pips
+        dg.player_level_display = dg.player_level
+        # Bar always animates forward at fixed speed. If target is behind current
+        # position (pip just rolled over), continue past 1.0 and wrap to 0.
+        XP_FILL_SPEED = 1.0  # bar fractions per second
+        target_frac = dg.player_xp_fraction
+        disp_frac = dg.player_xp_display_fraction
+        if disp_frac < target_frac:
+            dg.player_xp_display_fraction = min(disp_frac + XP_FILL_SPEED * delta_time, target_frac)
+        elif disp_frac > target_frac:
+            dg.player_xp_display_fraction = disp_frac + XP_FILL_SPEED * delta_time
             if dg.player_xp_display_fraction >= 1.0:
                 dg.player_xp_display_fraction -= 1.0
-                dg.player_pips_display += 1
-                if dg.player_pips_display >= 10:
-                    dg.player_pips_display = 0
-                    dg.player_level_display += 1
-            # Clamp if animation overshot the real total
-            disp_total_new = (dg.player_level_display - 1) * 10 + dg.player_pips_display + dg.player_xp_display_fraction
-            if disp_total_new > real_total:
-                dg.player_level_display = dg.player_level
-                dg.player_pips_display = dg.player_pips
-                dg.player_xp_display_fraction = dg.player_xp_fraction
+                dg.player_xp_display_fraction = min(dg.player_xp_display_fraction, target_frac)
 
         # Update viewport to keep tile count fixed and instead adjust tile size
         pixel_view_w, pixel_view_h = screen.get_size()
@@ -2487,17 +2486,17 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
         stamina_text_rect = stamina_text.get_rect(center=(stamina_bar_x + (max_stamina_tiles * bar_tile_size) // 2, stamina_bar_y + bar_h // 2))
         screen.blit(stamina_text, stamina_text_rect)
 
-        # Health bar (horizontal, red, centered just above stamina bar)
-        health_tiles = max(1, (dg.health + 24) // 25)  # Round up
-        max_health_tiles = max(1, (dg.max_health + 24) // 25)
-        health_bar_x = offset_x + (used_w - (max_health_tiles * bar_tile_size)) // 2
+        # Health bar (horizontal, red, centered just above stamina bar) — fixed 4-tile width
+        health_bar_tiles = 4
+        health_bar_w = health_bar_tiles * bar_tile_size
+        health_bar_x = offset_x + (used_w - health_bar_w) // 2
         health_bar_y = stamina_bar_y - bar_h - 4
-        for i in range(max_health_tiles):
-            tile_x = health_bar_x + i * bar_tile_size
-            if i < health_tiles:
-                pygame.draw.rect(screen, (255, 0, 0), (tile_x, health_bar_y, bar_tile_size, bar_h))
+        pygame.draw.rect(screen, (80, 0, 0), (health_bar_x, health_bar_y, health_bar_w, bar_h))
+        health_fill_w = int(health_bar_w * max(0.0, dg.health / dg.max_health))
+        if health_fill_w > 0:
+            pygame.draw.rect(screen, (255, 0, 0), (health_bar_x, health_bar_y, health_fill_w, bar_h))
         health_text = health_font.render(f'{dg.health}', True, (255, 255, 255))
-        health_text_rect = health_text.get_rect(center=(health_bar_x + (max_health_tiles * bar_tile_size) // 2, health_bar_y + bar_h // 2))
+        health_text_rect = health_text.get_rect(center=(health_bar_x + health_bar_w // 2, health_bar_y + bar_h // 2))
         screen.blit(health_text, health_text_rect)
 
         # XP pips and bar (decorative, purple, top right)
