@@ -24,6 +24,13 @@ DOOR_GLYPH_INDEX = 7 * 32 + 15
 # Glyph index for exits in the generated Unicode tilesheet.
 # Use tile at row = 9, col = 23 (0-based). Index = 9 * 32 + 23 = 303.
 EXIT_GLYPH_INDEX = 9 * 32 + 23
+# Glyphs for the fixed "base" structure placed at the center of openspace maps.
+# Base Floor: row 7, col 15 -> 239 (walkable interior)
+BASE_FLOOR_GLYPH_INDEX = 7 * 32 + 15
+# Base Wall: row 7, col 14 -> 238 (solid border, not walkable)
+BASE_WALL_GLYPH_INDEX = 7 * 32 + 14
+# Base Door: row 7, col 13 -> 237 (walkable for the player, blocked for monsters)
+BASE_DOOR_GLYPH_INDEX = 7 * 32 + 13
 
 # Visual tuning (higher contrast)
 # - Walls vs floors are differentiated primarily by background color.
@@ -162,6 +169,8 @@ class DungeonSqr:
     FLOOR = 'floor'
     DOOR = 'door'
     EXIT = 'exit'
+    # Door of the central base structure: walkable for the player, blocked for monsters.
+    BASE_DOOR = 'base_door'
     
     def __init__(self, glyph: str, tile_type: str = 'wall'):
         self.glyph = glyph
@@ -203,6 +212,9 @@ class RLDungeonGenerator:
         self.exit_pos = None
         # Whether current level uses openspace generation
         self.uses_openspace = False
+        # Bounds (r0, c0, r1, c1) of the central base structure, or None when absent.
+        # Includes the wall border; used to keep monsters/objects out.
+        self.structure_bounds = None
         # Player health and stamina
         self.max_health = PLAYER_LEVELS[0]['health']
         self.health = self.max_health
@@ -308,16 +320,60 @@ class RLDungeonGenerator:
                 else:
                     self.dungeon[r][c] = DungeonSqr(self.floor_glyph, DungeonSqr.FLOOR)
         
-        # Create one room in the middle for the map structure
-        room_width = max(5, self.width // 4)
-        room_height = max(5, self.height // 4)
-        room_row = (self.height - room_height) // 2
-        room_col = (self.width - room_width) // 2
-        
-        self.rooms.append(Room(room_row, room_col, room_height, room_width))
-        for r in range(room_row, room_row + room_height):
-            for c in range(room_col, room_col + room_width):
-                self.dungeon[r][c] = DungeonSqr(self.floor_glyph, DungeonSqr.FLOOR)
+        # Place the fixed base structure at the center of the map.
+        self.place_center_structure()
+
+    def place_center_structure(self):
+        """Build the fixed base structure at the center of an openspace map.
+
+        The structure is a 5x5 area of walkable Base Floor tiles enclosed by a
+        one-tile-thick border of Base Wall tiles (a 7x7 footprint overall). A
+        single Base Door replaces the Base Wall in the center of the right wall;
+        it is walkable for the player but blocks monsters.
+
+        The 5x5 interior is registered as the first room so the player spawns at
+        its exact center, and the full footprint is recorded in
+        ``self.structure_bounds`` so monsters and objects are never placed inside.
+        """
+        interior = 5
+        half = interior // 2  # 2
+        center_r = self.height // 2
+        center_c = self.width // 2
+        # Interior (walkable) bounds
+        ir0, ic0 = center_r - half, center_c - half
+        ir1, ic1 = center_r + half, center_c + half
+        # Full footprint including the one-tile wall border
+        sr0, sc0 = ir0 - 1, ic0 - 1
+        sr1, sc1 = ir1 + 1, ic1 + 1
+
+        base_floor = chr(BASE_FLOOR_GLYPH_INDEX)
+        base_wall = chr(BASE_WALL_GLYPH_INDEX)
+        base_door = chr(BASE_DOOR_GLYPH_INDEX)
+
+        for r in range(sr0, sr1 + 1):
+            for c in range(sc0, sc1 + 1):
+                if r < 0 or c < 0 or r >= self.height or c >= self.width:
+                    continue
+                if sr0 < r < sr1 and sc0 < c < sc1:
+                    self.dungeon[r][c] = DungeonSqr(base_floor, DungeonSqr.FLOOR)
+                else:
+                    self.dungeon[r][c] = DungeonSqr(base_wall, DungeonSqr.WALL)
+
+        # Replace the Base Wall in the center of the right wall with a Base Door.
+        door_r, door_c = center_r, sc1
+        if 0 <= door_r < self.height and 0 <= door_c < self.width:
+            self.dungeon[door_r][door_c] = DungeonSqr(base_door, DungeonSqr.BASE_DOOR)
+
+        # Record footprint (incl. walls) and register interior as the spawn room.
+        self.structure_bounds = (sr0, sc0, sr1, sc1)
+        self.rooms.append(Room(ir0, ic0, interior, interior))
+
+    def _in_structure(self, r, c) -> bool:
+        """Return True if (r, c) lies within the central base structure footprint."""
+        if not self.structure_bounds:
+            return False
+        sr0, sc0, sr1, sc1 = self.structure_bounds
+        return sr0 <= r <= sr1 and sc0 <= c <= sc1
 
     def are_rooms_adjacent(self, room1, room2):
         adj_rows = []
@@ -437,6 +493,7 @@ class RLDungeonGenerator:
         # Reset generation state so this can be called multiple times (e.g. when exiting)
         self.leaves = []
         self.rooms = []
+        self.structure_bounds = None  # Reset central structure (openspace only)
         self.monsters = []  # Reset monsters list
         self.objects = []   # Reset objects list
         # Recreate dungeon filled with walls
@@ -489,7 +546,7 @@ class RLDungeonGenerator:
             if obj['row'] == r and obj['col'] == c:
                 return False
         tile = self.dungeon[r][c]
-        return tile.tile_type in (DungeonSqr.FLOOR, DungeonSqr.DOOR, DungeonSqr.EXIT)
+        return tile.tile_type in (DungeonSqr.FLOOR, DungeonSqr.DOOR, DungeonSqr.EXIT, DungeonSqr.BASE_DOOR)
 
     # internal helpers
     def _is_floor_char(self, ch: str) -> bool:
@@ -1106,6 +1163,10 @@ class RLDungeonGenerator:
         if not self.is_walkable(r, c, monster):
             return False
 
+        # The base structure's door is walkable for the player only; monsters can't pass.
+        if self.dungeon[r][c].tile_type == DungeonSqr.BASE_DOOR:
+            return False
+
         # Check whether another monster already occupies the tile
         for m in self.monsters:
             if m is monster:
@@ -1360,6 +1421,12 @@ class RLDungeonGenerator:
             self.exit_pos = None
             return
 
+        # Openspace maps: rooms[0] is the enclosed base structure the player
+        # spawns inside, so the exit goes out in the open field instead.
+        if self.structure_bounds is not None:
+            self._place_exit_outside_structure()
+            return
+
         # Always use the first room (spawn point) as the exit room.
         room = self.rooms[0]
 
@@ -1389,6 +1456,34 @@ class RLDungeonGenerator:
         except Exception:
             self.exit_pos = None
 
+    def _place_exit_outside_structure(self):
+        """Place the exit on an open floor tile outside the central structure.
+
+        Prefers a spot near the right edge aligned with the structure's door;
+        falls back to the first open floor tile found outside the structure.
+        """
+        if self.structure_bounds is None:
+            self.exit_pos = None
+            return
+        sr0, _sc0, sr1, sc1 = self.structure_bounds
+        door_r = (sr0 + sr1) // 2
+        # Walk in from the right edge along the door's row for an open floor tile.
+        for c in range(self.width - 2, sc1, -1):
+            if (self.dungeon[door_r][c].tile_type == DungeonSqr.FLOOR
+                    and not self._in_structure(door_r, c)):
+                self.dungeon[door_r][c] = DungeonSqr(self.exit_glyph, DungeonSqr.EXIT)
+                self.exit_pos = (door_r, c)
+                return
+        # Fallback: any open floor tile outside the structure.
+        for r in range(self.height):
+            for c in range(self.width):
+                if (self.dungeon[r][c].tile_type == DungeonSqr.FLOOR
+                        and not self._in_structure(r, c)):
+                    self.dungeon[r][c] = DungeonSqr(self.exit_glyph, DungeonSqr.EXIT)
+                    self.exit_pos = (r, c)
+                    return
+        self.exit_pos = None
+
     def place_monsters(self):
         """Place monsters scattered across walkable areas of the map."""
         self.monsters = []
@@ -1415,7 +1510,8 @@ class RLDungeonGenerator:
         walkable_positions = []
         for r in range(self.height):
             for c in range(self.width):
-                if self.is_walkable(r, c) and (r, c) != (self.player_row, self.player_col) and (r, c) != self.exit_pos:
+                if (self.is_walkable(r, c) and (r, c) != (self.player_row, self.player_col)
+                        and (r, c) != self.exit_pos and not self._in_structure(r, c)):
                     walkable_positions.append((r, c))
         
         # Randomly select positions for monsters and ensure every available
@@ -1489,6 +1585,7 @@ class RLDungeonGenerator:
             if self.is_walkable(r, c)
             and (r, c) != (self.player_row, self.player_col)
             and (self.exit_pos is None or (r, c) != self.exit_pos)
+            and not self._in_structure(r, c)
         ]
         random.shuffle(walkable)
 
@@ -1678,7 +1775,7 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                         tile = dg.dungeon[wr][wc]
                         if tile.tile_type == DungeonSqr.WALL:  # wall
                             buf[y0:y0+dg.tile_size, x0:x0+dg.tile_size, :3] = dg.color_wall_bg
-                        elif tile.tile_type == DungeonSqr.FLOOR:  # floor
+                        elif tile.tile_type in (DungeonSqr.FLOOR, DungeonSqr.BASE_DOOR):  # floor / base door
                             buf[y0:y0+dg.tile_size, x0:x0+dg.tile_size, :3] = dg.color_floor_bg
                         else:
                             buf[y0:y0+dg.tile_size, x0:x0+dg.tile_size, :3] = (10, 10, 10)
@@ -2320,6 +2417,10 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
                     fg = (255, 215, 0)
                     bg = (0, 0, 0)
                     glyph = '+'
+                elif tile.tile_type == DungeonSqr.BASE_DOOR:  # base structure door
+                    fg = dg.color_floor_fg
+                    bg = dg.color_floor_bg
+                    glyph = ch
                 elif tile.tile_type == DungeonSqr.EXIT:  # exit
                     fg = dg.color_floor_fg
                     bg = dg.color_floor_bg
