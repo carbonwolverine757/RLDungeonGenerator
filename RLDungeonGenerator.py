@@ -228,6 +228,9 @@ class RLDungeonGenerator:
         self.player_level_display = 1
         self.player_pips_display = 0
         self.player_xp_display_fraction = 0.0
+        # Player inventory: maps item name -> {'count': int, 'glyph': tileset index}.
+        # Populated by monster drops; insertion order determines inventory slot order.
+        self.inventory = {}
         # Monsters list (each monster is a dict with 'type', 'row', 'col', 'health')
         self.monsters = []
         # Objects list (each object is a dict with 'type', 'row', 'col', 'health')
@@ -1023,14 +1026,40 @@ class RLDungeonGenerator:
         self._cleanup_dead_monsters()
 
     def _cleanup_dead_monsters(self):
-        """Remove monsters with health <= 0 from the monsters list, awarding XP."""
+        """Remove monsters with health <= 0 from the monsters list, awarding XP and drops."""
         for m in self.monsters:
             if m.get('health', 1) <= 0:
                 xp_val = m['type'].get('xp_value', 0)
                 if xp_val > 0:
                     print(f"You gained {xp_val} experience.")
                 self._award_xp(xp_val)
+                self._roll_drops(m['type'])
         self.monsters = [m for m in self.monsters if m.get('health', 1) > 0]
+
+    def _roll_drops(self, monster_type):
+        """Roll each entry in a monster type's 'drops' list and add the results
+        to the player's inventory.
+
+        A drop_chance's integer part always drops; its fractional part is the
+        probability of dropping one additional item. Examples: 0.5 -> one item
+        50% of the time; 1.2 -> one item 80% of the time and two 20% of the time.
+        Every entry is rolled independently, so repeated item names stack.
+        """
+        for item in monster_type.get('drops', []):
+            name = item.get('name')
+            chance = item.get('drop_chance', 0)
+            if not name or chance <= 0:
+                continue
+            quantity = int(chance)  # guaranteed whole-number part (drop_chance >= 0)
+            if random() < (chance - quantity):
+                quantity += 1  # fractional part: chance of one extra
+            if quantity > 0:
+                slot = self.inventory.get(name)
+                if slot is None:
+                    self.inventory[name] = {'count': quantity, 'glyph': item.get('glyph')}
+                else:
+                    slot['count'] += quantity
+                print(f"You obtained {quantity} {name}.")
 
     def _award_xp(self, xp_value):
         if xp_value <= 0:
@@ -2634,7 +2663,12 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
         INV_MARGIN = 8
         INV_COLS = 8
         inv_slot_font = pygame.font.SysFont('consolas', 10)
+        inv_count_font = pygame.font.SysFont('consolas', 16, bold=True)
         inv_rows = 4 if inventory_open else 1
+        # Drops fill the storage grid (every slot below the hotbar row), one slot
+        # per distinct item, ordered left-to-right then top-to-bottom starting at
+        # the top-left storage slot. Insertion order in the inventory dict is used.
+        inv_items = list(dg.inventory.items())
         for row in range(inv_rows):
             for col in range(INV_COLS):
                 sx = offset_x + INV_MARGIN + col * (INV_SLOT_SIZE + INV_SLOT_PAD)
@@ -2644,6 +2678,28 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
                 if row == 0:
                     num_surf = inv_slot_font.render(str(col + 1), True, (180, 180, 180))
                     screen.blit(num_surf, (sx + INV_SLOT_SIZE - num_surf.get_width() - 2, sy + 2))
+                    continue
+                # Storage slots (below the hotbar): draw the dropped item's glyph
+                # with its count centered along the bottom edge, over the glyph.
+                storage_idx = (row - 1) * INV_COLS + col
+                if storage_idx >= len(inv_items):
+                    continue
+                _name, data = inv_items[storage_idx]
+                glyph = data.get('glyph')
+                count = data.get('count', 0)
+                if (tile_surfaces is not None and glyph is not None
+                        and 0 <= glyph < len(tile_surfaces)):
+                    item_surf = pygame.transform.smoothscale(
+                        tile_surfaces[glyph], (INV_SLOT_SIZE, INV_SLOT_SIZE))
+                    screen.blit(item_surf, (sx, sy))
+                count_surf = inv_count_font.render(str(count), True, (255, 255, 255))
+                cx = sx + (INV_SLOT_SIZE - count_surf.get_width()) // 2
+                cy = sy + INV_SLOT_SIZE - count_surf.get_height() - 2
+                # Dark outline so the number stays readable over any glyph.
+                outline = inv_count_font.render(str(count), True, (0, 0, 0))
+                for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                    screen.blit(outline, (cx + dx, cy + dy))
+                screen.blit(count_surf, (cx, cy))
 
         pygame.display.flip()
         # Update window title with current level
