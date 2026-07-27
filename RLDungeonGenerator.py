@@ -88,6 +88,18 @@ except Exception:
     except Exception:
         OBJECT_TYPES = []
 
+# Drop item definitions live in `Drops.py`
+try:
+    from .Drops import DROPS
+except Exception:
+    try:
+        from Drops import DROPS
+    except Exception:
+        DROPS = []
+
+# Lookup from drop name -> glyph (tileset index) for rendering dropped items.
+DROP_GLYPHS = {d['name']: d.get('glyph') for d in DROPS}
+
 # Player level configurations live in `player levels.py` (space in filename requires importlib)
 try:
     import importlib.util as _ilu
@@ -538,11 +550,11 @@ class RLDungeonGenerator:
         """
         if r < 0 or c < 0 or r >= self.height or c >= self.width:
             return False
-        # Check if there's a monster at this position
+        # Check if any monster's footprint covers this position
         for monster in self.monsters:
             if monster is ignore_monster:
                 continue
-            if monster['row'] == r and monster['col'] == c:
+            if self._monster_occupies(monster, r, c):
                 return False
         # Check if there's an object at this position
         for obj in self.objects:
@@ -933,17 +945,17 @@ class RLDungeonGenerator:
             damage = float(weapon.get('damage', 0))
             if damage > 0:
                 for monster in self.monsters:
-                    monster_row = monster['row']
-                    monster_col = monster['col']
-                    if (monster_row, monster_col) in tiles:
+                    # A hit lands if any tile of the monster's footprint is struck.
+                    if any(t in tiles for t in self._monster_footprint(monster)):
                         monster['health'] -= damage
                         hit_monsters.append(monster)
                         monster['damage_aggro_timer'] = max(0.0, float(monster['type'].get('damage_aggro_time', 0)))
-                        # Add damage popup
+                        # Add damage popup, centered over the footprint.
+                        size = self._monster_size(monster)
                         created = time.time()
                         self.damage_popups.append({
-                            'row': monster_row,
-                            'col': monster_col,
+                            'row': monster['row'] + size // 2,
+                            'col': monster['col'] + size // 2,
                             'damage': int(damage),
                             'created_at': created,
                             'expires_at': created + 2.0,  # Show for 2 seconds
@@ -976,11 +988,13 @@ class RLDungeonGenerator:
                     knockback_tiles = knockback * resistance
 
                     if knockback_tiles > 0:
-                        # Calculate direction away from player (from player to monster)
+                        # Calculate direction away from player (from player to the
+                        # monster's footprint center).
+                        cx, cy = self._monster_center(monster)
                         mx = monster.get('x', (monster['col'] + 0.5) * self.tile_size)
                         my = monster.get('y', (monster['row'] + 0.5) * self.tile_size)
-                        dx = mx - self.player_x
-                        dy = my - self.player_y
+                        dx = cx - self.player_x
+                        dy = cy - self.player_y
                         dist = sqrt(dx * dx + dy * dy)
 
                         if dist > 0:
@@ -1056,7 +1070,8 @@ class RLDungeonGenerator:
             if quantity > 0:
                 slot = self.inventory.get(name)
                 if slot is None:
-                    self.inventory[name] = {'count': quantity, 'glyph': item.get('glyph')}
+                    # Glyph comes from the drop definition in Drops.py, keyed by name.
+                    self.inventory[name] = {'count': quantity, 'glyph': DROP_GLYPHS.get(name)}
                 else:
                     slot['count'] += quantity
                 print(f"You obtained {quantity} {name}.")
@@ -1159,6 +1174,86 @@ class RLDungeonGenerator:
 
         return True
 
+    # --- Multi-tile (N×N) monster footprint helpers ---
+    # A monster of size N owns an N×N block of tiles. monster['row']/['col'] is
+    # the top-left tile of that block, and monster['x']/['y'] is the pixel center
+    # of that top-left tile (so int(x/tile_size) == col for any size).
+    def _monster_size(self, monster) -> int:
+        """Side length N of a monster's N×N footprint (>= 1)."""
+        try:
+            return max(1, int(monster.get('type', {}).get('size', 1)))
+        except Exception:
+            return 1
+
+    def _monster_footprint(self, monster):
+        """Yield every (row, col) tile occupied by the monster's footprint."""
+        size = self._monster_size(monster)
+        mr = monster.get('row')
+        mc = monster.get('col')
+        if mr is None or mc is None:
+            return
+        for i in range(size):
+            for j in range(size):
+                yield (mr + i, mc + j)
+
+    def _monster_occupies(self, monster, r, c) -> bool:
+        """True if tile (r, c) lies within the monster's footprint."""
+        size = self._monster_size(monster)
+        mr = monster.get('row')
+        mc = monster.get('col')
+        if mr is None or mc is None:
+            return False
+        return mr <= r < mr + size and mc <= c < mc + size
+
+    def _monster_center(self, monster):
+        """Pixel center of the whole footprint (offset from the top-left tile
+        center by (N-1)/2 tiles)."""
+        off = (self._monster_size(monster) - 1) * 0.5 * self.tile_size
+        mx = monster.get('x', (monster.get('col', 0) + 0.5) * self.tile_size)
+        my = monster.get('y', (monster.get('row', 0) + 0.5) * self.tile_size)
+        return (mx + off, my + off)
+
+    def _footprint_enterable(self, top_r, top_c, size, monster=None) -> bool:
+        """True if every tile of the N×N block anchored at (top_r, top_c) is
+        enterable by *monster* (in-bounds, walkable, clear of player/monsters)."""
+        if top_r < 0 or top_c < 0 or top_r + size > self.height or top_c + size > self.width:
+            return False
+        for i in range(size):
+            for j in range(size):
+                if not self._is_tile_enterable_by_monster(top_r + i, top_c + j, monster):
+                    return False
+        return True
+
+    def _footprint_reaches_player(self, top_r, top_c, size) -> bool:
+        """True if the player's tile is inside or orthogonally adjacent to the
+        footprint (i.e. the monster is in melee range)."""
+        pr, pc = self.player_row, self.player_col
+        for i in range(size):
+            for j in range(size):
+                r, c = top_r + i, top_c + j
+                if (r, c) == (pr, pc) or abs(r - pr) + abs(c - pc) == 1:
+                    return True
+        return False
+
+    def _footprint_spawnable(self, top_r, top_c, size) -> bool:
+        """True if an N×N block anchored at (top_r, top_c) is a valid spawn
+        location: fully in-bounds, walkable, and clear of the player, exit,
+        central structure, and already-placed monsters/objects."""
+        for i in range(size):
+            for j in range(size):
+                r, c = top_r + i, top_c + j
+                if r < 0 or c < 0 or r >= self.height or c >= self.width:
+                    return False
+                if not self.is_walkable(r, c):
+                    return False
+                if (r, c) == (self.player_row, self.player_col):
+                    return False
+                if self.exit_pos is not None and (r, c) == self.exit_pos:
+                    return False
+                if self._in_structure(r, c):
+                    return False
+        return True
+
     def _tile_overlaps_player(self, r, c) -> bool:
         """Return True if the tile at (r,c) intersects the player's hitbox."""
         if r < 0 or c < 0 or r >= self.height or c >= self.width:
@@ -1196,63 +1291,81 @@ class RLDungeonGenerator:
         if self.dungeon[r][c].tile_type == DungeonSqr.BASE_DOOR:
             return False
 
-        # Check whether another monster already occupies the tile
+        # Check whether another monster's footprint already covers the tile
         for m in self.monsters:
             if m is monster:
                 continue
-            if m.get('row') == r and m.get('col') == c:
+            if self._monster_occupies(m, r, c):
                 return False
 
         return True
 
     def _can_move_monster_to(self, px, py, monster, radius=None):
-        """Check if monster can move its center to (px, py)."""
-        r = int(py / self.tile_size)
-        c = int(px / self.tile_size)
-        # Debug: check bounds
-        if r < 0 or r >= self.height or c < 0 or c >= self.width:
-            return False
-        return self._is_tile_enterable_by_monster(r, c, monster)
+        """Check if *monster* can place its top-left tile center at (px, py).
+
+        The whole N×N footprint anchored at the resulting top-left tile must be
+        enterable, so multi-tile monsters collide on their full bounding box.
+        """
+        top_c = int(px / self.tile_size)
+        top_r = int(py / self.tile_size)
+        return self._footprint_enterable(top_r, top_c, self._monster_size(monster), monster)
+
+    # Cap on BFS nodes explored per monster per frame, to bound pathfinding cost
+    # when many monsters are alerted (or the player is far away behind walls).
+    _PATHFIND_MAX_NODES = 1500
 
     def _find_monster_next_step(self, monster):
-        """Find the next tile along a walkable path from a monster to the player."""
+        """Return the next top-left tile a monster should step toward to reach the
+        player, or None to approach directly.
+
+        The search runs in "top-left tile" space: from each candidate position the
+        monster's full N×N footprint must be enterable, so every leading edge of a
+        multi-tile monster is checked before it advances. The goal is any position
+        whose footprint is adjacent to (or contains) the player; once there the
+        monster approaches directly (returns None) so it presses right up to the
+        player rather than stopping a tile short.
+        """
+        size = self._monster_size(monster)
         start_r = monster.get('row', int(monster.get('y', 0) / self.tile_size))
         start_c = monster.get('col', int(monster.get('x', 0) / self.tile_size))
-        target_r = self.player_row
-        target_c = self.player_col
 
-        if (start_r, start_c) == (target_r, target_c):
+        # Already in melee range: approach directly instead of pathfinding.
+        if self._footprint_reaches_player(start_r, start_c, size):
             return None
 
         queue = deque()
         queue.append((start_r, start_c))
-        came_from = {(start_r, start_c): None}
+        came_from = {(start_r, start_c): None}  # type: dict[tuple, tuple | None]
+        goal = None
+        explored = 0
         while queue:
             r, c = queue.popleft()
-            if (r, c) == (target_r, target_c):
+            if self._footprint_reaches_player(r, c, size):
+                goal = (r, c)
                 break
+            explored += 1
+            if explored > self._PATHFIND_MAX_NODES:
+                return None  # give up; fall back to direct movement
+            for dr, dc in ((0, 1), (1, 0), (0, -1), (-1, 0)):
+                nr, nc = r + dr, c + dc
+                if (nr, nc) in came_from:
+                    continue
+                # Every tile of the footprint at the new anchor must be enterable.
+                if not self._footprint_enterable(nr, nc, size, monster):
+                    continue
+                came_from[(nr, nc)] = (r, c)
+                queue.append((nr, nc))
 
-                for dr, dc in ((0, 1), (1, 0), (0, -1), (-1, 0)):
-                    nr, nc = r + dr, c + dc
-                    if (nr, nc) in came_from:
-                        continue
-                    if nr < 0 or nc < 0 or nr >= self.height or nc >= self.width:
-                        continue
-                    # For monster pathfinding, require tiles to be enterable by monsters.
-                    # This also prevents monsters from pathing into the player's hitbox.
-                    if not self._is_tile_enterable_by_monster(nr, nc, monster):
-                        continue
-                    came_from[(nr, nc)] = (r, c)
-                    queue.append((nr, nc))
-
-        if (target_r, target_c) not in came_from:
+        if goal is None:
             return None
 
-        current = (target_r, target_c)
-        while came_from[current] != (start_r, start_c):
-            current = came_from[current]
-            if current is None:
-                return None
+        # Walk the parent chain back to the first step out of the start tile.
+        current = goal
+        while True:
+            parent = came_from[current]
+            if parent is None or parent == (start_r, start_c):
+                break
+            current = parent
         return current
 
     def reveal_current_area(self):
@@ -1298,9 +1411,11 @@ class RLDungeonGenerator:
                 monster['x'] = (monster.get('col', 0) + 0.5) * self.tile_size
                 monster['y'] = (monster.get('row', 0) + 0.5) * self.tile_size
 
-            # Aggro check (distance in tiles)
-            dx_tiles = (monster['x'] - self.player_x) / self.tile_size
-            dy_tiles = (monster['y'] - self.player_y) / self.tile_size
+            # Aggro check (distance in tiles), measured from the footprint center
+            # so large monsters aggro consistently regardless of size.
+            center_x, center_y = self._monster_center(monster)
+            dx_tiles = (center_x - self.player_x) / self.tile_size
+            dy_tiles = (center_y - self.player_y) / self.tile_size
             dist_tiles = sqrt(dx_tiles * dx_tiles + dy_tiles * dy_tiles)
             aggro = max(0.0, float(mt.get('aggro_distance', 0)))
             aggro_time = max(0.0, float(mt.get('aggro_time', 0)))
@@ -1329,12 +1444,17 @@ class RLDungeonGenerator:
 
                 next_step = self._find_monster_next_step(monster)
                 if next_step is not None:
+                    # BFS works in top-left-tile space, so steer the top-left tile
+                    # center (monster['x'/'y']) toward the next path tile center.
                     target_r, target_c = next_step
                     target_x = (target_c + 0.5) * self.tile_size
                     target_y = (target_r + 0.5) * self.tile_size
                 else:
-                    target_x = self.player_x
-                    target_y = self.player_y
+                    # Direct approach: drive the footprint center at the player, so
+                    # the top-left tile aims (N-1)/2 tiles up-left of the player.
+                    off = (self._monster_size(monster) - 1) * 0.5 * self.tile_size
+                    target_x = self.player_x - off
+                    target_y = self.player_y - off
 
                 dx = target_x - monster['x']
                 dy = target_y - monster['y']
@@ -1555,46 +1675,42 @@ class RLDungeonGenerator:
             desired = max(desired, 2)
             desired = min(desired, max_positions)
 
-            monster_positions = random.sample(walkable_positions, desired)
+            # Build the sequence of types to place: one of each first, then random.
+            types_to_place = list(available_monster_types)
+            while len(types_to_place) < desired:
+                types_to_place.append(random.choice(available_monster_types))
 
-            # First, assign one instance of each monster type (if possible)
+            # Shuffle candidate anchors and place each monster at the first anchor
+            # whose full N×N footprint fits (clear of walls, the player, the exit,
+            # the central structure, and monsters already placed this pass).
+            random.shuffle(walkable_positions)
             self.monsters = []
-            pos_idx = 0
-            for mt in available_monster_types:
-                if pos_idx >= len(monster_positions):
-                    break
-                r, c = monster_positions[pos_idx]
+            cursor = 0
+            for mt in types_to_place:
+                size = max(1, int(mt.get('size', 1)))
+                anchor = None
+                # Scan forward from the cursor for a fitting anchor.
+                for offset in range(len(walkable_positions)):
+                    r, c = walkable_positions[(cursor + offset) % len(walkable_positions)]
+                    if self._footprint_spawnable(r, c, size):
+                        anchor = (r, c)
+                        cursor = (cursor + offset + 1) % len(walkable_positions)
+                        break
+                if anchor is None:
+                    continue  # no room for this monster's footprint; skip it
+                ar, ac = anchor
                 self.monsters.append({
                     'type': mt,
-                    'row': r,
-                    'col': c,
+                    'row': ar,
+                    'col': ac,
                     'health': mt['health'],
-                    # Pixel-precise position so monsters can move smoothly
-                    'x': (c + 0.5) * self.tile_size,
-                    'y': (r + 0.5) * self.tile_size,
+                    # Pixel center of the top-left footprint tile (smooth movement).
+                    'x': (ac + 0.5) * self.tile_size,
+                    'y': (ar + 0.5) * self.tile_size,
                     'alerted': False,
                     'aggro_timer': 0.0,
                     'damage_aggro_timer': 0.0,
                 })
-                pos_idx += 1
-
-            # Fill remaining slots with random choices from available types
-            while pos_idx < len(monster_positions):
-                r, c = monster_positions[pos_idx]
-                mt = random.choice(available_monster_types)
-                self.monsters.append({
-                    'type': mt,
-                    'row': r,
-                    'col': c,
-                    'health': mt['health'],
-                    # Pixel-precise position so monsters can move smoothly
-                    'x': (c + 0.5) * self.tile_size,
-                    'y': (r + 0.5) * self.tile_size,
-                    'alerted': False,
-                    'aggro_timer': 0.0,
-                    'damage_aggro_timer': 0.0,
-                })
-                pos_idx += 1
 
     def place_objects(self):
         """Place static objects on walkable floor tiles."""
@@ -2522,35 +2638,45 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
 
         # Draw monsters
         for monster in dg.monsters:
-                    # Compute integer tile coords for visibility check
+                    # Top-left tile of the monster's N×N footprint
                     monster_row = monster.get('row', int(monster.get('y', 0) / dg.tile_size))
                     monster_col = monster.get('col', int(monster.get('x', 0) / dg.tile_size))
-                    if (cam_ty <= monster_row < cam_ty + view_h + 1 and
-                        cam_tx <= monster_col < cam_tx + view_w + 1):
-                        # Pixel position for smooth movement
+                    m_size = dg._monster_size(monster)
+                    # Visible if the footprint's bounding box overlaps the camera view.
+                    if (monster_row + m_size > cam_ty and monster_row < cam_ty + view_h + 1 and
+                        monster_col + m_size > cam_tx and monster_col < cam_tx + view_w + 1):
+                        # Pixel position for smooth movement (center of top-left tile)
                         monster_px = monster.get('x', (monster_col + 0.5) * dg.tile_size) - cam_pixel_x + offset_x
                         monster_py = monster.get('y', (monster_row + 0.5) * dg.tile_size) - cam_pixel_y + offset_y
+                        # Top-left corner of the footprint, and its full pixel size.
                         x = int(monster_px - 0.5 * dg.tile_size)
                         y = int(monster_py - 0.5 * dg.tile_size)
+                        m_render_px = m_size * dg.tile_size
+                        # Pixel center of the whole footprint (for the alert marker).
+                        foot_cx = int(monster_px + (m_size - 1) * 0.5 * dg.tile_size)
+                        foot_cy = int(monster_py + (m_size - 1) * 0.5 * dg.tile_size)
 
-                        # Use monster glyph from tileset
+                        # Use monster glyph from tileset, scaled to the N×N footprint.
                         glyph_index = monster['type']['glyph_index']
                         if tile_surfaces is not None and glyph_index < len(tile_surfaces):
-                            # Draw monster sprite centered on tile
-                            screen.blit(tile_surfaces[glyph_index], (x, y))
+                            if m_size != 1:
+                                sprite = pygame.transform.scale(tile_surfaces[glyph_index], (m_render_px, m_render_px))
+                            else:
+                                sprite = tile_surfaces[glyph_index]
+                            screen.blit(sprite, (x, y))
                         else:
-                            # Fallback: draw red circle
-                            pygame.draw.circle(screen, (255, 0, 0), (int(monster_px), int(monster_py)), max(2, dg.tile_size // 4))
+                            # Fallback: draw red circle at the footprint center
+                            pygame.draw.circle(screen, (255, 0, 0), (foot_cx, foot_cy), max(2, m_render_px // 4))
 
-                        # Draw alert indicator if alerted
+                        # Draw alert indicator (centered above the footprint) if alerted
                         if monster.get('alerted'):
                             try:
                                 ex_surf = popup_font.render('!', True, (255, 0, 0))
-                                ex_rect = ex_surf.get_rect(center=(int(monster_px), int(monster_py - dg.tile_size * 0.5 - 6)))
+                                ex_rect = ex_surf.get_rect(center=(foot_cx, int(monster_py - dg.tile_size * 0.5 - 6)))
                                 screen.blit(ex_surf, ex_rect)
                             except Exception:
                                 # fallback to a small red rectangle
-                                rx = int(monster_px) - 2
+                                rx = foot_cx - 2
                                 ry = int(monster_py - dg.tile_size * 0.5 - 8)
                                 pygame.draw.rect(screen, (255, 0, 0), (rx, ry, 4, 6))
 
