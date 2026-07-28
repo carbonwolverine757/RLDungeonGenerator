@@ -5,7 +5,10 @@
 # - health: health points
 # - size: side length N of the N×N block of tiles the monster occupies (default 1).
 #   Movement, collision, pathfinding, and rendering all operate on this footprint.
-# - levels: list of level names where this monster appears (empty list means all levels)
+# - levels: list of the levels where this monster appears. Each entry is a dict with
+#   'name' (the level name) and 'max_count' (the most of this monster that may spawn
+#   on that level; None means no cap, so the map-size density decides). An empty
+#   list means the monster appears on all levels with no cap.
 # - drops: list of items dropped when the monster is defeated. Each item is a dict
 #   with 'name' and 'drop_chance'. The 'name' refers to a drop defined in Drops.py,
 #   which supplies the glyph used to draw it. The drop_chance is the (possibly
@@ -21,7 +24,9 @@ MONSTER_TYPES = [
         'health': 10,
         'size': 1,  # occupies a 1x1 block of tiles
         'xp_value': 18,
-        'levels': ['Meadows'],
+        'levels': [
+            {'name': 'Meadows', 'max_count': None},
+        ],
         'aggro_distance': 5.0,  # tiles
         'aggro_time': 4.0,  # seconds monster stays aggroed after losing sight of player
         'damage_aggro_time': 10.0,  # seconds monster stays aggroed after taking damage
@@ -38,7 +43,10 @@ MONSTER_TYPES = [
         'health': 20,
         'size': 1,  # occupies a 1x1 block of tiles
         'xp_value': 18,
-        'levels': ['Meadows', 'Black Forest'],
+        'levels': [
+            {'name': 'Meadows', 'max_count': None},
+            {'name': 'Black Forest', 'max_count': None},
+        ],
         'aggro_distance': 5.0,  # tiles
         'aggro_time': 4.0,  # seconds monster stays aggroed after losing sight of player
         'damage_aggro_time': 10.0,  # seconds monster stays aggroed after taking damage
@@ -55,12 +63,14 @@ MONSTER_TYPES = [
         'health': 500,
         'size': 4,  # occupies a 4x4 block of tiles
         'xp_value': 240,
-        'levels': ['Eikthyr Bossfight'],
-        'aggro_distance': 5.0,  # tiles
+        'levels': [
+            {'name': 'Eikthyr Bossfight', 'max_count': 1},  # single boss per map
+        ],
+        'aggro_distance': 500.0,  # tiles
         'aggro_time': 16.0,  # seconds monster stays aggroed after losing sight of player
         'damage_aggro_time': 40.0,  # seconds monster stays aggroed after taking damage
         'movement_speed': 1.5,
-        'knockback_resistance': 0.9,  # 0-1; higher = less knockback
+        'knockback_resistance': 0.99,  # 0-1; higher = less knockback
         'drops': [
         ],
     }

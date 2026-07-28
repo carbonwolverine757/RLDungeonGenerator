@@ -3,3 +3,8 @@
 ################################################################################
 
 /.vs/*
+__pycache__/*.pyc
+documentation/.~lock.*.ods#
+__pycache__/monsters.cpython-313.pyc
+__pycache__/RLDungeonGenerator.cpython-313.pyc
+__pycache__/weapons.cpython-313.pyc

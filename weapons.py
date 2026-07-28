@@ -16,7 +16,7 @@ WEAPONS = [
         'range': 99.5,
         'area': 3.0,
         'angle': 360.0,
-        'knockback': 10.0,  # tiles of knockback
+        'knockback': 1.0,  # tiles of knockback
         'glyph': None,
     },
 ]

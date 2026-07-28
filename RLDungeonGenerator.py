@@ -227,6 +227,11 @@ class RLDungeonGenerator:
         # Bounds (r0, c0, r1, c1) of the central base structure, or None when absent.
         # Includes the wall border; used to keep monsters/objects out.
         self.structure_bounds = None
+        # Pathfinding acceleration structures (see _begin_monster_frame).
+        # _static_blocked caches impassable terrain for the current map;
+        # _dynamic_occupancy maps tile -> occupying monster/object for this frame.
+        self._static_blocked = None
+        self._dynamic_occupancy = {}
         # Player health and stamina
         self.max_health = PLAYER_LEVELS[0]['health']
         self.health = self.max_health
@@ -509,6 +514,8 @@ class RLDungeonGenerator:
         self.leaves = []
         self.rooms = []
         self.structure_bounds = None  # Reset central structure (openspace only)
+        self._static_blocked = None   # Terrain changed; rebuild the pathfinding cache
+        self._dynamic_occupancy = {}
         self.monsters = []  # Reset monsters list
         self.objects = []   # Reset objects list
         # Recreate dungeon filled with walls
@@ -1224,6 +1231,54 @@ class RLDungeonGenerator:
                     return False
         return True
 
+    # --- Pathfinding acceleration ---
+    # `is_walkable` scans every monster and object, which is far too slow to call
+    # from inside a BFS once there are many monsters. Pathfinding instead uses a
+    # snapshot: terrain is cached per map, and occupancy is indexed once per frame,
+    # making each lookup O(1). Actual movement is still validated by the exact
+    # `_can_move_monster_to`, so this only affects route planning.
+    def _rebuild_static_blocked(self):
+        """Cache terrain that monsters can never enter for the current map."""
+        passable = (DungeonSqr.FLOOR, DungeonSqr.DOOR, DungeonSqr.EXIT)
+        grid = [
+            [self.dungeon[r][c].tile_type not in passable for c in range(self.width)]
+            for r in range(self.height)
+        ]
+        self._static_blocked = grid
+        return grid
+
+    def _begin_monster_frame(self):
+        """Refresh the per-frame pathfinding snapshot (terrain + occupancy)."""
+        static = self._static_blocked
+        if (static is None or len(static) != self.height
+                or (self.height and len(static[0]) != self.width)):
+            self._rebuild_static_blocked()
+        occ = {}
+        for m in self.monsters:
+            for t in self._monster_footprint(m):
+                occ[t] = m
+        for o in self.objects:
+            occ[(o['row'], o['col'])] = o
+        self._dynamic_occupancy = occ
+
+    def _footprint_open_fast(self, top_r, top_c, size, monster=None) -> bool:
+        """Snapshot-based version of _footprint_enterable used by pathfinding."""
+        if top_r < 0 or top_c < 0 or top_r + size > self.height or top_c + size > self.width:
+            return False
+        static = self._static_blocked or self._rebuild_static_blocked()
+        occ = self._dynamic_occupancy
+        for i in range(size):
+            r = top_r + i
+            static_row = static[r]
+            for j in range(size):
+                c = top_c + j
+                if static_row[c]:
+                    return False
+                blocker = occ.get((r, c))
+                if blocker is not None and blocker is not monster:
+                    return False
+        return True
+
     def _footprint_reaches_player(self, top_r, top_c, size) -> bool:
         """True if the player's tile is inside or orthogonally adjacent to the
         footprint (i.e. the monster is in melee range)."""
@@ -1313,6 +1368,11 @@ class RLDungeonGenerator:
     # Cap on BFS nodes explored per monster per frame, to bound pathfinding cost
     # when many monsters are alerted (or the player is far away behind walls).
     _PATHFIND_MAX_NODES = 1500
+    # Paths are reused for a short while instead of being recomputed every frame.
+    # A monster whose route is blocked backs off much harder, since re-running a
+    # search that just failed is the most expensive thing a monster can do.
+    _REPATH_INTERVAL = 0.30       # seconds between recomputes while chasing
+    _REPATH_FAIL_INTERVAL = 1.50  # seconds before retrying an unreachable target
 
     def _find_monster_next_step(self, monster):
         """Return the next top-left tile a monster should step toward to reach the
@@ -1350,8 +1410,9 @@ class RLDungeonGenerator:
                 nr, nc = r + dr, c + dc
                 if (nr, nc) in came_from:
                     continue
-                # Every tile of the footprint at the new anchor must be enterable.
-                if not self._footprint_enterable(nr, nc, size, monster):
+                # Every tile of the footprint at the new anchor must be open.
+                # Uses the per-frame snapshot; movement is validated exactly later.
+                if not self._footprint_open_fast(nr, nc, size, monster):
                     continue
                 came_from[(nr, nc)] = (r, c)
                 queue.append((nr, nc))
@@ -1404,6 +1465,10 @@ class RLDungeonGenerator:
         if not self.monsters:
             return
 
+        # Index terrain/occupancy once for the whole frame so pathfinding lookups
+        # are O(1) instead of scanning every monster and object per tile.
+        self._begin_monster_frame()
+
         for monster in list(self.monsters):
             mt = monster.get('type', {})
             # Ensure monster has pixel position
@@ -1442,7 +1507,21 @@ class RLDungeonGenerator:
                     continue
                 speed_px = speed_tiles * self.tile_size
 
-                next_step = self._find_monster_next_step(monster)
+                # Reuse the cached route for a short interval rather than running a
+                # fresh search every frame. The interval is jittered per monster so
+                # a crowd doesn't all recompute on the same frame, and a failed
+                # search (player unreachable) backs off for much longer.
+                # The timer alone gates recomputation: a failed search caches None
+                # and must still honour its backoff, otherwise unreachable monsters
+                # would re-run the most expensive search every single frame.
+                monster['_repath_timer'] = monster.get('_repath_timer', 0.0) - delta_time
+                if monster['_repath_timer'] <= 0.0:
+                    monster['_next_step'] = self._find_monster_next_step(monster)
+                    base = (self._REPATH_INTERVAL if monster['_next_step'] is not None
+                            else self._REPATH_FAIL_INTERVAL)
+                    monster['_repath_timer'] = base * (0.75 + random() * 0.5)
+                next_step = monster.get('_next_step')
+
                 if next_step is not None:
                     # BFS works in top-left-tile space, so steer the top-left tile
                     # center (monster['x'/'y']) toward the next path tile center.
@@ -1489,6 +1568,11 @@ class RLDungeonGenerator:
                 # Update integer tile coords
                 monster['col'] = int(monster['x'] / self.tile_size)
                 monster['row'] = int(monster['y'] / self.tile_size)
+
+                # Arrived at the queued step: expire the timer so the next frame
+                # plans the following one instead of idling until it runs out.
+                if next_step is not None and (monster['row'], monster['col']) == next_step:
+                    monster['_repath_timer'] = 0.0
 
     def apply_level(self, index: int) -> None:
         """Apply level settings by index from self.levels."""
@@ -1640,15 +1724,21 @@ class RLDungeonGenerator:
         # Get current level name
         current_level_name = self.get_current_level_name()
         
-        # Filter monster types to those that explicitly list this level.
-        # Only monster types whose `levels` list contains the current level
-        # name will be considered for placement.
-        available_monster_types = [
-            mt for mt in MONSTER_TYPES
-            # empty `levels` list means the monster can appear on any level
-            if not mt.get('levels') or current_level_name in mt.get('levels', [])
-        ]
-        
+        # Filter monster types to those that list this level, capturing the
+        # per-level 'max_count' cap alongside each one. Entries in a monster's
+        # `levels` list are dicts of {'name', 'max_count'}; an empty list means
+        # the monster can appear on any level with no cap.
+        available_monster_types = []  # list of (monster_type, max_count)
+        for mt in MONSTER_TYPES:
+            entries = mt.get('levels') or []
+            if not entries:
+                available_monster_types.append((mt, None))
+                continue
+            for entry in entries:
+                if entry.get('name') == current_level_name:
+                    available_monster_types.append((mt, entry.get('max_count')))
+                    break
+
         if not available_monster_types:
             return  # No monsters available for this level
         
@@ -1675,10 +1765,30 @@ class RLDungeonGenerator:
             desired = max(desired, 2)
             desired = min(desired, max_positions)
 
-            # Build the sequence of types to place: one of each first, then random.
-            types_to_place = list(available_monster_types)
+            # Build the sequence of types to place: one of each first, then random
+            # fill. A type is only eligible while it is under its per-level
+            # 'max_count' (None = uncapped), so e.g. a boss capped at 1 spawns once
+            # instead of filling the map at the area-based density.
+            types_to_place = []
+            placed_counts = {}
+
+            def _under_cap(entry):
+                mt, cap = entry
+                return cap is None or placed_counts.get(mt['name'], 0) < cap
+
+            def _take(entry):
+                mt = entry[0]
+                types_to_place.append(mt)
+                placed_counts[mt['name']] = placed_counts.get(mt['name'], 0) + 1
+
+            for entry in available_monster_types:
+                if _under_cap(entry):
+                    _take(entry)
             while len(types_to_place) < desired:
-                types_to_place.append(random.choice(available_monster_types))
+                eligible = [e for e in available_monster_types if _under_cap(e)]
+                if not eligible:
+                    break  # every type has reached its cap
+                _take(random.choice(eligible))
 
             # Shuffle candidate anchors and place each monster at the first anchor
             # whose full N×N footprint fits (clear of walls, the player, the exit,
