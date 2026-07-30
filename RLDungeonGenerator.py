@@ -1,5 +1,5 @@
 # This code is released into the Public Domain.
-from math import sqrt
+from math import sqrt, floor, ceil
 from random import random
 from random import randrange
 from random import choice
@@ -232,6 +232,8 @@ class RLDungeonGenerator:
         # _dynamic_occupancy maps tile -> occupying monster/object for this frame.
         self._static_blocked = None
         self._dynamic_occupancy = {}
+        self._object_tiles = set()
+        self._pathfind_budget = 0
         # Player health and stamina
         self.max_health = PLAYER_LEVELS[0]['health']
         self.health = self.max_health
@@ -813,9 +815,10 @@ class RLDungeonGenerator:
                             monster['x'] = new_x
                             monster['y'] = new_y
                         
-                        # Update tile position
+                        # Update tile position, keeping the occupancy index in sync
                         monster['col'] = int(monster['x'] / self.tile_size)
                         monster['row'] = int(monster['y'] / self.tile_size)
+                        self._occupancy_register(monster)
         except Exception as e:
             logging.exception(f"Error in apply_melee_knockback: {e}")
 
@@ -985,6 +988,9 @@ class RLDungeonGenerator:
         try:
             knockback = float(weapon.get('knockback', 0))
             if knockback > 0 and hit_monsters:
+                # Collision checks below read the occupancy index; refresh it since
+                # attacks can land between monster-update frames.
+                self._begin_monster_frame()
                 for monster in hit_monsters:
                     # Get monster's knockback resistance (0-1; higher = less knockback)
                     monster_type = monster.get('type', {})
@@ -1029,9 +1035,10 @@ class RLDungeonGenerator:
                             elif self._can_move_monster_to(monster['x'], new_y, monster):
                                 monster['y'] = new_y
 
-                        # Update tile position
+                        # Update tile position, keeping the occupancy index in sync
                         monster['col'] = int(monster['x'] / self.tile_size)
                         monster['row'] = int(monster['y'] / self.tile_size)
+                        self._occupancy_register(monster)
         except Exception:
             pass
 
@@ -1055,7 +1062,11 @@ class RLDungeonGenerator:
                     print(f"You gained {xp_val} experience.")
                 self._award_xp(xp_val)
                 self._roll_drops(m['type'])
+        before = len(self.monsters)
         self.monsters = [m for m in self.monsters if m.get('health', 1) > 0]
+        if len(self.monsters) != before:
+            # Drop the dead from the occupancy index so their tiles free up now.
+            self._begin_monster_frame()
 
     def _roll_drops(self, monster_type):
         """Roll each entry in a monster type's 'drops' list and add the results
@@ -1182,9 +1193,18 @@ class RLDungeonGenerator:
         return True
 
     # --- Multi-tile (N×N) monster footprint helpers ---
-    # A monster of size N owns an N×N block of tiles. monster['row']/['col'] is
-    # the top-left tile of that block, and monster['x']/['y'] is the pixel center
-    # of that top-left tile (so int(x/tile_size) == col for any size).
+    # A monster of size N is an N-tile-square box in *pixel* space. Its position
+    # monster['x']/['y'] is the center of the box's top-left tile and moves
+    # smoothly, so the box is generally not aligned to the tile grid: it can
+    # straddle up to (N+1)x(N+1) tiles. monster['row']/['col'] is just the tile
+    # containing that anchor point. Collision and occupancy therefore work from
+    # the box's real tile span, otherwise a monster laps into neighbouring walls
+    # and monsters whenever it sits near a tile edge.
+    # Tolerance (in tiles) when deciding which tiles a monster's box overlaps.
+    # Small enough to be sub-pixel at any sane tile size, large enough to absorb
+    # the float drift that smooth movement accumulates.
+    _TILE_SPAN_EPSILON = 1e-4
+
     def _monster_size(self, monster) -> int:
         """Side length N of a monster's N×N footprint (>= 1)."""
         try:
@@ -1192,25 +1212,127 @@ class RLDungeonGenerator:
         except Exception:
             return 1
 
-    def _monster_footprint(self, monster):
-        """Yield every (row, col) tile occupied by the monster's footprint."""
+    def _monster_tile_span(self, px, py, size):
+        """Tile range (r0, c0, r1, c1) overlapped by a size×size pixel box whose
+        top-left tile is centered at (px, py).
+
+        A box edge landing exactly on a tile boundary only *touches* the next
+        tile, so an aligned box spans exactly N tiles - matching the player's
+        "touching is allowed, overlapping is not" collision convention.
+
+        Edges are compared with a sub-pixel tolerance because accumulated float
+        error leaves a "centered" monster a few 1e-8 of a tile off. Without it a
+        size-N monster reads as N+1 tiles wide and can never fit through a gap
+        exactly N tiles across.
+        """
+        ts = self.tile_size
+        eps = self._TILE_SPAN_EPSILON
+        left = (px - 0.5 * ts) / ts
+        top = (py - 0.5 * ts) / ts
+        right = left + size
+        bottom = top + size
+        c0 = int(floor(left + eps))
+        r0 = int(floor(top + eps))
+        c1 = int(ceil(right - eps)) - 1
+        r1 = int(ceil(bottom - eps)) - 1
+        return r0, c0, max(r0, r1), max(c0, c1)
+
+    def _monster_span(self, monster):
+        """Tile range (r0, c0, r1, c1) the monster currently covers."""
         size = self._monster_size(monster)
-        mr = monster.get('row')
-        mc = monster.get('col')
-        if mr is None or mc is None:
+        px = monster.get('x')
+        py = monster.get('y')
+        if px is None or py is None:
+            # No pixel position yet (e.g. mid-spawn): fall back to the tile anchor.
+            mr = monster.get('row')
+            mc = monster.get('col')
+            if mr is None or mc is None:
+                return None
+            return mr, mc, mr + size - 1, mc + size - 1
+        return self._monster_tile_span(px, py, size)
+
+    def _monster_box(self, px, py, size):
+        """Pixel rect (left, top, right, bottom) of a size×size box anchored so
+        its top-left tile is centered at (px, py)."""
+        ts = self.tile_size
+        left = px - 0.5 * ts
+        top = py - 0.5 * ts
+        return left, top, left + size * ts, top + size * ts
+
+    def _current_monster_box(self, monster):
+        """Pixel rect the monster currently occupies, or None if unpositioned."""
+        px = monster.get('x')
+        py = monster.get('y')
+        if px is None or py is None:
+            return None
+        return self._monster_box(px, py, self._monster_size(monster))
+
+    def _box_blocked_by_monster(self, px, py, size, monster):
+        """True if this monster's box at (px, py) would overlap another monster.
+
+        Monster-vs-monster uses an exact rect test rather than the tile index.
+        Tile-resolution occupancy is far too coarse here: an off-grid 1x1 monster
+        covers a 2x2 tile block, which would shove others a whole tile further away
+        than their sprites actually need and can wedge two monsters permanently.
+        The tile index is still used as a broad phase to find candidates cheaply.
+
+        Monsters already overlapping (from a spawn, knockback, or a resize) are
+        allowed to move as long as they are separating, so they can never lock up.
+        """
+        occ = self._dynamic_occupancy
+        eps = self._TILE_SPAN_EPSILON * self.tile_size
+        left, top, right, bottom = self._monster_box(px, py, size)
+        cur = self._current_monster_box(monster)
+        # Broad phase: only monsters registered on the tiles the box touches.
+        r0, c0, r1, c1 = self._monster_tile_span(px, py, size)
+        seen = set()
+        candidates = []
+        for r in range(r0, r1 + 1):
+            for c in range(c0, c1 + 1):
+                for other in occ.get((r, c), ()):
+                    key = id(other)
+                    if other is monster or key in seen:
+                        continue
+                    seen.add(key)
+                    candidates.append(other)
+
+        for other in candidates:
+            ob = self._current_monster_box(other)
+            if ob is None:
+                continue
+            # Narrow phase: exact rect overlap (touching edges is fine).
+            if not (left < ob[2] - eps and right > ob[0] + eps
+                    and top < ob[3] - eps and bottom > ob[1] + eps):
+                continue
+            # Already interpenetrating? Permit the move if it separates them,
+            # otherwise a stuck pair would block each other forever.
+            if cur is not None and (cur[0] < ob[2] - eps and cur[2] > ob[0] + eps
+                                    and cur[1] < ob[3] - eps and cur[3] > ob[1] + eps):
+                o_cx, o_cy = (ob[0] + ob[2]) * 0.5, (ob[1] + ob[3]) * 0.5
+                cur_d = abs((cur[0] + cur[2]) * 0.5 - o_cx) + abs((cur[1] + cur[3]) * 0.5 - o_cy)
+                new_d = abs((left + right) * 0.5 - o_cx) + abs((top + bottom) * 0.5 - o_cy)
+                if new_d > cur_d:
+                    continue  # separating - allow it
+            return True
+        return False
+
+    def _monster_footprint(self, monster):
+        """Yield every (row, col) tile the monster's box covers."""
+        span = self._monster_span(monster)
+        if span is None:
             return
-        for i in range(size):
-            for j in range(size):
-                yield (mr + i, mc + j)
+        r0, c0, r1, c1 = span
+        for r in range(r0, r1 + 1):
+            for c in range(c0, c1 + 1):
+                yield (r, c)
 
     def _monster_occupies(self, monster, r, c) -> bool:
-        """True if tile (r, c) lies within the monster's footprint."""
-        size = self._monster_size(monster)
-        mr = monster.get('row')
-        mc = monster.get('col')
-        if mr is None or mc is None:
+        """True if tile (r, c) is covered by the monster's box."""
+        span = self._monster_span(monster)
+        if span is None:
             return False
-        return mr <= r < mr + size and mc <= c < mc + size
+        r0, c0, r1, c1 = span
+        return r0 <= r <= r1 and c0 <= c <= c1
 
     def _monster_center(self, monster):
         """Pixel center of the whole footprint (offset from the top-left tile
@@ -1253,13 +1375,45 @@ class RLDungeonGenerator:
         if (static is None or len(static) != self.height
                 or (self.height and len(static[0]) != self.width)):
             self._rebuild_static_blocked()
+        # Monsters and objects are indexed separately: objects are true one-tile
+        # blockers, while monsters need an exact box test (see _box_blocked_by_monster).
+        # Each tile maps to a *list*, because neighbouring monster boxes legitimately
+        # share tile coverage once they sit off-grid; a single slot would hide one of
+        # them from the broad phase and let boxes interpenetrate.
         occ = {}
         for m in self.monsters:
-            for t in self._monster_footprint(m):
-                occ[t] = m
-        for o in self.objects:
-            occ[(o['row'], o['col'])] = o
+            tiles = tuple(self._monster_footprint(m))
+            for t in tiles:
+                occ.setdefault(t, []).append(m)
+            m['_occ_tiles'] = tiles
         self._dynamic_occupancy = occ
+        self._object_tiles = {(o['row'], o['col']) for o in self.objects}
+        self._pathfind_budget = self._PATHFIND_BUDGET_PER_FRAME
+
+    def _occupancy_register(self, monster):
+        """Re-index a monster in the occupancy snapshot after it moved.
+
+        Clears exactly the tiles it was last registered under (tracked on the
+        monster, since a moving box's tile span changes as it drifts off-grid)
+        and re-adds its current ones. Keeping the index exact - rather than only
+        rebuilding once per frame - lets collision checks read it directly, so
+        monsters that move earlier in a frame still block those that move later.
+        """
+        occ = self._dynamic_occupancy
+        for t in monster.get('_occ_tiles', ()):
+            bucket = occ.get(t)
+            if not bucket:
+                continue
+            for i, m in enumerate(bucket):
+                if m is monster:
+                    bucket.pop(i)
+                    break
+            if not bucket:
+                del occ[t]
+        tiles = tuple(self._monster_footprint(monster))
+        for t in tiles:
+            occ.setdefault(t, []).append(monster)
+        monster['_occ_tiles'] = tiles
 
     def _footprint_open_fast(self, top_r, top_c, size, monster=None) -> bool:
         """Snapshot-based version of _footprint_enterable used by pathfinding."""
@@ -1267,16 +1421,17 @@ class RLDungeonGenerator:
             return False
         static = self._static_blocked or self._rebuild_static_blocked()
         occ = self._dynamic_occupancy
+        object_tiles = self._object_tiles
         for i in range(size):
             r = top_r + i
             static_row = static[r]
             for j in range(size):
                 c = top_c + j
-                if static_row[c]:
+                if static_row[c] or (r, c) in object_tiles:
                     return False
-                blocker = occ.get((r, c))
-                if blocker is not None and blocker is not monster:
-                    return False
+                for blocker in occ.get((r, c), ()):
+                    if blocker is not monster:
+                        return False
         return True
 
     def _footprint_reaches_player(self, top_r, top_c, size) -> bool:
@@ -1338,19 +1493,18 @@ class RLDungeonGenerator:
         if self._tile_overlaps_player(r, c):
             return False
 
-        # Use existing walkability check (pass through monster ignore so tile type is checked)
-        if not self.is_walkable(r, c, monster):
+        # Terrain: the cached grid marks walls and the base structure's door (which
+        # is walkable for the player only) as impassable to monsters.
+        static = self._static_blocked or self._rebuild_static_blocked()
+        if static[r][c]:
             return False
 
-        # The base structure's door is walkable for the player only; monsters can't pass.
-        if self.dungeon[r][c].tile_type == DungeonSqr.BASE_DOOR:
+        # Occupancy: an object, or another monster's footprint, already covers it.
+        # Read from the maintained index rather than scanning every entity.
+        if (r, c) in self._object_tiles:
             return False
-
-        # Check whether another monster's footprint already covers the tile
-        for m in self.monsters:
-            if m is monster:
-                continue
-            if self._monster_occupies(m, r, c):
+        for blocker in self._dynamic_occupancy.get((r, c), ()):
+            if blocker is not monster:
                 return False
 
         return True
@@ -1358,12 +1512,26 @@ class RLDungeonGenerator:
     def _can_move_monster_to(self, px, py, monster, radius=None):
         """Check if *monster* can place its top-left tile center at (px, py).
 
-        The whole N×N footprint anchored at the resulting top-left tile must be
-        enterable, so multi-tile monsters collide on their full bounding box.
+        Every tile the monster's pixel box would overlap must be enterable - not
+        just the tile under its anchor point. Without this a monster sitting near
+        a tile edge visually laps into the neighbouring wall or monster.
         """
-        top_c = int(px / self.tile_size)
-        top_r = int(py / self.tile_size)
-        return self._footprint_enterable(top_r, top_c, self._monster_size(monster), monster)
+        size = self._monster_size(monster)
+        r0, c0, r1, c1 = self._monster_tile_span(px, py, size)
+        if r0 < 0 or c0 < 0 or r1 >= self.height or c1 >= self.width:
+            return False
+        # Terrain, objects and the player are genuine tile-resolution blockers.
+        static = self._static_blocked or self._rebuild_static_blocked()
+        object_tiles = self._object_tiles
+        for r in range(r0, r1 + 1):
+            static_row = static[r]
+            for c in range(c0, c1 + 1):
+                if static_row[c] or (r, c) in object_tiles:
+                    return False
+                if self._tile_overlaps_player(r, c):
+                    return False
+        # Other monsters are compared box-to-box so they can stand side by side.
+        return not self._box_blocked_by_monster(px, py, size, monster)
 
     # Cap on BFS nodes explored per monster per frame, to bound pathfinding cost
     # when many monsters are alerted (or the player is far away behind walls).
@@ -1373,6 +1541,10 @@ class RLDungeonGenerator:
     # search that just failed is the most expensive thing a monster can do.
     _REPATH_INTERVAL = 0.30       # seconds between recomputes while chasing
     _REPATH_FAIL_INTERVAL = 1.50  # seconds before retrying an unreachable target
+    # Ceiling on path searches per frame. Without it, a crowd that all aggros on
+    # the same frame would search at once and cause a visible hitch; monsters over
+    # budget keep their previous route and are served on a following frame.
+    _PATHFIND_BUDGET_PER_FRAME = 12
 
     def _find_monster_next_step(self, monster):
         """Return the next top-left tile a monster should step toward to reach the
@@ -1515,7 +1687,8 @@ class RLDungeonGenerator:
                 # and must still honour its backoff, otherwise unreachable monsters
                 # would re-run the most expensive search every single frame.
                 monster['_repath_timer'] = monster.get('_repath_timer', 0.0) - delta_time
-                if monster['_repath_timer'] <= 0.0:
+                if monster['_repath_timer'] <= 0.0 and self._pathfind_budget > 0:
+                    self._pathfind_budget -= 1
                     monster['_next_step'] = self._find_monster_next_step(monster)
                     base = (self._REPATH_INTERVAL if monster['_next_step'] is not None
                             else self._REPATH_FAIL_INTERVAL)
@@ -1565,9 +1738,10 @@ class RLDungeonGenerator:
                     elif can_move_y:
                         monster['y'] += move_y
 
-                # Update integer tile coords
+                # Update integer tile coords, keeping the occupancy index in sync
                 monster['col'] = int(monster['x'] / self.tile_size)
                 monster['row'] = int(monster['y'] / self.tile_size)
+                self._occupancy_register(monster)
 
                 # Arrived at the queued step: expire the timer so the next frame
                 # plans the following one instead of idling until it runs out.
@@ -1820,16 +1994,31 @@ class RLDungeonGenerator:
                     'alerted': False,
                     'aggro_timer': 0.0,
                     'damage_aggro_timer': 0.0,
+                    # Stagger first path searches so a mass aggro spreads its cost
+                    # over several frames instead of spiking on one.
+                    # (`random` is the module here, shadowed by this scope's import.)
+                    '_repath_timer': random.random() * self._REPATH_INTERVAL,
+                    '_next_step': None,
                 })
 
     def place_objects(self):
         """Place static objects on walkable floor tiles."""
         import random
         current_level_name = self.get_current_level_name()
-        available = [
-            ot for ot in OBJECT_TYPES
-            if not ot.get('levels') or current_level_name in ot.get('levels', [])
-        ]
+        # Filter object types to those that list this level, capturing the
+        # per-level 'spawn_count' alongside each one. Entries in an object's
+        # `levels` list are dicts of {'name', 'spawn_count'}; an empty list means
+        # the object appears on any level using its 'default_spawn_count'.
+        available = []  # list of (object_type, spawn_count)
+        for ot in OBJECT_TYPES:
+            entries = ot.get('levels') or []
+            if not entries:
+                available.append((ot, ot.get('default_spawn_count', 0)))
+                continue
+            for entry in entries:
+                if entry.get('name') == current_level_name:
+                    available.append((ot, entry.get('spawn_count', 0)))
+                    break
         if not available:
             return
 
@@ -1845,8 +2034,8 @@ class RLDungeonGenerator:
         random.shuffle(walkable)
 
         pos_idx = 0
-        for ot in available:
-            count = min(ot['spawn_count'], len(walkable) - pos_idx)
+        for ot, spawn_count in available:
+            count = min(spawn_count, len(walkable) - pos_idx)
             for _ in range(count):
                 r, c = walkable[pos_idx]
                 self.objects.append({
@@ -2777,6 +2966,10 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
                         else:
                             # Fallback: draw red circle at the footprint center
                             pygame.draw.circle(screen, (255, 0, 0), (foot_cx, foot_cy), max(2, m_render_px // 4))
+
+                        # Outline the monster's hitbox (its N×N tile footprint) in red.
+                        pygame.draw.rect(screen, (255, 0, 0), (x, y, m_render_px, m_render_px),
+                                         max(1, dg.tile_size // 16))
 
                         # Draw alert indicator (centered above the footprint) if alerted
                         if monster.get('alerted'):
