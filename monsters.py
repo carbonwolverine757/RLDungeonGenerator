@@ -27,10 +27,10 @@ MONSTER_TYPES = [
         'levels': [
             {'name': 'Meadows', 'max_count': None},
         ],
-        'aggro_distance': 5.0,  # tiles
+        'aggro_distance': 500.0,  # tiles
         'aggro_time': 4.0,  # seconds monster stays aggroed after losing sight of player
         'damage_aggro_time': 10.0,  # seconds monster stays aggroed after taking damage
-        'movement_speed': 1.0,  # tiles per second
+        'movement_speed': 100.0,  # tiles per second
         'knockback_resistance': 0.7,  # 0-1; higher = less knockback
         'drops': [
             {'name': 'Boar Meat', 'drop_chance': 1.5},
@@ -47,10 +47,10 @@ MONSTER_TYPES = [
             {'name': 'Meadows', 'max_count': None},
             {'name': 'Black Forest', 'max_count': None},
         ],
-        'aggro_distance': 5.0,  # tiles
+        'aggro_distance': 500.0,  # tiles
         'aggro_time': 4.0,  # seconds monster stays aggroed after losing sight of player
         'damage_aggro_time': 10.0,  # seconds monster stays aggroed after taking damage
-        'movement_speed': 1.5,
+        'movement_speed': 100.5,
         'knockback_resistance': 0.5,  # 0-1; higher = less knockback
         'drops': [
             {'name': 'Resin', 'drop_chance': 1.0},

@@ -830,14 +830,8 @@ class RLDungeonGenerator:
         if new_row != self.player_row or new_col != self.player_col:
             self.player_row = new_row
             self.player_col = new_col
-            # If player stepped on the exit, generate a new map
-            try:
-                if self.dungeon[new_row][new_col].tile_type == DungeonSqr.EXIT:
-                    # Advance to next level configuration and regenerate
-                    self.advance_level()
-                    return
-            except Exception:
-                pass
+            # Standing on the exit no longer advances automatically: the renderer
+            # opens the level selection dialog while player_on_exit() is true.
 
             if (new_row, new_col) != self.last_revealed_tile:
                 self.last_revealed_tile = (new_row, new_col)
@@ -1796,12 +1790,25 @@ class RLDungeonGenerator:
         if not self.levels:
             self.generate_map()
             return
-        self.current_level_index = (self.current_level_index + 1) % len(self.levels)
-        self.apply_level(self.current_level_index)
-        # Restore health and stamina on level advancement
+        self.go_to_level(self.current_level_index + 1)
+
+    def go_to_level(self, index: int) -> None:
+        """Switch to the level at *index* and regenerate the map."""
+        if not self.levels:
+            self.generate_map()
+            return
+        self.apply_level(index % len(self.levels))
+        # Restore health and stamina on level change
         self.health = self.max_health
         self.stamina = self.max_stamina
         self.generate_map()
+
+    def player_on_exit(self) -> bool:
+        """True if the player is currently standing on an exit tile."""
+        try:
+            return self.dungeon[self.player_row][self.player_col].tile_type == DungeonSqr.EXIT
+        except Exception:
+            return False
 
     def get_current_level_name(self) -> str:
         """Get the name of the current level."""
@@ -1828,10 +1835,10 @@ class RLDungeonGenerator:
             self.exit_pos = None
             return
 
-        # Openspace maps: rooms[0] is the enclosed base structure the player
-        # spawns inside, so the exit goes out in the open field instead.
+        # Openspace maps: the exit sits in the bottom-left corner of the base
+        # structure the player spawns inside.
         if self.structure_bounds is not None:
-            self._place_exit_outside_structure()
+            self._place_exit_in_structure()
             return
 
         # Always use the first room (spawn point) as the exit room.
@@ -1863,33 +1870,22 @@ class RLDungeonGenerator:
         except Exception:
             self.exit_pos = None
 
-    def _place_exit_outside_structure(self):
-        """Place the exit on an open floor tile outside the central structure.
+    def _place_exit_in_structure(self):
+        """Place the exit on the bottom-left interior tile of the base structure.
 
-        Prefers a spot near the right edge aligned with the structure's door;
-        falls back to the first open floor tile found outside the structure.
+        ``structure_bounds`` includes the one-tile wall border, so the interior's
+        bottom-left corner is one tile in from each of those edges.
         """
         if self.structure_bounds is None:
             self.exit_pos = None
             return
-        sr0, _sc0, sr1, sc1 = self.structure_bounds
-        door_r = (sr0 + sr1) // 2
-        # Walk in from the right edge along the door's row for an open floor tile.
-        for c in range(self.width - 2, sc1, -1):
-            if (self.dungeon[door_r][c].tile_type == DungeonSqr.FLOOR
-                    and not self._in_structure(door_r, c)):
-                self.dungeon[door_r][c] = DungeonSqr(self.exit_glyph, DungeonSqr.EXIT)
-                self.exit_pos = (door_r, c)
-                return
-        # Fallback: any open floor tile outside the structure.
-        for r in range(self.height):
-            for c in range(self.width):
-                if (self.dungeon[r][c].tile_type == DungeonSqr.FLOOR
-                        and not self._in_structure(r, c)):
-                    self.dungeon[r][c] = DungeonSqr(self.exit_glyph, DungeonSqr.EXIT)
-                    self.exit_pos = (r, c)
-                    return
-        self.exit_pos = None
+        sr0, sc0, sr1, sc1 = self.structure_bounds
+        er, ec = sr1 - 1, sc0 + 1
+        if 0 <= er < self.height and 0 <= ec < self.width:
+            self.dungeon[er][ec] = DungeonSqr(self.exit_glyph, DungeonSqr.EXIT)
+            self.exit_pos = (er, ec)
+        else:
+            self.exit_pos = None
 
     def place_monsters(self):
         """Place monsters scattered across walkable areas of the map."""
@@ -2556,9 +2552,106 @@ def parse_start_level(dg: RLDungeonGenerator, start_level: str | None) -> int | 
     return None
 
 
+# --- In-game level selection dialog (shown while standing on an exit tile) ---
+LEVEL_DIALOG_BUTTON_HEIGHT = 26
+LEVEL_DIALOG_BUTTON_GAP = 6
+LEVEL_DIALOG_PAD = 10
+LEVEL_DIALOG_SCROLLBAR_W = 8
+
+
+def level_dialog_layout(screen, dg, scroll):
+    """Geometry for the in-game level dialog.
+
+    Returns ``(dialog, content, buttons, scroll, max_scroll, track, knob)`` where
+    *buttons* is a list of ``(rect, level_index)`` for the rows currently in view
+    and *track*/*knob* are None when the list fits without scrolling. Drawing and
+    hit-testing both go through this so their geometry can never diverge.
+    """
+    sw, sh = screen.get_size()
+    # One quarter of the screen wide, half of it tall, centered.
+    dialog = pygame.Rect(0, 0, max(1, sw // 4), max(1, sh // 2))
+    dialog.center = (sw // 2, sh // 2)
+
+    pad = LEVEL_DIALOG_PAD
+    content = pygame.Rect(
+        dialog.x + pad,
+        dialog.y + pad,
+        max(1, dialog.w - pad * 2 - LEVEL_DIALOG_SCROLLBAR_W - 4),
+        max(1, dialog.h - pad * 2),
+    )
+
+    step = LEVEL_DIALOG_BUTTON_HEIGHT + LEVEL_DIALOG_BUTTON_GAP
+    count = len(dg.levels)
+    total = max(0, count * step - LEVEL_DIALOG_BUTTON_GAP)
+    max_scroll = max(0, total - content.h)
+    scroll = max(0, min(int(scroll), max_scroll))
+
+    buttons = []
+    for i in range(count):
+        top = content.y + i * step - scroll
+        if top + LEVEL_DIALOG_BUTTON_HEIGHT <= content.y or top >= content.bottom:
+            continue  # scrolled out of view
+        buttons.append((pygame.Rect(content.x, top, content.w, LEVEL_DIALOG_BUTTON_HEIGHT), i))
+
+    track = knob = None
+    if max_scroll > 0:
+        track = pygame.Rect(dialog.right - pad - LEVEL_DIALOG_SCROLLBAR_W,
+                            content.y, LEVEL_DIALOG_SCROLLBAR_W, content.h)
+        knob_h = max(20, int(content.h * content.h / total))
+        knob_y = track.y + int((track.h - knob_h) * scroll / max_scroll)
+        knob = pygame.Rect(track.x, knob_y, track.w, knob_h)
+
+    return dialog, content, buttons, scroll, max_scroll, track, knob
+
+
+def _fit_text(font, text, max_w):
+    """Truncate *text* with an ellipsis so it fits within *max_w* pixels."""
+    if max_w <= 0 or font.size(text)[0] <= max_w:
+        return text
+    for cut in range(len(text) - 1, 0, -1):
+        candidate = text[:cut] + '...'
+        if font.size(candidate)[0] <= max_w:
+            return candidate
+    return ''
+
+
+def draw_level_dialog(screen, dg, font, scroll):
+    """Draw the level dialog over the map. Returns the clamped scroll offset."""
+    dialog, content, buttons, scroll, _max_scroll, track, knob = level_dialog_layout(screen, dg, scroll)
+
+    # Black panel with a blue border.
+    pygame.draw.rect(screen, (0, 0, 0), dialog)
+    pygame.draw.rect(screen, (40, 120, 255), dialog, 3)
+
+    mouse = pygame.mouse.get_pos()
+    prev_clip = screen.get_clip()
+    screen.set_clip(content)
+    for rect, i in buttons:
+        name = dg.levels[i].get('name', f'Level {i}')
+        is_current = (i == dg.current_level_index)
+        label = f'{name} - You are here' if is_current else name
+        if is_current:
+            color = (120, 120, 120)  # dimmed: this one does nothing when clicked
+        elif rect.collidepoint(mouse):
+            color = (235, 235, 235)
+        else:
+            color = (200, 200, 200)
+        pygame.draw.rect(screen, color, rect)
+        text = _fit_text(font, label, rect.w - 8)
+        surf = font.render(text, True, (20, 20, 20))
+        screen.blit(surf, surf.get_rect(center=rect.center))
+    screen.set_clip(prev_clip)
+
+    if track is not None and knob is not None:
+        pygame.draw.rect(screen, (35, 35, 35), track)
+        pygame.draw.rect(screen, (170, 170, 170), knob)
+
+    return scroll
+
+
 def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_menu: bool = False, start_level: str | None = None) -> None:
     import os
-    
+
     if pygame is None:
         info = (
             f"pygame is not installed or failed to import.\n"
@@ -2656,6 +2749,8 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
         popup_font = pygame.font.SysFont('consolas', max(10, dg.tile_size // 2), bold=True)
     except Exception:
         popup_font = pygame.font.SysFont(None, max(10, dg.tile_size // 2))
+    # Fixed-size font for the level dialog (independent of zoom/tile size)
+    level_dialog_font = pygame.font.SysFont('consolas', 13)
     glyph_cache = {}
     # Keep initial view size in tiles fixed; tile size will change on window resize
     init_view_w = min(20, dg.width)
@@ -2674,6 +2769,10 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
     held_directions = []
     shift_held = False
     inventory_open = False
+    # In-game level dialog: shown while the player stands on an exit tile.
+    level_dialog_open = False
+    level_dialog_scroll = 0
+    level_dialog_drag = None  # grab offset within the scrollbar knob while dragging
 
     selected_level_idx = None
     if dg.levels:
@@ -3130,6 +3229,15 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
                     screen.blit(outline, (cx + dx, cy + dy))
                 screen.blit(count_surf, (cx, cy))
 
+        # Level selection dialog, drawn last so it sits on top of the HUD. It is
+        # open exactly while the player stands on the exit, so stepping off closes it.
+        level_dialog_open = bool(dg.levels) and dg.player_on_exit()
+        if level_dialog_open:
+            level_dialog_scroll = draw_level_dialog(screen, dg, level_dialog_font, level_dialog_scroll)
+        else:
+            level_dialog_scroll = 0
+            level_dialog_drag = None
+
         pygame.display.flip()
         # Update window title with current level
         pygame.display.set_caption(f"RLDungeonGenerator - {dg.get_current_level_name()}")
@@ -3138,8 +3246,44 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+            elif event.type == pygame.MOUSEWHEEL and level_dialog_open:
+                # Scroll the level list (one button per notch); layout clamps it.
+                step = LEVEL_DIALOG_BUTTON_HEIGHT + LEVEL_DIALOG_BUTTON_GAP
+                level_dialog_scroll = level_dialog_layout(
+                    screen, dg, level_dialog_scroll - event.y * step)[3]
+            elif event.type == pygame.MOUSEBUTTONUP:
+                if event.button == 1:
+                    level_dialog_drag = None
+            elif event.type == pygame.MOUSEMOTION and level_dialog_drag is not None:
+                # Dragging the scrollbar knob maps mouse Y onto the scroll range.
+                _d, _c, _b, _s, max_scroll, track, knob = level_dialog_layout(screen, dg, level_dialog_scroll)
+                if track is not None and knob is not None and track.h > knob.h:
+                    rel = (event.pos[1] - level_dialog_drag - track.y) / (track.h - knob.h)
+                    level_dialog_scroll = int(max(0.0, min(1.0, rel)) * max_scroll)
             elif event.type == pygame.MOUSEBUTTONDOWN:
-                if event.button == 1:  # Left click
+                dialog_hit = False
+                if level_dialog_open and event.button == 1:
+                    dialog, content, buttons, level_dialog_scroll, _ms, track, knob = level_dialog_layout(
+                        screen, dg, level_dialog_scroll)
+                    # A click anywhere inside the dialog is consumed, so it never
+                    # falls through to an attack on the map underneath.
+                    dialog_hit = dialog.collidepoint(event.pos)
+                    if dialog_hit:
+                        if knob is not None and knob.collidepoint(event.pos):
+                            level_dialog_drag = event.pos[1] - knob.y
+                        elif track is not None and track.collidepoint(event.pos):
+                            level_dialog_drag = knob.h // 2 if knob is not None else 0
+                        else:
+                            for rect, i in buttons:
+                                if rect.collidepoint(event.pos) and content.collidepoint(event.pos):
+                                    # The current level's button is inert.
+                                    if i != dg.current_level_index:
+                                        dg.go_to_level(i)
+                                        held_directions.clear()
+                                        level_dialog_scroll = 0
+                                        level_dialog_drag = None
+                                    break
+                if not dialog_hit and event.button == 1:  # Left click
                     target = dg.screen_to_tile(event.pos[0], event.pos[1], cam_tx, cam_ty, offset_x - ox, offset_y - oy, view_w + 1, view_h + 1)
                     if target is not None:
                         tr, tc = target

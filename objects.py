@@ -17,7 +17,7 @@ OBJECT_TYPES = [
         'glyph_index': 7 * 32 + 14,  # Row 7, Column 14
         'levels': [
             {'name': 'Meadows', 'spawn_count': 20},
-            {'name': 'Black Forest', 'spawn_count': 20},
+            {'name': 'Black Forest', 'spawn_count': 625},
         ],
         'display_size': 2,  # renders as 2×2 tiles, centered on anchor tile
     },
