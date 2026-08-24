@@ -32,6 +32,10 @@ BASE_WALL_GLYPH_INDEX = 7 * 32 + 14
 # Base Door: row 7, col 13 -> 237 (walkable for the player, blocked for monsters)
 BASE_DOOR_GLYPH_INDEX = 7 * 32 + 13
 
+# Log every spawn tick's outcome (see update_spawning). The per-type failure reason is
+# what distinguishes a quiet map that is merely tuned sparse from one that is broken.
+SPAWN_DEBUG = False
+
 # Visual tuning (higher contrast)
 # - Walls vs floors are differentiated primarily by background color.
 # - Fog-of-war is rendered much darker than explored tiles.
@@ -252,6 +256,25 @@ class RLDungeonGenerator:
         self.inventory = {}
         # Monsters list (each monster is a dict with 'type', 'row', 'col', 'health')
         self.monsters = []
+        # --- Runtime monster spawning (see update_spawning) ---
+        # Elapsed *gameplay* seconds on the current map. Driven by delta_time rather
+        # than the wall clock, so a stall (breakpoint, window drag, alt-tab) doesn't
+        # bank spawn progress and dump one of every type the instant play resumes.
+        self._spawn_clock = 0.0
+        # Seconds accumulated toward the next spawn tick.
+        self._spawn_tick_accumulator = 0.0
+        # Monster name -> the _spawn_clock value of that type's last *successful*
+        # spawn. Global per type, so at most one of a type can appear per
+        # 'spawn_interval'. Absent means "never spawned on this map", which is always
+        # eligible - that is what lets a spawn_interval of 0 fire on the first tick.
+        self._spawn_last_time = {}
+        # Monster name -> how many have ever been spawned on this map. Only consulted
+        # for types with 'respawns': False, which are finished once they hit max_count.
+        self._spawn_totals = {}
+        # (chunk_row, chunk_col) -> [(row, col), ...] anchors whose terrain permits a
+        # spawn. Built lazily once per map; None means "not built yet".
+        self._spawn_chunk_tiles = None
+        self._spawn_warned_no_chunks = False
         # Objects list (each object is a dict with 'type', 'row', 'col', 'health')
         self.objects = []
         # Equipped weapon (defaults to first weapon in WEAPONS)
@@ -518,8 +541,25 @@ class RLDungeonGenerator:
         self.structure_bounds = None  # Reset central structure (openspace only)
         self._static_blocked = None   # Terrain changed; rebuild the pathfinding cache
         self._dynamic_occupancy = {}
+        # Stale entries would otherwise survive into the new map: _object_tiles is only
+        # ever rebuilt by _begin_monster_frame, which doesn't run while the map has no
+        # monsters - and maps now start empty.
+        self._object_tiles = set()
         self.monsters = []  # Reset monsters list
         self.objects = []   # Reset objects list
+        # Reset the runtime spawner. The chunk cache is left unbuilt rather than built
+        # here: exit_pos and structure_bounds aren't assigned until place_exit() and
+        # generate_openspace_map() run further down, so it has to be built lazily on
+        # first use.
+        self._spawn_clock = 0.0
+        self._spawn_last_time = {}
+        self._spawn_totals = {}
+        self._spawn_chunk_tiles = None
+        self._spawn_warned_no_chunks = False
+        # Prime the accumulator so the first tick fires on the first frame instead of
+        # _SPAWN_TICK_INTERVAL seconds in; types with spawn_interval 0 then appear
+        # immediately rather than after a visible delay.
+        self._spawn_tick_accumulator = self._SPAWN_TICK_INTERVAL
         # Recreate dungeon filled with walls
         self.dungeon = []
         for h in range(self.height):
@@ -544,8 +584,8 @@ class RLDungeonGenerator:
         self.place_exit()
         # Place the player and reveal nearby area
         self.spawn_player()
-        # Place monsters scattered across the map
-        self.place_monsters()
+        # No monsters are placed here: the map starts empty and is populated over time
+        # by update_spawning(), which the render loop ticks every frame.
         # Place static objects across the map
         self.place_objects()
         self.reveal_current_area()
@@ -1540,6 +1580,32 @@ class RLDungeonGenerator:
     # budget keep their previous route and are served on a following frame.
     _PATHFIND_BUDGET_PER_FRAME = 12
 
+    # --- Runtime spawning (see update_spawning) ---
+    # Gameplay seconds between spawn ticks. Every eligible type is evaluated on each
+    # tick; a type's own 'spawn_interval' decides how often it may actually spawn.
+    _SPAWN_TICK_INTERVAL = 4.0
+    # Side length in tiles of a spawn "chunk". Chunk index is (row // N, col // N).
+    _SPAWN_CHUNK_SIZE = 10
+    # Chunks within this Chebyshev chunk distance of the player's own chunk never
+    # spawn, so nothing ever materialises in view. The nearest eligible anchor is a
+    # chunk offset of 2 away, i.e. at least 11 tiles - which clears the fixed 20x12
+    # viewport (half-extents 10 and 6). Raising init_view_w past 22 would break that
+    # invariant and this would have to go to 2.
+    _SPAWN_EXCLUSION_CHUNK_RADIUS = 1
+    # Ceiling on candidate anchors tested per spawn attempt. Only reached when nothing
+    # can fit anywhere; an open map almost always succeeds on the first candidate. A
+    # full sweep of a jammed 150x80 map measures ~3ms, this caps it at ~0.1ms. Giving up
+    # early is indistinguishable from any other failed attempt: the type simply retries
+    # on the next tick, and a false "nowhere to spawn" needs a map >98% blocked before
+    # it is even likely.
+    _SPAWN_MAX_LOCATION_TESTS = 400
+    # Fallbacks for a monster type whose 'levels' list is empty ("appears everywhere").
+    # A real cap matters here: an uncapped type under a runtime spawner would fill the
+    # map forever.
+    _SPAWN_DEFAULT_INTERVAL = 30.0
+    _SPAWN_DEFAULT_CHANCE = 1.0
+    _SPAWN_DEFAULT_MAX_COUNT = 10
+
     def _find_monster_next_step(self, monster):
         """Return the next top-left tile a monster should step toward to reach the
         player, or None to approach directly.
@@ -1887,115 +1953,287 @@ class RLDungeonGenerator:
         else:
             self.exit_pos = None
 
-    def place_monsters(self):
-        """Place monsters scattered across walkable areas of the map."""
-        self.monsters = []
-        
-        # Get current level name
-        current_level_name = self.get_current_level_name()
-        
-        # Filter monster types to those that list this level, capturing the
-        # per-level 'max_count' cap alongside each one. Entries in a monster's
-        # `levels` list are dicts of {'name', 'max_count'}; an empty list means
-        # the monster can appear on any level with no cap.
-        available_monster_types = []  # list of (monster_type, max_count)
+    def _monster_types_for_level(self, level_name=None):
+        """Monster types eligible for a level, each paired with its level entry.
+
+        Entries in a monster's `levels` list are dicts of {'name', 'max_count',
+        'spawn_interval', 'spawn_chance'}. The whole entry is returned rather than just
+        the cap because the spawn timing keys live on the entry, not on the type - a
+        monster can be common in one biome and rare in another.
+
+        An empty `levels` list means the monster appears on every level, in which case a
+        synthetic entry built from the spawner defaults stands in. A real cap matters
+        there: an uncapped type under a runtime spawner would fill the map forever.
+        """
+        if level_name is None:
+            level_name = self.get_current_level_name()
+        available = []  # list of (monster_type, level_entry)
         for mt in MONSTER_TYPES:
             entries = mt.get('levels') or []
             if not entries:
-                available_monster_types.append((mt, None))
+                available.append((mt, {
+                    'name': level_name,
+                    'max_count': self._SPAWN_DEFAULT_MAX_COUNT,
+                    'spawn_interval': self._SPAWN_DEFAULT_INTERVAL,
+                    'spawn_chance': self._SPAWN_DEFAULT_CHANCE,
+                }))
                 continue
             for entry in entries:
-                if entry.get('name') == current_level_name:
-                    available_monster_types.append((mt, entry.get('max_count')))
+                if entry.get('name') == level_name:
+                    available.append((mt, entry))
                     break
+        return available
 
-        if not available_monster_types:
-            return  # No monsters available for this level
-        
-        # Determine number of monsters based on map size (roughly 1 monster per 50 tiles)
-        num_monsters = max(1, (self.width * self.height) // 50)
-        
-        # Collect all walkable positions (excluding player and exit positions)
-        walkable_positions = []
+    def _build_spawn_chunks(self):
+        """Index every tile a monster could ever be anchored on, bucketed by chunk.
+
+        Only terrain-static facts are baked in - passable tile type, not the exit tile,
+        not the central base structure - because all three are fixed for the lifetime of
+        a map. Objects, monsters and the player are destructible or mobile, so those are
+        re-tested on every spawn attempt instead.
+
+        Passability is read from the pathfinding cache rather than `is_walkable`, which
+        accepts BASE_DOOR: the base door is walkable for the player but not for monsters.
+        """
+        size = self._SPAWN_CHUNK_SIZE
+        static = self._static_blocked
+        if (static is None or len(static) != self.height
+                or (self.height and len(static[0]) != self.width)):
+            static = self._rebuild_static_blocked()
+        exit_pos = self.exit_pos
+        chunks = {}
         for r in range(self.height):
+            blocked_row = static[r]
+            chunk_r = r // size
             for c in range(self.width):
-                if (self.is_walkable(r, c) and (r, c) != (self.player_row, self.player_col)
-                        and (r, c) != self.exit_pos and not self._in_structure(r, c)):
-                    walkable_positions.append((r, c))
-        
-        # Randomly select positions for monsters and ensure every available
-        # monster type appears at least once. Also prefer at least two
-        # monsters on the map when possible.
-        if len(walkable_positions) > 0:
-            import random
-            max_positions = len(walkable_positions)
-            # Ensure we have room to place all monster types at least once
-            desired = max(num_monsters, len(available_monster_types))
-            # Prefer at least two monsters for variety
-            desired = max(desired, 2)
-            desired = min(desired, max_positions)
+                if blocked_row[c]:
+                    continue
+                if exit_pos is not None and (r, c) == exit_pos:
+                    continue
+                if self._in_structure(r, c):
+                    continue
+                chunks.setdefault((chunk_r, c // size), []).append((r, c))
+        self._spawn_chunk_tiles = chunks
+        return chunks
 
-            # Build the sequence of types to place: one of each first, then random
-            # fill. A type is only eligible while it is under its per-level
-            # 'max_count' (None = uncapped), so e.g. a boss capped at 1 spawns once
-            # instead of filling the map at the area-based density.
-            types_to_place = []
-            placed_counts = {}
+    def _eligible_spawn_chunks(self):
+        """Chunk keys that may host a spawn right now: every chunk holding spawnable
+        terrain except the player's own chunk and its eight neighbours.
 
-            def _under_cap(entry):
-                mt, cap = entry
-                return cap is None or placed_counts.get(mt['name'], 0) < cap
+        Recomputed every tick so the exclusion ring follows the player around the map.
+        """
+        chunks = self._spawn_chunk_tiles
+        if chunks is None:
+            chunks = self._build_spawn_chunks()
+        size = self._SPAWN_CHUNK_SIZE
+        pr = self.player_row // size
+        pc = self.player_col // size
+        radius = self._SPAWN_EXCLUSION_CHUNK_RADIUS
+        return [key for key in chunks
+                if abs(key[0] - pr) > radius or abs(key[1] - pc) > radius]
 
-            def _take(entry):
-                mt = entry[0]
-                types_to_place.append(mt)
-                placed_counts[mt['name']] = placed_counts.get(mt['name'], 0) + 1
+    def _footprint_spawnable_fast(self, top_r, top_c, size) -> bool:
+        """Snapshot-based equivalent of `_footprint_spawnable`.
 
-            for entry in available_monster_types:
-                if _under_cap(entry):
-                    _take(entry)
-            while len(types_to_place) < desired:
-                eligible = [e for e in available_monster_types if _under_cap(e)]
-                if not eligible:
-                    break  # every type has reached its cap
-                _take(random.choice(eligible))
+        Same acceptance rule - in bounds, passable terrain, clear of objects, monsters,
+        the exit and the base structure - but reads the O(1) occupancy index instead of
+        `is_walkable`'s linear scan over every monster and object, so it is safe to call
+        hundreds of times inside a single spawn search.
 
-            # Shuffle candidate anchors and place each monster at the first anchor
-            # whose full N×N footprint fits (clear of walls, the player, the exit,
-            # the central structure, and monsters already placed this pass).
-            random.shuffle(walkable_positions)
-            self.monsters = []
-            cursor = 0
-            for mt in types_to_place:
-                size = max(1, int(mt.get('size', 1)))
-                anchor = None
-                # Scan forward from the cursor for a fitting anchor.
-                for offset in range(len(walkable_positions)):
-                    r, c = walkable_positions[(cursor + offset) % len(walkable_positions)]
-                    if self._footprint_spawnable(r, c, size):
-                        anchor = (r, c)
-                        cursor = (cursor + offset + 1) % len(walkable_positions)
-                        break
-                if anchor is None:
-                    continue  # no room for this monster's footprint; skip it
-                ar, ac = anchor
-                self.monsters.append({
-                    'type': mt,
-                    'row': ar,
-                    'col': ac,
-                    'health': mt['health'],
-                    # Pixel center of the top-left footprint tile (smooth movement).
-                    'x': (ac + 0.5) * self.tile_size,
-                    'y': (ar + 0.5) * self.tile_size,
-                    'alerted': False,
-                    'aggro_timer': 0.0,
-                    'damage_aggro_timer': 0.0,
-                    # Stagger first path searches so a mass aggro spreads its cost
-                    # over several frames instead of spiking on one.
-                    # (`random` is the module here, shadowed by this scope's import.)
-                    '_repath_timer': random.random() * self._REPATH_INTERVAL,
-                    '_next_step': None,
-                })
+        The exit and structure tests are repeated per footprint tile because the chunk
+        cache only filters the *anchor*: a 4x4 monster anchored on a legal tile can still
+        overlap either. A 1x1 monster needs no such re-check.
+        """
+        if not self._footprint_open_fast(top_r, top_c, size):
+            return False
+        if size == 1:
+            return True  # the anchor itself was already filtered by _build_spawn_chunks
+        for i in range(size):
+            for j in range(size):
+                r, c = top_r + i, top_c + j
+                if self.exit_pos is not None and (r, c) == self.exit_pos:
+                    return False
+                if self._in_structure(r, c):
+                    return False
+        return True
+
+    def _find_spawn_location(self, monster_type, chunks):
+        """Pick a legal anchor for *monster_type*, or None if there is nowhere to put it.
+
+        Chunks are visited from a random offset and each chunk's tiles likewise, so the
+        first legal anchor found is an effectively random one without enumerating every
+        option - on an open map the first candidate almost always wins. The cyclic scan
+        mirrors the anchor search the old place_monsters used, and avoids copying a
+        hundred-element list per chunk just to shuffle it.
+
+        Returning None is a normal outcome, not an error: the caller treats it as a
+        failed attempt and retries on the next tick.
+        """
+        if not chunks:
+            return None
+        size = max(1, int(monster_type.get('size', 1)))
+        all_tiles = self._spawn_chunk_tiles
+        if all_tiles is None:
+            all_tiles = self._build_spawn_chunks()
+        tested = 0
+        chunk_start = randrange(len(chunks))
+        for k in range(len(chunks)):
+            tiles = all_tiles.get(chunks[(chunk_start + k) % len(chunks)])
+            if not tiles:
+                continue
+            tile_start = randrange(len(tiles))
+            for n in range(len(tiles)):
+                r, c = tiles[(tile_start + n) % len(tiles)]
+                if self._footprint_spawnable_fast(r, c, size):
+                    return (r, c)
+                tested += 1
+                if tested >= self._SPAWN_MAX_LOCATION_TESTS:
+                    return None  # treat as "nowhere to spawn"; retry next tick
+        return None
+
+    def _spawn_monster(self, monster_type, row, col):
+        """Create one live monster anchored at (row, col) and return it."""
+        monster = {
+            'type': monster_type,
+            'row': row,
+            'col': col,
+            'health': monster_type['health'],
+            # Pixel center of the top-left footprint tile (smooth movement).
+            'x': (col + 0.5) * self.tile_size,
+            'y': (row + 0.5) * self.tile_size,
+            'alerted': False,
+            'aggro_timer': 0.0,
+            'damage_aggro_timer': 0.0,
+            # Stagger first path searches so a mass aggro spreads its cost over several
+            # frames instead of spiking on one.
+            '_repath_timer': random() * self._REPATH_INTERVAL,
+            '_next_step': None,
+        }
+        self.monsters.append(monster)
+        # Index it immediately: later attempts on this same tick, and every collision
+        # check until the next _begin_monster_frame, read this snapshot rather than the
+        # monsters list, so an unregistered monster would be invisible to both.
+        self._occupancy_register(monster)
+        return monster
+
+    def update_spawning(self, delta_time):
+        """Run the real-time monster spawner.
+
+        Called every frame; does real work once every `_SPAWN_TICK_INTERVAL` seconds of
+        gameplay time. On each tick every monster type eligible for the current level
+        gets one independent attempt, gated in order by its global `spawn_interval`, the
+        `respawns` flag, the live `max_count`, a `spawn_chance` roll, and finally the
+        search for a legal anchor outside the 3x3 chunk ring around the player.
+
+        Only a successful spawn restarts a type's interval. A failed roll, a map already
+        at its cap, or a map with nowhere to put the monster all leave the timer alone,
+        so the type simply tries again on the next tick.
+        """
+        self._spawn_clock += delta_time
+        self._spawn_tick_accumulator += delta_time
+        if self._spawn_tick_accumulator < self._SPAWN_TICK_INTERVAL:
+            return
+        # Subtract rather than zero so the long-run cadence stays exact. Both render
+        # loops clamp delta_time to 0.1s, so the overshoot can never be large enough to
+        # have queued up a second tick.
+        self._spawn_tick_accumulator -= self._SPAWN_TICK_INTERVAL
+
+        available = self._monster_types_for_level()
+        if not available:
+            return
+
+        # Refresh the terrain/occupancy snapshot. update_monsters returns early while
+        # the map has no monsters, so without this the first searches on a new map would
+        # read the *previous* map's index. Doing it here also keeps this method correct
+        # regardless of whether or when update_monsters runs.
+        self._begin_monster_frame()
+
+        now = self._spawn_clock
+        # One pass for every type's live count, rather than rescanning per type.
+        counts = {}
+        for m in self.monsters:
+            name = m.get('type', {}).get('name')
+            counts[name] = counts.get(name, 0) + 1
+
+        chunks = None  # built only if some type gets as far as needing a location
+        for mt, entry in available:
+            name = mt.get('name')
+
+            # 1. Interval. Absent from the dict means "never spawned here" => eligible,
+            #    which is what makes a spawn_interval of 0 fire on the very first tick.
+            last = self._spawn_last_time.get(name)
+            interval = float(entry.get('spawn_interval', self._SPAWN_DEFAULT_INTERVAL))
+            if last is not None and now - last < interval:
+                if SPAWN_DEBUG:
+                    print(f"[Spawn] t={now:6.1f} {name}: interval "
+                          f"({now - last:.1f}/{interval:.1f}s)")
+                continue
+
+            max_count = entry.get('max_count', self._SPAWN_DEFAULT_MAX_COUNT)
+
+            # 2. One-off types (bosses) are finished once they have been spawned
+            #    max_count times on this map, even after the player kills them.
+            if (max_count is not None and not mt.get('respawns', True)
+                    and self._spawn_totals.get(name, 0) >= max_count):
+                if SPAWN_DEBUG:
+                    print(f"[Spawn] t={now:6.1f} {name}: respawns=False, already spawned")
+                continue
+
+            # 3. Live cap. Failing here does not reset the timer, so killing one lets a
+            #    replacement arrive on the next tick.
+            if max_count is not None and counts.get(name, 0) >= max_count:
+                if SPAWN_DEBUG:
+                    print(f"[Spawn] t={now:6.1f} {name}: cap ({counts.get(name, 0)}/{max_count})")
+                continue
+
+            # 4. Chance roll, deliberately *before* the location search. A spawn happens
+            #    iff the roll passes and a location exists; conjunction commutes, the
+            #    search is read-only, and both failure branches are indistinguishable to
+            #    any caller - so testing the cheap one first is free.
+            chance = float(entry.get('spawn_chance', self._SPAWN_DEFAULT_CHANCE))
+            if not (random() < chance):
+                if SPAWN_DEBUG:
+                    print(f"[Spawn] t={now:6.1f} {name}: roll failed (p={chance})")
+                continue
+
+            # 5. Location.
+            if chunks is None:
+                chunks = self._eligible_spawn_chunks()
+                if not chunks and not self._spawn_warned_no_chunks:
+                    self._spawn_warned_no_chunks = True
+                    print("[Spawn] No chunks lie outside the player's exclusion ring; "
+                          f"nothing can spawn on a {self.width}x{self.height} map.")
+            spot = self._find_spawn_location(mt, chunks)
+            if spot is None:
+                if SPAWN_DEBUG:
+                    print(f"[Spawn] t={now:6.1f} {name}: no location")
+                continue
+
+            self._spawn_monster(mt, spot[0], spot[1])
+            counts[name] = counts.get(name, 0) + 1
+            self._spawn_totals[name] = self._spawn_totals.get(name, 0) + 1
+            self._spawn_last_time[name] = now
+            if SPAWN_DEBUG:
+                pr = self.player_row // self._SPAWN_CHUNK_SIZE
+                pc = self.player_col // self._SPAWN_CHUNK_SIZE
+                chunk = (spot[0] // self._SPAWN_CHUNK_SIZE, spot[1] // self._SPAWN_CHUNK_SIZE)
+                print(f"[Spawn] t={now:6.1f} {name} at {spot} chunk {chunk} "
+                      f"player chunk {(pr, pc)} live={counts[name]}/{max_count}")
+
+    def debug_force_spawn(self, type_name=None):
+        """Immediately spawn one of each eligible type (or just *type_name*), ignoring
+        intervals, caps and chance. Manual testing only; exercises the same machinery
+        the real tick uses so it can't drift out of sync with it."""
+        self._begin_monster_frame()
+        chunks = self._eligible_spawn_chunks()
+        spawned = []
+        for mt, _entry in self._monster_types_for_level():
+            if type_name is not None and mt.get('name') != type_name:
+                continue
+            spot = self._find_spawn_location(mt, chunks)
+            if spot is not None:
+                spawned.append(self._spawn_monster(mt, spot[0], spot[1]))
+        return spawned
 
     def place_objects(self):
         """Place static objects on walkable floor tiles."""
@@ -2156,6 +2394,8 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
                 delta_time = 0.1
 
             dg.update_movement(delta_time, (0.0, 0.0))
+            # Runtime monster spawning: maps generate empty and are populated here.
+            dg.update_spawning(delta_time)
             # Update monster AI/movement after player moves
             dg.update_monsters(delta_time)
             # Frame-based held-key single-pixel movement: if any directions are held,
@@ -2815,6 +3055,11 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
                 dg.update_movement(delta_time, (mdx, mdy))
         else:
             dg.update_movement(delta_time, (0.0, 0.0))
+
+        # Runtime monster spawning: maps generate empty and are populated here. Runs
+        # before update_monsters so anything spawned this frame is already indexed and
+        # gets its AI update immediately.
+        dg.update_spawning(delta_time)
 
         # Update monsters (aggro & movement)
         dg.update_monsters(delta_time)
