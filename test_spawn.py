@@ -156,7 +156,12 @@ check(dg._spawn_chunk_tiles is None, "chunk cache invalidated for the new map")
 check(len(dg.monsters) == 0, "new map starts empty")
 bf = run(dg, 450)  # measured mean time-to-cap is ~260s, max ~292s over 12 trials
 bfnames = {n for _, n, _, _ in bf}
-check(bfnames == {'Greyling'}, f"only Greylings in Black Forest (got {bfnames})")
+# Derived from the roster rather than hardcoded, so adding a monster to a level
+# doesn't break the test that nothing spawns *outside* its configured levels.
+bf_roster = {mt['name'] for mt in M.MONSTER_TYPES
+             if any(lv['name'] == 'Black Forest' for lv in mt['levels'])}
+check(bfnames <= bf_roster, f"only the Black Forest roster spawns there (got {bfnames - bf_roster} extra)")
+check(bfnames == bf_roster, f"the whole Black Forest roster spawns (missing {bf_roster - bfnames})")
 live = sum(1 for m in dg.monsters if m['type']['name'] == 'Greyling')
 check(live == 24, f"Black Forest Greyling cap 24 reached (got {live})")
 objtiles = {(o['row'], o['col']) for o in dg.objects}

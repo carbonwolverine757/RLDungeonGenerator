@@ -11,7 +11,14 @@
         * By level (random distribution)
         * Spawner-like (set frequency within biome, max spawns per map)
         * By chunk (spawn frequency per chunk, max spawns for chunk and for map)
+            * Enemy spawn in groups, spawn locations on certain maps (CoH-like)
             
+
+            TEST CRAFTING AND NEW MONSTERS
+            Add art to tilesheet
+
+
+
     * Damage :
         Slash
             **Physical**

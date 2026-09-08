@@ -13,4 +13,11 @@ DROPS = [
     {'name': 'Leather Scraps', 'glyph': 10 * 32 + 0},  # Row 10, Column 0
     {'name': 'Resin', 'glyph': 10 * 32 + 3},           # Row 10, Column 3 (art TBD)
     {'name': 'Wood', 'glyph': 10 * 32 + 2},            # Row 10, Column 2 (art TBD)
+    # Crafting materials. Recipes in Recipes.py spend these; the monsters that
+    # yield them are tiered by biome (Neck/Meadows, Skeleton/Black Forest,
+    # Draugr/Swamps) so the better materials arrive with the later levels.
+    {'name': 'Stone', 'glyph': 10 * 32 + 4},           # Row 10, Column 4 (art TBD)
+    {'name': 'Flint', 'glyph': 10 * 32 + 5},           # Row 10, Column 5 (art TBD)
+    {'name': 'Bronze', 'glyph': 10 * 32 + 6},          # Row 10, Column 6 (art TBD)
+    {'name': 'Iron', 'glyph': 10 * 32 + 7},            # Row 10, Column 7 (art TBD)
 ]

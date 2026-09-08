@@ -31,6 +31,10 @@ BASE_FLOOR_GLYPH_INDEX = 7 * 32 + 15
 BASE_WALL_GLYPH_INDEX = 7 * 32 + 14
 # Base Door: row 7, col 13 -> 237 (walkable for the player, blocked for monsters)
 BASE_DOOR_GLYPH_INDEX = 7 * 32 + 13
+# Workbench: row 7, col 12 -> 236. Sits in the top-right interior corner of the
+# base structure; clicking it from within 2 tiles opens the crafting menu.
+# Blocks movement like a wall. (Art TBD: this cell shows the placeholder glyph.)
+WORKBENCH_GLYPH_INDEX = 7 * 32 + 12
 
 # Log every spawn tick's outcome (see update_spawning). The per-type failure reason is
 # what distinguishes a quiet map that is merely tuned sparse from one that is broken.
@@ -101,8 +105,22 @@ except Exception:
     except Exception:
         DROPS = []
 
+# Crafting recipe definitions live in `Recipes.py`
+try:
+    from .Recipes import RECIPES
+except Exception:
+    try:
+        from Recipes import RECIPES
+    except Exception:
+        RECIPES = []
+
 # Lookup from drop name -> glyph (tileset index) for rendering dropped items.
 DROP_GLYPHS = {d['name']: d.get('glyph') for d in DROPS}
+# Same, for weapons, which reach the inventory by being crafted.
+WEAPON_GLYPHS = {w['name']: w.get('glyph') for w in WEAPONS}
+# Anything that can occupy an inventory slot: dropped materials and crafted
+# weapons alike. add_item() resolves an item's icon through this.
+ITEM_GLYPHS = {**DROP_GLYPHS, **WEAPON_GLYPHS}
 
 # Player level configurations live in `player levels.py` (space in filename requires importlib)
 try:
@@ -187,6 +205,9 @@ class DungeonSqr:
     EXIT = 'exit'
     # Door of the central base structure: walkable for the player, blocked for monsters.
     BASE_DOOR = 'base_door'
+    # Crafting station in the base structure. Not walkable by anything; the
+    # player interacts with it by clicking it from up to 2 tiles away.
+    WORKBENCH = 'workbench'
     
     def __init__(self, glyph: str, tile_type: str = 'wall'):
         self.glyph = glyph
@@ -231,6 +252,9 @@ class RLDungeonGenerator:
         # Bounds (r0, c0, r1, c1) of the central base structure, or None when absent.
         # Includes the wall border; used to keep monsters/objects out.
         self.structure_bounds = None
+        # Workbench position (row, col) inside the base structure, or None when
+        # the level has no base structure.
+        self.workbench_pos = None
         # Pathfinding acceleration structures (see _begin_monster_frame).
         # _static_blocked caches impassable terrain for the current map;
         # _dynamic_occupancy maps tile -> occupying monster/object for this frame.
@@ -413,6 +437,15 @@ class RLDungeonGenerator:
         self.structure_bounds = (sr0, sc0, sr1, sc1)
         self.rooms.append(Room(ir0, ic0, interior, interior))
 
+        # Workbench in the top-right interior corner, diagonally opposite the
+        # exit that _place_exit_in_structure puts in the bottom-left one.
+        wr, wc = ir0, ic1
+        if 0 <= wr < self.height and 0 <= wc < self.width:
+            self.dungeon[wr][wc] = DungeonSqr(chr(WORKBENCH_GLYPH_INDEX), DungeonSqr.WORKBENCH)
+            self.workbench_pos = (wr, wc)
+        else:
+            self.workbench_pos = None
+
     def _in_structure(self, r, c) -> bool:
         """Return True if (r, c) lies within the central base structure footprint."""
         if not self.structure_bounds:
@@ -539,6 +572,7 @@ class RLDungeonGenerator:
         self.leaves = []
         self.rooms = []
         self.structure_bounds = None  # Reset central structure (openspace only)
+        self.workbench_pos = None     # Lives in the structure, so it goes with it
         self._static_blocked = None   # Terrain changed; rebuild the pathfinding cache
         self._dynamic_occupancy = {}
         # Stale entries would otherwise survive into the new map: _object_tiles is only
@@ -1120,13 +1154,81 @@ class RLDungeonGenerator:
             if random() < (chance - quantity):
                 quantity += 1  # fractional part: chance of one extra
             if quantity > 0:
-                slot = self.inventory.get(name)
-                if slot is None:
-                    # Glyph comes from the drop definition in Drops.py, keyed by name.
-                    self.inventory[name] = {'count': quantity, 'glyph': DROP_GLYPHS.get(name)}
-                else:
-                    slot['count'] += quantity
+                self.add_item(name, quantity)
                 print(f"You obtained {quantity} {name}.")
+
+    def add_item(self, name, count=1):
+        """Add *count* of *name* to the inventory, creating its slot if needed.
+
+        The glyph comes from ITEM_GLYPHS, which covers both drops (Drops.py) and
+        weapons (weapons.py), so crafted gear gets an icon just like a drop does.
+        A new slot lands at the end of the dict, and insertion order is what
+        orders the inventory grid.
+        """
+        if not name or count <= 0:
+            return
+        slot = self.inventory.get(name)
+        if slot is None:
+            self.inventory[name] = {'count': count, 'glyph': ITEM_GLYPHS.get(name)}
+        else:
+            slot['count'] += count
+
+    def remove_item(self, name, count=1):
+        """Remove up to *count* of *name*, dropping the slot when it empties.
+
+        Returns the number actually removed, which is less than *count* only
+        when the player did not have that many.
+        """
+        if not name or count <= 0:
+            return 0
+        slot = self.inventory.get(name)
+        if slot is None:
+            return 0
+        removed = min(count, slot['count'])
+        slot['count'] -= removed
+        if slot['count'] <= 0:
+            # Drop the slot entirely rather than leaving a zero-count entry, so
+            # the inventory grid doesn't fill with empty icons.
+            del self.inventory[name]
+        return removed
+
+    def item_count(self, name):
+        """How many of *name* the player is carrying (0 when absent)."""
+        slot = self.inventory.get(name)
+        return slot['count'] if slot else 0
+
+    def is_workbench_in_reach(self, r, c) -> bool:
+        """True if (r, c) is the workbench and the player is within 2 tiles of it.
+
+        Distance is Chebyshev, so the whole 5x5 block around the bench counts —
+        which is most of the base structure's interior.
+        """
+        if self.workbench_pos is None or (r, c) != self.workbench_pos:
+            return False
+        return max(abs(self.player_row - r), abs(self.player_col - c)) <= 2
+
+    def can_craft(self, index) -> bool:
+        """True if the player holds every ingredient of RECIPES[*index*]."""
+        if index is None or not (0 <= index < len(RECIPES)):
+            return False
+        return all(self.item_count(cost['Name']) >= cost['Count']
+                   for cost in RECIPES[index].get('Crafting Cost', []))
+
+    def craft_recipe(self, index) -> bool:
+        """Spend a recipe's Crafting Cost and add its Crafted Item to the inventory.
+
+        Returns True when the craft happened. An unaffordable recipe changes
+        nothing and returns False, so costs can never go negative.
+        """
+        if not self.can_craft(index):
+            return False
+        recipe = RECIPES[index]
+        for cost in recipe.get('Crafting Cost', []):
+            self.remove_item(cost['Name'], cost['Count'])
+        for product in recipe.get('Crafted Item', []):
+            self.add_item(product['Name'], product['Count'])
+            print(f"You crafted {product['Count']} {product['Name']}.")
+        return True
 
     def _award_xp(self, xp_value):
         if xp_value <= 0:
@@ -2889,6 +2991,148 @@ def draw_level_dialog(screen, dg, font, scroll):
     return scroll
 
 
+CRAFT_DIALOG_PAD = 12
+CRAFT_DIALOG_BUTTON_HEIGHT = 30
+CRAFT_DIALOG_BUTTON_GAP = 6
+CRAFT_BUTTON_W = 62
+CRAFT_BUTTON_H = 22
+# The crafting panel and its recipe buttons, the buttons a shade lighter.
+CRAFT_DIALOG_BG = (70, 70, 70)
+CRAFT_DIALOG_BORDER = (40, 120, 255)
+CRAFT_RECIPE_BG = (100, 100, 100)
+CRAFT_RECIPE_BG_HOVER = (120, 120, 120)
+CRAFT_TEXT_AFFORDABLE = (255, 255, 255)
+CRAFT_TEXT_MISSING = (220, 60, 60)
+
+
+def _craft_recipe_lines(recipe):
+    """Rows of the expanded recipe body, top to bottom.
+
+    Each entry is ``(name, count, is_cost)``; a ``None`` entry is the blank line
+    separating the Crafting Cost block from the Crafted Item block. Layout and
+    drawing both walk this so their line counts can never disagree.
+    """
+    lines = []
+    lines.extend((c['Name'], c['Count'], True) for c in recipe.get('Crafting Cost', []))
+    lines.append(None)
+    lines.extend((p['Name'], p['Count'], False) for p in recipe.get('Crafted Item', []))
+    return lines
+
+
+def crafting_dialog_layout(screen, font, expanded):
+    """Geometry for the crafting dialog.
+
+    Returns ``(dialog, content, buttons, craft_button)`` where *buttons* is a
+    list of ``(rect, recipe_index)`` and *craft_button* is the Craft button's
+    rect, or None when no recipe is expanded. Drawing and hit-testing both go
+    through this so their geometry can never diverge.
+    """
+    sw, sh = screen.get_size()
+    # A large panel, sitting slightly down and to the left of screen center.
+    dialog = pygame.Rect(0, 0, max(1, sw * 2 // 5), max(1, sh * 2 // 3))
+    dialog.center = (sw // 2 - sw // 12, sh // 2 + sh // 12)
+
+    pad = CRAFT_DIALOG_PAD
+    content = pygame.Rect(
+        dialog.x + pad,
+        dialog.y + pad,
+        max(1, dialog.w - pad * 2),
+        max(1, dialog.h - pad * 2),
+    )
+
+    line_h = font.get_linesize()
+    buttons = []
+    craft_button = None
+    top = content.y
+    for i, recipe in enumerate(RECIPES):
+        if i == expanded:
+            # The body starts halfway up the button, so the button has to be
+            # twice the height of everything below that midpoint. Deriving it
+            # from the recipe keeps the Craft button clear of the last line
+            # however many ingredients a recipe has.
+            below = len(_craft_recipe_lines(recipe)) * line_h + pad + CRAFT_BUTTON_H
+            height = max(CRAFT_DIALOG_BUTTON_HEIGHT, 2 * below)
+        else:
+            height = CRAFT_DIALOG_BUTTON_HEIGHT
+        rect = pygame.Rect(content.x, top, content.w, height)
+        buttons.append((rect, i))
+        if i == expanded:
+            craft_button = pygame.Rect(
+                rect.x + pad, rect.bottom - pad - CRAFT_BUTTON_H,
+                CRAFT_BUTTON_W, CRAFT_BUTTON_H)
+        top += height + CRAFT_DIALOG_BUTTON_GAP
+
+    return dialog, content, buttons, craft_button
+
+
+def draw_crafting_dialog(screen, dg, font, bold_font, tile_surfaces, expanded):
+    """Draw the crafting menu over the map."""
+    dialog, content, buttons, craft_button = crafting_dialog_layout(screen, font, expanded)
+
+    # Gray panel with a blue border.
+    pygame.draw.rect(screen, CRAFT_DIALOG_BG, dialog)
+    pygame.draw.rect(screen, CRAFT_DIALOG_BORDER, dialog, 3)
+
+    mouse = pygame.mouse.get_pos()
+    pad = CRAFT_DIALOG_PAD
+    line_h = font.get_linesize()
+    prev_clip = screen.get_clip()
+    screen.set_clip(content)
+
+    for rect, i in buttons:
+        recipe = RECIPES[i]
+        hovered = rect.collidepoint(mouse) and content.collidepoint(mouse)
+        pygame.draw.rect(screen, CRAFT_RECIPE_BG_HOVER if hovered else CRAFT_RECIPE_BG, rect)
+
+        # Recipe name: bold white, aligned left, at the top of the button.
+        name = _fit_text(bold_font, recipe['Name'], rect.w - pad * 2)
+        name_surf = bold_font.render(name, True, (255, 255, 255))
+        if i == expanded:
+            screen.blit(name_surf, (rect.x + pad, rect.y + pad))
+        else:
+            screen.blit(name_surf, (rect.x + pad, rect.centery - name_surf.get_height() // 2))
+
+        if i != expanded:
+            continue
+
+        # Weapon glyph on the left, under the name.
+        glyph = ITEM_GLYPHS.get(recipe['Name'])
+        icon_y = rect.y + pad + name_surf.get_height() + pad
+        icon_size = min(48, max(16, rect.bottom - pad - CRAFT_BUTTON_H - pad - icon_y))
+        if (tile_surfaces is not None and glyph is not None
+                and 0 <= glyph < len(tile_surfaces)):
+            icon = pygame.transform.smoothscale(tile_surfaces[glyph], (icon_size, icon_size))
+            screen.blit(icon, (rect.x + pad, icon_y))
+
+        # Costs then products, starting at the horizontal and vertical middle.
+        # Names sit at the midpoint; counts are right-aligned to the button edge.
+        text_x = rect.centerx
+        text_y = rect.centery
+        for entry in _craft_recipe_lines(recipe):
+            if entry is None:
+                text_y += line_h  # blank line between costs and products
+                continue
+            item_name, count, is_cost = entry
+            # A cost the player cannot cover is red; products are always white.
+            color = CRAFT_TEXT_AFFORDABLE
+            if is_cost and dg.item_count(item_name) < count:
+                color = CRAFT_TEXT_MISSING
+            count_surf = font.render(str(count), True, color)
+            label = _fit_text(font, item_name,
+                              rect.right - pad - count_surf.get_width() - 8 - text_x)
+            screen.blit(font.render(label, True, color), (text_x, text_y))
+            screen.blit(count_surf, (rect.right - pad - count_surf.get_width(), text_y))
+            text_y += line_h
+
+        # Craft button: small and blue, in the bottom-left, with centered text.
+        if craft_button is not None:
+            pygame.draw.rect(screen, CRAFT_DIALOG_BORDER, craft_button)
+            craft_surf = font.render('Craft', True, (255, 255, 255))
+            screen.blit(craft_surf, craft_surf.get_rect(center=craft_button.center))
+
+    screen.set_clip(prev_clip)
+
+
 def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_menu: bool = False, start_level: str | None = None) -> None:
     import os
 
@@ -2991,6 +3235,9 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
         popup_font = pygame.font.SysFont(None, max(10, dg.tile_size // 2))
     # Fixed-size font for the level dialog (independent of zoom/tile size)
     level_dialog_font = pygame.font.SysFont('consolas', 13)
+    # Same for the crafting dialog; recipe names are drawn bold.
+    craft_font = pygame.font.SysFont('consolas', 13)
+    craft_bold_font = pygame.font.SysFont('consolas', 13, bold=True)
     glyph_cache = {}
     # Keep initial view size in tiles fixed; tile size will change on window resize
     init_view_w = min(20, dg.width)
@@ -3009,6 +3256,10 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
     held_directions = []
     shift_held = False
     inventory_open = False
+    # Crafting dialog: opened by clicking the workbench from within 2 tiles,
+    # closed by Esc or by walking out of range.
+    crafting_open = False
+    crafting_expanded = None  # index into RECIPES of the expanded recipe, or None
     # In-game level dialog: shown while the player stands on an exit tile.
     level_dialog_open = False
     level_dialog_scroll = 0
@@ -3206,6 +3457,12 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
                     bg = (0, 0, 0)
                     glyph = '+'
                 elif tile.tile_type == DungeonSqr.BASE_DOOR:  # base structure door
+                    fg = dg.color_floor_fg
+                    bg = dg.color_floor_bg
+                    glyph = ch
+                elif tile.tile_type == DungeonSqr.WORKBENCH:  # crafting station
+                    # Sits on the base's floor, so it takes the floor's colors
+                    # rather than falling through to the white-on-black default.
                     fg = dg.color_floor_fg
                     bg = dg.color_floor_bg
                     glyph = ch
@@ -3483,6 +3740,22 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
             level_dialog_scroll = 0
             level_dialog_drag = None
 
+        # Crafting dialog, drawn last so it sits above the level dialog and HUD.
+        # Walking more than 2 tiles from the bench closes it, mirroring the way
+        # stepping off the exit closes the level dialog.
+        # Also covers changing level with the menu open: the new map regenerates
+        # workbench_pos, so the bench this menu belongs to is simply gone.
+        if crafting_open and (dg.workbench_pos is None
+                              or not dg.is_workbench_in_reach(*dg.workbench_pos)):
+            crafting_open = False
+            crafting_expanded = None
+        if crafting_open and RECIPES:
+            draw_crafting_dialog(screen, dg, craft_font, craft_bold_font,
+                                 tile_surfaces, crafting_expanded)
+        else:
+            crafting_open = False
+            crafting_expanded = None
+
         pygame.display.flip()
         # Update window title with current level
         pygame.display.set_caption(f"RLDungeonGenerator - {dg.get_current_level_name()}")
@@ -3528,9 +3801,30 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
                                         level_dialog_scroll = 0
                                         level_dialog_drag = None
                                     break
+                if crafting_open and not dialog_hit and event.button == 1:
+                    c_dialog, c_content, c_buttons, c_craft = crafting_dialog_layout(
+                        screen, craft_font, crafting_expanded)
+                    # As with the level dialog, a click anywhere inside is
+                    # consumed so it never falls through to an attack.
+                    dialog_hit = c_dialog.collidepoint(event.pos)
+                    if dialog_hit:
+                        # Craft first: the button sits inside the expanded
+                        # recipe's rect, which would otherwise collapse it.
+                        if c_craft is not None and c_craft.collidepoint(event.pos):
+                            dg.craft_recipe(crafting_expanded)
+                        else:
+                            for rect, i in c_buttons:
+                                if rect.collidepoint(event.pos) and c_content.collidepoint(event.pos):
+                                    # Clicking the expanded recipe collapses it.
+                                    crafting_expanded = None if crafting_expanded == i else i
+                                    break
                 if not dialog_hit and event.button == 1:  # Left click
                     target = dg.screen_to_tile(event.pos[0], event.pos[1], cam_tx, cam_ty, offset_x - ox, offset_y - oy, view_w + 1, view_h + 1)
-                    if target is not None:
+                    if target is not None and dg.is_workbench_in_reach(*target):
+                        # Close enough to use the bench: craft instead of attack.
+                        crafting_open = True
+                        crafting_expanded = None
+                    elif target is not None:
                         tr, tc = target
                         # Trace a line of tiles from player to clicked tile and look
                         # for the first monster on that ray. If found, retarget
@@ -3563,7 +3857,13 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
                         dg.perform_attack(tr, tc)
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
-                    running = False
+                    # Esc closes the crafting menu first, and only quits the
+                    # game when there is no menu to dismiss.
+                    if crafting_open:
+                        crafting_open = False
+                        crafting_expanded = None
+                    else:
+                        running = False
                 elif event.key == pygame.K_LSHIFT or event.key == pygame.K_RSHIFT:
                     shift_held = True
                     dg.player_speed_pixels = 7.0 * dg.tile_size
