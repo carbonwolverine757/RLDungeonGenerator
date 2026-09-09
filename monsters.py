@@ -46,7 +46,7 @@ MONSTER_TYPES = [
             # map reaches its 12 in about three minutes.
             {'name': 'Meadows', 'max_count': 12, 'spawn_interval': 12.0, 'spawn_chance': 0.6},
         ],
-        'aggro_distance': 500.0,  # tiles
+        'aggro_distance': 5.0,  # tiles
         'aggro_time': 4.0,  # seconds monster stays aggroed after losing sight of player
         'damage_aggro_time': 10.0,  # seconds monster stays aggroed after taking damage
         'movement_speed': 1.0,  # tiles per second
@@ -67,14 +67,16 @@ MONSTER_TYPES = [
             # Their home biome: arrive faster and pack in three times as thick.
             {'name': 'Black Forest', 'max_count': 24, 'spawn_interval': 8.0, 'spawn_chance': 0.75},
         ],
-        'aggro_distance': 500.0,  # tiles
+        'aggro_distance': 5.0,  # tiles
         'aggro_time': 4.0,  # seconds monster stays aggroed after losing sight of player
         'damage_aggro_time': 10.0,  # seconds monster stays aggroed after taking damage
         'movement_speed': 1.5,
         'knockback_resistance': 0.5,  # 0-1; higher = less knockback
         'drops': [
             {'name': 'Resin', 'drop_chance': 1.0},
-            {'name': 'Wood', 'drop_chance': 0.5},
+            {'name': 'Wood', 'drop_chance': 10.5},
+            {'name': 'Flint', 'drop_chance': 10.0},
+            {'name': 'Stone', 'drop_chance': 10.0},
         ],
     },
     {
@@ -88,7 +90,7 @@ MONSTER_TYPES = [
         'levels': [
             {'name': 'Meadows', 'max_count': 10, 'spawn_interval': 14.0, 'spawn_chance': 0.6},
         ],
-        'aggro_distance': 500.0,  # tiles
+        'aggro_distance': 5.0,  # tiles
         'aggro_time': 4.0,  # seconds monster stays aggroed after losing sight of player
         'damage_aggro_time': 10.0,  # seconds monster stays aggroed after taking damage
         'movement_speed': 2.0,  # skittish: the fastest thing in the Meadows
@@ -108,7 +110,7 @@ MONSTER_TYPES = [
         'levels': [
             {'name': 'Black Forest', 'max_count': 10, 'spawn_interval': 14.0, 'spawn_chance': 0.6},
         ],
-        'aggro_distance': 500.0,  # tiles
+        'aggro_distance': 5.0,  # tiles
         'aggro_time': 4.0,  # seconds monster stays aggroed after losing sight of player
         'damage_aggro_time': 10.0,  # seconds monster stays aggroed after taking damage
         'movement_speed': 1.2,
@@ -127,7 +129,7 @@ MONSTER_TYPES = [
         'levels': [
             {'name': 'Swamps', 'max_count': 10, 'spawn_interval': 14.0, 'spawn_chance': 0.6},
         ],
-        'aggro_distance': 500.0,  # tiles
+        'aggro_distance': 5.0,  # tiles
         'aggro_time': 4.0,  # seconds monster stays aggroed after losing sight of player
         'damage_aggro_time': 10.0,  # seconds monster stays aggroed after taking damage
         'movement_speed': 1.3,

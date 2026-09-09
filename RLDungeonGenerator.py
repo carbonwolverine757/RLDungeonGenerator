@@ -121,6 +121,12 @@ WEAPON_GLYPHS = {w['name']: w.get('glyph') for w in WEAPONS}
 # Anything that can occupy an inventory slot: dropped materials and crafted
 # weapons alike. add_item() resolves an item's icon through this.
 ITEM_GLYPHS = {**DROP_GLYPHS, **WEAPON_GLYPHS}
+# Lookup from weapon name -> its definition, for resolving what is equipped.
+WEAPONS_BY_NAME = {w['name']: w for w in WEAPONS}
+# The weapon attacks fall back to whenever nothing is equipped. It is never an
+# inventory item, so it can't be equipped or unequipped by the player.
+UNARMED_NAME = 'Unarmed'
+UNARMED_WEAPON = WEAPONS_BY_NAME.get(UNARMED_NAME) or (WEAPONS[0] if WEAPONS else None)
 
 # Player level configurations live in `player levels.py` (space in filename requires importlib)
 try:
@@ -301,8 +307,10 @@ class RLDungeonGenerator:
         self._spawn_warned_no_chunks = False
         # Objects list (each object is a dict with 'type', 'row', 'col', 'health')
         self.objects = []
-        # Equipped weapon (defaults to first weapon in WEAPONS)
-        self.equipped_weapon = WEAPONS[0] if WEAPONS else None
+        # Name of the equipped weapon, or None when the player is unarmed. The
+        # weapon itself is resolved through the `equipped_weapon` property, which
+        # falls back to Unarmed. Right-clicking an inventory slot toggles this.
+        self.equipped_weapon_name = None
         # Active attack effects (visual only)
         self.attack_effects = []  # each entry: {'tiles': set((r,c)), 'expires_at': float}
         # Damage popups (visual feedback for damage dealt)
@@ -1196,6 +1204,42 @@ class RLDungeonGenerator:
         """How many of *name* the player is carrying (0 when absent)."""
         slot = self.inventory.get(name)
         return slot['count'] if slot else 0
+
+    @property
+    def equipped_weapon(self):
+        """The weapon attacks use: whatever is equipped, else Unarmed.
+
+        Equipping is a property of an inventory item, so a weapon that has left
+        the inventory counts as unequipped rather than staying in hand.
+        """
+        name = self.equipped_weapon_name
+        if name is None or name not in self.inventory:
+            return UNARMED_WEAPON
+        return WEAPONS_BY_NAME.get(name, UNARMED_WEAPON)
+
+    def is_weapon_item(self, name) -> bool:
+        """True if the inventory item *name* is a weapon the player can equip."""
+        return name in WEAPONS_BY_NAME and name != UNARMED_NAME
+
+    def is_equipped(self, name) -> bool:
+        """True if *name* is the weapon currently in hand."""
+        return name is not None and name == self.equipped_weapon_name and name in self.inventory
+
+    def toggle_equipped_weapon(self, name) -> bool:
+        """Equip the weapon *name*, or unequip it if it is already equipped.
+
+        Equipping replaces whatever was in hand, since only one weapon can be
+        held at a time. Returns True if the equipped weapon changed.
+        """
+        if not self.is_weapon_item(name) or name not in self.inventory:
+            return False
+        if self.equipped_weapon_name == name:
+            self.equipped_weapon_name = None
+            print(f"You unequipped the {name}.")
+        else:
+            self.equipped_weapon_name = name
+            print(f"You equipped the {name}.")
+        return True
 
     def is_workbench_in_reach(self, r, c) -> bool:
         """True if (r, c) is the workbench and the player is within 2 tiles of it.
@@ -2991,6 +3035,47 @@ def draw_level_dialog(screen, dg, font, scroll):
     return scroll
 
 
+INV_SLOT_SIZE = 48
+INV_SLOT_PAD = 3
+INV_MARGIN = 8
+INV_COLS = 8
+INV_ROWS_OPEN = 4  # hotbar row plus three storage rows
+INV_SLOT_BG = (30, 30, 30)
+INV_SLOT_BORDER = (110, 110, 110)
+# The equipped weapon's slot, so it reads as in-hand at a glance.
+INV_SLOT_EQUIPPED_BG = (120, 190, 235)
+INV_SLOT_EQUIPPED_BORDER = (200, 235, 255)
+
+
+def inventory_layout(dg, offset_x, offset_y, inventory_open):
+    """Geometry for the inventory panel.
+
+    Returns a list of ``(rect, item_name, row, col)`` for every slot on screen.
+    *item_name* is None for the hotbar row and for empty storage slots. Drawing
+    and right-click hit-testing both go through this so their geometry can never
+    diverge.
+
+    Drops and crafted weapons fill the storage grid (every slot below the hotbar
+    row), one slot per distinct item, ordered left-to-right then top-to-bottom.
+    Insertion order in the inventory dict is what orders them.
+    """
+    inv_items = list(dg.inventory.items())
+    slots = []
+    for row in range(INV_ROWS_OPEN if inventory_open else 1):
+        for col in range(INV_COLS):
+            rect = pygame.Rect(
+                offset_x + INV_MARGIN + col * (INV_SLOT_SIZE + INV_SLOT_PAD),
+                offset_y + INV_MARGIN + row * (INV_SLOT_SIZE + INV_SLOT_PAD),
+                INV_SLOT_SIZE, INV_SLOT_SIZE)
+            name = None
+            if row > 0:
+                storage_idx = (row - 1) * INV_COLS + col
+                if storage_idx < len(inv_items):
+                    name = inv_items[storage_idx][0]
+            slots.append((rect, name, row, col))
+    return slots
+
+
 CRAFT_DIALOG_PAD = 12
 CRAFT_DIALOG_BUTTON_HEIGHT = 30
 CRAFT_DIALOG_BUTTON_GAP = 6
@@ -3688,48 +3773,38 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
         screen.blit(lvl_surf, lvl_rect)
 
         # Draw inventory (hotbar always; full inventory when inventory_open)
-        INV_SLOT_SIZE = 48
-        INV_SLOT_PAD = 3
-        INV_MARGIN = 8
-        INV_COLS = 8
         inv_slot_font = pygame.font.SysFont('consolas', 10)
         inv_count_font = pygame.font.SysFont('consolas', 16, bold=True)
-        inv_rows = 4 if inventory_open else 1
-        # Drops fill the storage grid (every slot below the hotbar row), one slot
-        # per distinct item, ordered left-to-right then top-to-bottom starting at
-        # the top-left storage slot. Insertion order in the inventory dict is used.
-        inv_items = list(dg.inventory.items())
-        for row in range(inv_rows):
-            for col in range(INV_COLS):
-                sx = offset_x + INV_MARGIN + col * (INV_SLOT_SIZE + INV_SLOT_PAD)
-                sy = offset_y + INV_MARGIN + row * (INV_SLOT_SIZE + INV_SLOT_PAD)
-                pygame.draw.rect(screen, (30, 30, 30), (sx, sy, INV_SLOT_SIZE, INV_SLOT_SIZE))
-                pygame.draw.rect(screen, (110, 110, 110), (sx, sy, INV_SLOT_SIZE, INV_SLOT_SIZE), 1)
-                if row == 0:
-                    num_surf = inv_slot_font.render(str(col + 1), True, (180, 180, 180))
-                    screen.blit(num_surf, (sx + INV_SLOT_SIZE - num_surf.get_width() - 2, sy + 2))
-                    continue
-                # Storage slots (below the hotbar): draw the dropped item's glyph
-                # with its count centered along the bottom edge, over the glyph.
-                storage_idx = (row - 1) * INV_COLS + col
-                if storage_idx >= len(inv_items):
-                    continue
-                _name, data = inv_items[storage_idx]
-                glyph = data.get('glyph')
-                count = data.get('count', 0)
-                if (tile_surfaces is not None and glyph is not None
-                        and 0 <= glyph < len(tile_surfaces)):
-                    item_surf = pygame.transform.smoothscale(
-                        tile_surfaces[glyph], (INV_SLOT_SIZE, INV_SLOT_SIZE))
-                    screen.blit(item_surf, (sx, sy))
-                count_surf = inv_count_font.render(str(count), True, (255, 255, 255))
-                cx = sx + (INV_SLOT_SIZE - count_surf.get_width()) // 2
-                cy = sy + INV_SLOT_SIZE - count_surf.get_height() - 2
-                # Dark outline so the number stays readable over any glyph.
-                outline = inv_count_font.render(str(count), True, (0, 0, 0))
-                for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
-                    screen.blit(outline, (cx + dx, cy + dy))
-                screen.blit(count_surf, (cx, cy))
+        for rect, name, row, col in inventory_layout(dg, offset_x, offset_y, inventory_open):
+            # The equipped weapon's slot is light blue; everything else is dark.
+            equipped = dg.is_equipped(name)
+            pygame.draw.rect(screen, INV_SLOT_EQUIPPED_BG if equipped else INV_SLOT_BG, rect)
+            pygame.draw.rect(screen, INV_SLOT_EQUIPPED_BORDER if equipped else INV_SLOT_BORDER,
+                             rect, 2 if equipped else 1)
+            if row == 0:
+                num_surf = inv_slot_font.render(str(col + 1), True, (180, 180, 180))
+                screen.blit(num_surf, (rect.right - num_surf.get_width() - 2, rect.y + 2))
+                continue
+            # Storage slots (below the hotbar): draw the item's glyph with its
+            # count centered along the bottom edge, over the glyph.
+            if name is None:
+                continue
+            data = dg.inventory[name]
+            glyph = data.get('glyph')
+            count = data.get('count', 0)
+            if (tile_surfaces is not None and glyph is not None
+                    and 0 <= glyph < len(tile_surfaces)):
+                item_surf = pygame.transform.smoothscale(
+                    tile_surfaces[glyph], (INV_SLOT_SIZE, INV_SLOT_SIZE))
+                screen.blit(item_surf, rect.topleft)
+            count_surf = inv_count_font.render(str(count), True, (255, 255, 255))
+            cx = rect.x + (INV_SLOT_SIZE - count_surf.get_width()) // 2
+            cy = rect.bottom - count_surf.get_height() - 2
+            # Dark outline so the number stays readable over any glyph.
+            outline = inv_count_font.render(str(count), True, (0, 0, 0))
+            for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                screen.blit(outline, (cx + dx, cy + dy))
+            screen.blit(count_surf, (cx, cy))
 
         # Level selection dialog, drawn last so it sits on top of the HUD. It is
         # open exactly while the player stands on the exit, so stepping off closes it.
@@ -3780,6 +3855,16 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
                     level_dialog_scroll = int(max(0.0, min(1.0, rel)) * max_scroll)
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 dialog_hit = False
+                if event.button == 3:  # Right click
+                    # Right-clicking a weapon in the inventory equips it, or
+                    # unequips it when it is already in hand. Non-weapon items
+                    # and the hotbar row are inert; toggle_equipped_weapon
+                    # ignores anything that isn't an equippable weapon.
+                    for rect, name, row, _col in inventory_layout(
+                            dg, offset_x, offset_y, inventory_open):
+                        if row > 0 and name is not None and rect.collidepoint(event.pos):
+                            dg.toggle_equipped_weapon(name)
+                            break
                 if level_dialog_open and event.button == 1:
                     dialog, content, buttons, level_dialog_scroll, _ms, track, knob = level_dialog_layout(
                         screen, dg, level_dialog_scroll)
