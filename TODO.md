@@ -81,19 +81,157 @@
             **Damage Modifier Notes** : Some creatures can be resistant to certain sources of Pure damage.
     **NOTE** : Maybe damage should all just be immediate damage, and additional effects can come with it.
 
-* **Combat Mechancics : Spells/Powers/Abilities/Whatever**
-    Fire
-    Ice
-    Electricity
-    Force
-    Psychic
-    Earth
-    Water
-    Dark
-    Invulnerability
-    Regeneration
-    Ice Armor
-    Earth Armor
+* **Combat Mechancics : Skills**
+    **Fire Blast**
+        *Fire Bolt*
+            Damage: 10
+            Stamina Cost: 5
+            Range: 12
+            Area: 0.5
+            Angle: 360
+            Knockback: 0.5
+            Glyph: Row 23, Column 0
+            Background: #ff8d0a
+            Level Requirement: 1
+            Cooldown: 3
+        *Scorch*
+            Damage: 20
+            Stamina Cost: 8
+            Range: 18
+            Area: 0.5
+            Angle: 360
+            Knockback: 1
+            Glyph: Row 23, Column 1
+            Background: #ff8d0a
+            Level Requirement: 5
+            Cooldown: 5
+        *Fireball*
+            Damage: 10
+            Stamina Cost: 10
+            Range: 15
+            Area: 3
+            Angle: 360
+            Knockback: 0.5
+            Glyph: Row 23, Column 2
+            Background: #ff8d0a
+            Level Requirement: 10
+            Cooldown: 8
+        *Immolate*
+            Damage: 40
+            Stamina Cost: 12
+            Range: 15
+            Area: 0.5
+            Angle: 360
+            Knockback: 0.2
+            Glyph: Row 23, Column 3
+            Background: #ff8d0a
+            Level Requirement: 15
+            Cooldown: 12
+    **Ice Blast**
+        *Frost Bolt*
+            Damage: 10
+            Stamina Cost: 5
+            Range: 12
+            Area: 0.5
+            Angle: 360
+            Knockback: 0.5
+            Glyph: Row 23, Column 0
+            Background: #90eeff
+            Level Requirement: 1
+            Cooldown: 3
+        *Ice Shard*
+            Damage: 20
+            Stamina Cost: 8
+            Range: 18
+            Area: 0.5
+            Angle: 360
+            Knockback: 1
+            Glyph: Row 23, Column 1
+            Background: #90eeff
+            Level Requirement: 5
+            Cooldown: 5
+        *Frigid Blast*
+            Damage: 10
+            Stamina Cost: 10
+            Range: 0.1
+            Area: 9
+            Angle: 50
+            Knockback: 0.5
+            Glyph: Row 23, Column 4
+            Background: #90eeff
+            Level Requirement: 10
+            Cooldown: 8
+        *Ice Bolt*
+            Damage: 20
+            Stamina Cost: 12
+            Range: 0.1
+            Area: 12
+            Angle: 30
+            Knockback: 2
+            Glyph: Row 23, Column 5
+            Background: #90eeff
+            Level Requirement: 15
+            Cooldown: 12
+    **Electricity Blast**
+        *Zap*
+            Damage: 10
+            Stamina Cost: 5
+            Range: 12
+            Area: 0.5
+            Angle: 360
+            Knockback: 0.2
+            Glyph: Row 23, Column 0
+            Background: #5e6df0
+            Level Requirement: 1
+            Cooldown: 3
+        *Shocking Bolt*
+            Damage: 
+            Stamina Cost: 8
+            Range: 18
+            Area: 0.5
+            Angle: 360
+            Knockback: 0.2
+            Glyph: Row 23, Column 1
+            Background: #5e6df0
+            Level Requirement: 5
+            Cooldown: 5
+        *Static Discharge*
+            Damage: 
+            Stamina Cost: 10
+            Range: 12
+            Area: 30
+            Angle: 30
+            Knockback: 0.2
+            Glyph: Row 23, Column 4
+            Background: #5e6df0
+            Level Requirement: 10
+            Cooldown: 8
+        *Lightning Bolt*
+            Damage: 
+            Stamina Cost: 12
+            Range: 45
+            Area: 1.5
+            Angle: 360
+            Knockback: 0.5
+            Glyph: Row 23, Column 6
+            Background: #5e6df0
+            Level Requirement: 15
+            Cooldown: 12
+    **Energy Blast**
+    **Psychic Blast**
+    **Water Blast**
+    **Dark Blast**
+    **Storm Summoning**
+    **Fire Manipulation**
+    **Energy Manipulation**
+    **Gravity Manipulation**
+    **Earth Manipulation**
+    **Invulnerability**
+    **Regeneration**
+    **Ice Armor**
+    **Stone Armor**
+    **Psychic Armor**
+    **Fiery Aura**
 
 
 

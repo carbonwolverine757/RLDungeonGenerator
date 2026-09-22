@@ -44,12 +44,12 @@ MONSTER_TYPES = [
         'levels': [
             # One boar roughly every 15s (12s interval, then ~1 retry at 60%), so the
             # map reaches its 12 in about three minutes.
-            {'name': 'Meadows', 'max_count': 12, 'spawn_interval': 12.0, 'spawn_chance': 0.6},
+            {'name': 'Meadows', 'max_count': 120, 'spawn_interval': 4.0, 'spawn_chance': 0.6},
         ],
-        'aggro_distance': 5.0,  # tiles
+        'aggro_distance': 50.0,  # tiles
         'aggro_time': 4.0,  # seconds monster stays aggroed after losing sight of player
         'damage_aggro_time': 10.0,  # seconds monster stays aggroed after taking damage
-        'movement_speed': 1.0,  # tiles per second
+        'movement_speed': 5.0,  # tiles per second
         'knockback_resistance': 0.7,  # 0-1; higher = less knockback
         'drops': [
             {'name': 'Boar Meat', 'drop_chance': 1.5},
@@ -63,14 +63,14 @@ MONSTER_TYPES = [
         'size': 1,  # occupies a 1x1 block of tiles
         'xp_value': 18,
         'levels': [
-            {'name': 'Meadows', 'max_count': 8, 'spawn_interval': 16.0, 'spawn_chance': 0.5},
+            {'name': 'Meadows', 'max_count': 80, 'spawn_interval': 4.0, 'spawn_chance': 0.5},
             # Their home biome: arrive faster and pack in three times as thick.
-            {'name': 'Black Forest', 'max_count': 24, 'spawn_interval': 8.0, 'spawn_chance': 0.75},
+            {'name': 'Black Forest', 'max_count': 240, 'spawn_interval': 4.0, 'spawn_chance': 0.75},
         ],
-        'aggro_distance': 5.0,  # tiles
+        'aggro_distance': 50.0,  # tiles
         'aggro_time': 4.0,  # seconds monster stays aggroed after losing sight of player
         'damage_aggro_time': 10.0,  # seconds monster stays aggroed after taking damage
-        'movement_speed': 1.5,
+        'movement_speed': 5.5,
         'knockback_resistance': 0.5,  # 0-1; higher = less knockback
         'drops': [
             {'name': 'Resin', 'drop_chance': 1.0},
@@ -88,12 +88,12 @@ MONSTER_TYPES = [
         'size': 1,  # occupies a 1x1 block of tiles
         'xp_value': 15,
         'levels': [
-            {'name': 'Meadows', 'max_count': 10, 'spawn_interval': 14.0, 'spawn_chance': 0.6},
+            {'name': 'Meadows', 'max_count': 100, 'spawn_interval': 4.0, 'spawn_chance': 0.6},
         ],
-        'aggro_distance': 5.0,  # tiles
+        'aggro_distance': 50.0,  # tiles
         'aggro_time': 4.0,  # seconds monster stays aggroed after losing sight of player
         'damage_aggro_time': 10.0,  # seconds monster stays aggroed after taking damage
-        'movement_speed': 2.0,  # skittish: the fastest thing in the Meadows
+        'movement_speed': 6.0,  # skittish: the fastest thing in the Meadows
         'knockback_resistance': 0.3,  # 0-1; higher = less knockback
         'drops': [
             {'name': 'Flint', 'drop_chance': 1.0},
@@ -108,12 +108,12 @@ MONSTER_TYPES = [
         'size': 1,  # occupies a 1x1 block of tiles
         'xp_value': 45,
         'levels': [
-            {'name': 'Black Forest', 'max_count': 10, 'spawn_interval': 14.0, 'spawn_chance': 0.6},
+            {'name': 'Black Forest', 'max_count': 100, 'spawn_interval': 4.0, 'spawn_chance': 0.6},
         ],
-        'aggro_distance': 5.0,  # tiles
+        'aggro_distance': 50.0,  # tiles
         'aggro_time': 4.0,  # seconds monster stays aggroed after losing sight of player
         'damage_aggro_time': 10.0,  # seconds monster stays aggroed after taking damage
-        'movement_speed': 1.2,
+        'movement_speed': 5.2,
         'knockback_resistance': 0.4,  # 0-1; higher = less knockback
         'drops': [
             {'name': 'Bronze', 'drop_chance': 0.8},
@@ -127,12 +127,12 @@ MONSTER_TYPES = [
         'size': 1,  # occupies a 1x1 block of tiles
         'xp_value': 90,
         'levels': [
-            {'name': 'Swamps', 'max_count': 10, 'spawn_interval': 14.0, 'spawn_chance': 0.6},
+            {'name': 'Swamps', 'max_count': 100, 'spawn_interval': 4.0, 'spawn_chance': 0.6},
         ],
-        'aggro_distance': 5.0,  # tiles
+        'aggro_distance': 50.0,  # tiles
         'aggro_time': 4.0,  # seconds monster stays aggroed after losing sight of player
         'damage_aggro_time': 10.0,  # seconds monster stays aggroed after taking damage
-        'movement_speed': 1.3,
+        'movement_speed': 5.3,
         'knockback_resistance': 0.6,  # 0-1; higher = less knockback
         'drops': [
             {'name': 'Iron', 'drop_chance': 0.8},

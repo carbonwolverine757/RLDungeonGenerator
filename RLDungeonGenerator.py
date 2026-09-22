@@ -114,6 +114,15 @@ except Exception:
     except Exception:
         RECIPES = []
 
+# Skill definitions live in `skills.py`
+try:
+    from .skills import SKILLS
+except Exception:
+    try:
+        from skills import SKILLS
+    except Exception:
+        SKILLS = []
+
 # Lookup from drop name -> glyph (tileset index) for rendering dropped items.
 DROP_GLYPHS = {d['name']: d.get('glyph') for d in DROPS}
 # Same, for weapons, which reach the inventory by being crafted.
@@ -127,6 +136,9 @@ WEAPONS_BY_NAME = {w['name']: w for w in WEAPONS}
 # inventory item, so it can't be equipped or unequipped by the player.
 UNARMED_NAME = 'Unarmed'
 UNARMED_WEAPON = WEAPONS_BY_NAME.get(UNARMED_NAME) or (WEAPONS[0] if WEAPONS else None)
+# Lookup from skill name -> its definition, for resolving what a group refers to
+# and what the tray has activated.
+SKILLS_BY_NAME = {s['name']: s for s in SKILLS}
 
 # Player level configurations live in `player levels.py` (space in filename requires importlib)
 try:
@@ -143,6 +155,22 @@ try:
 except Exception:
     logging.warning("Failed to load player levels.py; using built-in fallback", exc_info=True)
     PLAYER_LEVELS = [{'level': i + 1, 'xp_needed': 50 * (i + 1) * (i + 2), 'health': 100 + i * 25} for i in range(200)]
+
+# Skill group definitions live in `skill groups.py` (space in filename requires importlib)
+try:
+    import importlib.util as _ilu
+    _sgspec = _ilu.spec_from_file_location(
+        "skill_groups",
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "skill groups.py")
+    )
+    if _sgspec is None or _sgspec.loader is None:
+        raise ImportError("Could not load skill groups.py")
+    _sgmod = _ilu.module_from_spec(_sgspec)
+    _sgspec.loader.exec_module(_sgmod)
+    SKILL_GROUPS = _sgmod.SKILL_GROUPS
+except Exception:
+    logging.warning("Failed to load skill groups.py; the skill menu will be empty", exc_info=True)
+    SKILL_GROUPS = []
 
 # Prefer tcod for alternative rendering when available (import after pygame to avoid SDL DLL conflicts)
 try:
@@ -273,6 +301,12 @@ class RLDungeonGenerator:
         self.health = self.max_health
         self.max_stamina = 100
         self.stamina = self.max_stamina
+        # Stamina refills once the player has gone stamina_regen_delay seconds
+        # without spending any. Spending restarts that wait (see perform_attack),
+        # so chain-attacking holds the bar flat while backing off refills it.
+        self.stamina_regen_per_second = 15.0
+        self.stamina_regen_delay = 1.0
+        self.stamina_regen_timer = 0.0  # counts down to 0, then stamina climbs
         # Player level / XP
         self.player_level = 1
         self.player_pips = 0           # filled pips (0–9)
@@ -281,6 +315,15 @@ class RLDungeonGenerator:
         self.player_level_display = 1
         self.player_pips_display = 0
         self.player_xp_display_fraction = 0.0
+        # Skills. A level-up grants one skill point; spending it in the skill
+        # menu raises that skill's proficiency, and proficiency > 0 is what makes
+        # a skill usable. active_skill_name is the skill the tray has armed for
+        # the next attack, and skill_cooldowns maps a skill name to the wall-clock
+        # time it becomes usable again (the same shape as attack_effects).
+        self.skill_points = 0
+        self.skill_proficiency = {}
+        self.active_skill_name = None
+        self.skill_cooldowns = {}
         # Player inventory: maps item name -> {'count': int, 'glyph': tileset index}.
         # Populated by monster drops; insertion order determines inventory slot order.
         self.inventory = {}
@@ -1014,10 +1057,21 @@ class RLDungeonGenerator:
         self.damage_popups = [p for p in self.damage_popups if p.get('expires_at', 0) > current_time]
 
     def perform_attack(self, target_row, target_col, weapon=None):
-        """Perform an attack aimed at the given tile."""
+        """Perform an attack aimed at the given tile.
+
+        Returns True when the attack went through, False when it fizzled for
+        want of stamina. perform_player_attack relies on that answer to decide
+        whether an armed skill has actually been spent.
+        """
         weapon = weapon or self.equipped_weapon
         if weapon is None:
-            return
+            return False
+
+        # Too tired to swing: the attack does not happen at all. This is the one
+        # gate on attacking, and it applies to weapons and skills alike.
+        cost = float(weapon.get('stamina_cost', 0) or 0)
+        if cost > 0 and getattr(self, 'stamina', 0) < cost:
+            return False
 
         target_center_row, target_center_col, dir_row, dir_col = self._resolve_attack_target(target_row, target_col, weapon)
         tiles = self._compute_attack_tiles(target_center_row, target_center_col, dir_row, dir_col, weapon)
@@ -1118,16 +1172,45 @@ class RLDungeonGenerator:
         except Exception:
             pass
 
-        # Deduct stamina if possible (does not block attacks)
+        # Deduct stamina. The gate at the top already proved the player can
+        # afford this, so the subtraction cannot drive the bar negative; it also
+        # restarts the wait before stamina starts refilling.
         try:
-            cost = float(weapon.get('stamina_cost', 0))
             if cost > 0 and hasattr(self, 'stamina'):
                 self.stamina = max(0, self.stamina - cost)
+                self.stamina_regen_timer = self.stamina_regen_delay
         except Exception:
             pass
 
         # Remove dead monsters
         self._cleanup_dead_monsters()
+        return True
+
+    def perform_player_attack(self, target_row, target_col):
+        """Attack with the armed skill if there is one, else the equipped weapon.
+
+        A skill is armed for exactly one attack: casting it starts its cooldown
+        and disarms it, so the next click swings the weapon again. An attack that
+        fizzles for want of stamina costs nothing and leaves the skill armed.
+        """
+        skill = self.active_skill
+        if skill is None:
+            return self.perform_attack(target_row, target_col)
+
+        name = skill['name']
+        # Locked or still cooling down: disarm and fall back rather than eating
+        # the click. Neither should be reachable from the tray, but the armed
+        # name outlives the click that set it.
+        if (self.skill_proficiency_of(name) <= 0
+                or self.skill_cooldown_remaining(name) > 0.0):
+            self.active_skill_name = None
+            return self.perform_attack(target_row, target_col)
+
+        if not self.perform_attack(target_row, target_col, self.scaled_skill(skill)):
+            return False
+        self.skill_cooldowns[name] = time.time() + float(skill.get('cooldown', 0))
+        self.active_skill_name = None
+        return True
 
     def _cleanup_dead_monsters(self):
         """Remove monsters with health <= 0 from the monsters list, awarding XP and drops."""
@@ -1241,6 +1324,104 @@ class RLDungeonGenerator:
             print(f"You equipped the {name}.")
         return True
 
+    # --- Skills -----------------------------------------------------------
+    # A skill is a weapon the player casts: skills.py uses the same combat keys
+    # weapons.py does, so a skill dict goes straight into perform_attack. What
+    # is extra is progression — points earned by levelling, spent to raise a
+    # skill's proficiency — and a per-skill cooldown.
+
+    def skill_proficiency_of(self, name) -> int:
+        """Points spent on the skill *name*. 0 means it is still locked."""
+        try:
+            return int(self.skill_proficiency.get(name, 0))
+        except Exception:
+            return 0
+
+    def can_spend_skill_point(self, name) -> bool:
+        """True if a point can go into *name* right now."""
+        skill = SKILLS_BY_NAME.get(name)
+        if skill is None or self.skill_points <= 0:
+            return False
+        return self.player_level >= int(skill.get('level_requirement', 1))
+
+    def spend_skill_point(self, name) -> bool:
+        """Put one skill point into *name*. Returns True if a point was spent.
+
+        There is no cap: points past the first keep raising the damage bonus in
+        scaled_skill.
+        """
+        if not self.can_spend_skill_point(name):
+            return False
+        self.skill_points -= 1
+        self.skill_proficiency[name] = self.skill_proficiency_of(name) + 1
+        return True
+
+    def usable_skills(self):
+        """Every skill the player has unlocked, in skills.py order.
+
+        This is what the tray shows, so the order stays stable as skills unlock
+        rather than shuffling on each purchase.
+        """
+        return [sk for sk in SKILLS if self.skill_proficiency_of(sk['name']) > 0]
+
+    def scaled_skill(self, skill):
+        """A copy of *skill* with its damage raised by proficiency.
+
+        The first point unlocks the skill at its listed damage; each point after
+        that adds 10%. The copy exists so the definition in skills.py is never
+        mutated.
+        """
+        if skill is None:
+            return None
+        prof = self.skill_proficiency_of(skill.get('name'))
+        if prof <= 1:
+            return dict(skill)
+        scaled = dict(skill)
+        scaled['damage'] = float(skill.get('damage', 0)) * (1.0 + 0.1 * (prof - 1))
+        return scaled
+
+    @property
+    def active_skill(self):
+        """The skill armed for the next attack, or None.
+
+        Read-only, like equipped_weapon: the name is the stored field, so arming
+        and disarming both go through active_skill_name.
+        """
+        return SKILLS_BY_NAME.get(self.active_skill_name)
+
+    def skill_cooldown_remaining(self, name, now=None) -> float:
+        """Seconds until *name* can be used again. 0.0 when it is ready."""
+        expires_at = self.skill_cooldowns.get(name)
+        if expires_at is None:
+            return 0.0
+        if now is None:
+            now = time.time()
+        return max(0.0, expires_at - now)
+
+    def _update_skill_cooldowns(self, current_time=None):
+        """Drop cooldowns that have elapsed.
+
+        Called every frame from the renderer, like _update_attack_effects.
+        """
+        if current_time is None:
+            current_time = time.time()
+        self.skill_cooldowns = {name: t for name, t in self.skill_cooldowns.items()
+                                if t > current_time}
+
+    def update_stamina(self, delta_time):
+        """Refill stamina, once the player has stopped spending it.
+
+        Driven by the frame's delta rather than the wall clock, for the reason
+        _spawn_clock is: a stall shouldn't bank a refill the player didn't wait
+        for.
+        """
+        if self.stamina_regen_timer > 0.0:
+            self.stamina_regen_timer = max(0.0, self.stamina_regen_timer - delta_time)
+            return
+        if self.stamina < self.max_stamina:
+            self.stamina = min(float(self.max_stamina),
+                               self.stamina + self.stamina_regen_per_second * delta_time)
+
     def is_workbench_in_reach(self, r, c) -> bool:
         """True if (r, c) is the workbench and the player is within 2 tiles of it.
 
@@ -1287,6 +1468,8 @@ class RLDungeonGenerator:
                 self.player_pips = 0
                 if self.player_level < len(PLAYER_LEVELS):
                     self.player_level += 1
+                    # Each level buys one point to spend in the skill menu.
+                    self.skill_points += 1
                 level_idx = min(self.player_level - 1, len(PLAYER_LEVELS) - 1)
                 xp_needed = PLAYER_LEVELS[level_idx]['xp_needed']
                 self.max_health = PLAYER_LEVELS[level_idx]['health']
@@ -2013,6 +2196,7 @@ class RLDungeonGenerator:
         # Restore health and stamina on level change
         self.health = self.max_health
         self.stamina = self.max_stamina
+        self.stamina_regen_timer = 0.0
         self.generate_map()
 
     def player_on_exit(self) -> bool:
@@ -3218,6 +3402,286 @@ def draw_crafting_dialog(screen, dg, font, bold_font, tile_surfaces, expanded):
     screen.set_clip(prev_clip)
 
 
+# --- Skill menu (H) and skill tray ---------------------------------------
+SKILL_DIALOG_PAD = 12
+SKILL_GROUP_BUTTON_H = 26
+SKILL_GROUP_BUTTON_GAP = 6
+SKILL_DIALOG_SCROLLBAR_W = 8
+SKILL_ROW_H = 44
+SKILL_ROW_GAP = 8
+SKILL_ROW_GUTTER = 8   # between the glyph, the button, and the proficiency
+SKILL_PROF_W = 28      # gutter reserved right of a button for its proficiency
+SKILL_BUTTON_MAX_W = 260
+# A medium gray panel with a light gray border, and buttons a shade lighter
+# still. Locked skills and the group already on screen are dimmed instead.
+SKILL_DIALOG_BG = (110, 110, 110)
+SKILL_DIALOG_BORDER = (200, 200, 200)
+SKILL_BUTTON_BG = (200, 200, 200)
+SKILL_BUTTON_BG_HOVER = (235, 235, 235)
+SKILL_BUTTON_BG_LOCKED = (140, 140, 140)
+SKILL_BUTTON_BG_SELECTED = (120, 120, 120)
+SKILL_TEXT = (20, 20, 20)
+SKILL_TEXT_LOCKED = (75, 75, 75)
+SKILL_FOOTER_TEXT = (255, 255, 255)
+
+
+def skill_menu_layout(screen, font, selected_group, scroll):
+    """Geometry for the skill menu.
+
+    Returns ``(dialog, group_content, group_buttons, scroll, max_scroll, track,
+    knob, skill_content, skill_buttons)`` where *group_buttons* is a list of
+    ``(rect, group_index)`` for the rows currently in view, *skill_buttons* is a
+    list of ``(rect, icon_rect, skill_name)`` for the selected group, and
+    *track*/*knob* are None when the group list fits without scrolling. Drawing
+    and hit-testing both go through this so their geometry can never diverge.
+    """
+    sw, sh = screen.get_size()
+    # Two thirds of the screen in each direction, centered.
+    dialog = pygame.Rect(0, 0, max(1, sw * 2 // 3), max(1, sh * 2 // 3))
+    dialog.center = (sw // 2, sh // 2)
+
+    pad = SKILL_DIALOG_PAD
+    # A footer strip along the bottom holds the unspent point count, so both
+    # columns stop short of it.
+    footer_h = font.get_linesize() + pad
+    body_h = max(1, dialog.h - pad * 2 - footer_h)
+
+    # Left column: the group list, with room reserved for its scrollbar.
+    group_w = max(1, dialog.w // 3 - pad)
+    group_content = pygame.Rect(
+        dialog.x + pad, dialog.y + pad,
+        max(1, group_w - SKILL_DIALOG_SCROLLBAR_W - 4), body_h)
+
+    step = SKILL_GROUP_BUTTON_H + SKILL_GROUP_BUTTON_GAP
+    count = len(SKILL_GROUPS)
+    total = max(0, count * step - SKILL_GROUP_BUTTON_GAP)
+    max_scroll = max(0, total - group_content.h)
+    scroll = max(0, min(int(scroll), max_scroll))
+
+    group_buttons = []
+    for i in range(count):
+        top = group_content.y + i * step - scroll
+        if top + SKILL_GROUP_BUTTON_H <= group_content.y or top >= group_content.bottom:
+            continue  # scrolled out of view
+        group_buttons.append(
+            (pygame.Rect(group_content.x, top, group_content.w, SKILL_GROUP_BUTTON_H), i))
+
+    track = knob = None
+    if max_scroll > 0:
+        track = pygame.Rect(group_content.right + 4, group_content.y,
+                            SKILL_DIALOG_SCROLLBAR_W, group_content.h)
+        knob_h = max(20, int(group_content.h * group_content.h / total))
+        knob_y = track.y + int((track.h - knob_h) * scroll / max_scroll)
+        knob = pygame.Rect(track.x, knob_y, track.w, knob_h)
+
+    # Right of the group list: the skills of whichever group is selected.
+    skills_x = dialog.x + pad + group_w + pad
+    skill_content = pygame.Rect(skills_x, dialog.y + pad,
+                                max(1, dialog.right - pad - skills_x), body_h)
+
+    # Names that resolve to a skill, so a typo in `skill groups.py` drops that
+    # one row rather than breaking the menu.
+    names = []
+    if 0 <= selected_group < len(SKILL_GROUPS):
+        names = [n for n in SKILL_GROUPS[selected_group].get('skills', [])
+                 if n in SKILLS_BY_NAME]
+
+    # Each row is glyph, button, proficiency; the three are centered as a unit.
+    button_w = max(1, min(
+        SKILL_BUTTON_MAX_W,
+        skill_content.w - SKILL_ROW_H - SKILL_PROF_W - SKILL_ROW_GUTTER * 2))
+    row_w = SKILL_ROW_H + SKILL_ROW_GUTTER + button_w + SKILL_ROW_GUTTER + SKILL_PROF_W
+    row_x = skill_content.x + max(0, (skill_content.w - row_w) // 2)
+
+    row_step = SKILL_ROW_H + SKILL_ROW_GAP
+    block_h = max(0, len(names) * row_step - SKILL_ROW_GAP)
+    top = skill_content.y + max(0, (skill_content.h - block_h) // 2)
+
+    skill_buttons = []
+    for name in names:
+        icon_rect = pygame.Rect(row_x, top, SKILL_ROW_H, SKILL_ROW_H)
+        rect = pygame.Rect(row_x + SKILL_ROW_H + SKILL_ROW_GUTTER, top, button_w, SKILL_ROW_H)
+        skill_buttons.append((rect, icon_rect, name))
+        top += row_step
+
+    return (dialog, group_content, group_buttons, scroll, max_scroll, track, knob,
+            skill_content, skill_buttons)
+
+
+def _draw_skill_icon(screen, tile_surfaces, skill, rect):
+    """Fill *rect* with the skill's background, then draw its glyph over it."""
+    background = skill.get('background')
+    if background is not None:
+        pygame.draw.rect(screen, background, rect)
+    glyph = skill.get('glyph')
+    if (tile_surfaces is not None and glyph is not None
+            and 0 <= glyph < len(tile_surfaces)):
+        icon = pygame.transform.smoothscale(tile_surfaces[glyph], rect.size)
+        screen.blit(icon, rect.topleft)
+
+
+def _skill_detail_text(skill):
+    """The one-line summary drawn under a skill's name in the menu."""
+    return '{0} stam   {1:g}s cd   {2:g} dmg'.format(
+        int(skill.get('stamina_cost', 0)),
+        skill.get('cooldown', 0),
+        skill.get('damage', 0))
+
+
+def draw_skill_menu(screen, dg, font, bold_font, tile_surfaces, selected_group, scroll):
+    """Draw the skill menu over the map. Returns the clamped scroll offset."""
+    (dialog, group_content, group_buttons, scroll, _max_scroll, track, knob,
+     skill_content, skill_buttons) = skill_menu_layout(screen, font, selected_group, scroll)
+
+    # Medium gray panel with a light gray border.
+    pygame.draw.rect(screen, SKILL_DIALOG_BG, dialog)
+    pygame.draw.rect(screen, SKILL_DIALOG_BORDER, dialog, 3)
+
+    mouse = pygame.mouse.get_pos()
+    prev_clip = screen.get_clip()
+
+    # Group buttons down the left, the one on screen dimmed the way the level
+    # dialog dims the level you are already standing on.
+    screen.set_clip(group_content)
+    for rect, i in group_buttons:
+        if i == selected_group:
+            color = SKILL_BUTTON_BG_SELECTED
+        elif rect.collidepoint(mouse) and group_content.collidepoint(mouse):
+            color = SKILL_BUTTON_BG_HOVER
+        else:
+            color = SKILL_BUTTON_BG
+        pygame.draw.rect(screen, color, rect)
+        label = _fit_text(font, SKILL_GROUPS[i].get('name', 'Group {0}'.format(i)), rect.w - 8)
+        surf = font.render(label, True, SKILL_TEXT)
+        screen.blit(surf, surf.get_rect(center=rect.center))
+    screen.set_clip(prev_clip)
+
+    if track is not None and knob is not None:
+        pygame.draw.rect(screen, (35, 35, 35), track)
+        pygame.draw.rect(screen, (170, 170, 170), knob)
+
+    # The selected group: glyph on the left of each button, proficiency right.
+    screen.set_clip(skill_content)
+    for rect, icon_rect, name in skill_buttons:
+        skill = SKILLS_BY_NAME[name]
+        locked = dg.player_level < int(skill.get('level_requirement', 1))
+        if locked:
+            color = SKILL_BUTTON_BG_LOCKED
+        elif rect.collidepoint(mouse) and skill_content.collidepoint(mouse):
+            color = SKILL_BUTTON_BG_HOVER
+        else:
+            color = SKILL_BUTTON_BG
+        _draw_skill_icon(screen, tile_surfaces, skill, icon_rect)
+        pygame.draw.rect(screen, color, rect)
+
+        # A locked skill says what level would unlock it.
+        text_color = SKILL_TEXT_LOCKED if locked else SKILL_TEXT
+        name_label = name
+        if locked:
+            name_label = '{0} (Lv {1})'.format(name, int(skill.get('level_requirement', 1)))
+        name_surf = bold_font.render(
+            _fit_text(bold_font, name_label, rect.w - 16), True, text_color)
+        screen.blit(name_surf, (rect.x + 8, rect.centery - name_surf.get_height() - 1))
+        detail = _skill_detail_text(skill)
+        detail_surf = font.render(_fit_text(font, detail, rect.w - 16), True, text_color)
+        screen.blit(detail_surf, (rect.x + 8, rect.centery + 1))
+
+        proficiency = dg.skill_proficiency_of(name)
+        if proficiency > 0:
+            prof_surf = bold_font.render(str(proficiency), True, SKILL_FOOTER_TEXT)
+            screen.blit(prof_surf, prof_surf.get_rect(
+                center=(rect.right + SKILL_ROW_GUTTER + SKILL_PROF_W // 2, rect.centery)))
+    screen.set_clip(prev_clip)
+
+    # Footer: what is left to spend, so a click that does nothing explains itself.
+    points = font.render('Skill Points: {0}'.format(dg.skill_points), True, SKILL_FOOTER_TEXT)
+    screen.blit(points, (dialog.x + SKILL_DIALOG_PAD,
+                         dialog.bottom - SKILL_DIALOG_PAD - points.get_height()))
+
+    return scroll
+
+
+TRAY_COLS = 10
+TRAY_ROWS = 4
+TRAY_MARGIN = 10
+TRAY_INNER_PAD = 6
+TRAY_GAP = 3
+TRAY_BG = (110, 110, 110)
+TRAY_SLOT_BG = (45, 45, 45)
+TRAY_SLOT_BORDER = (70, 70, 70)
+# The armed skill, and the wash over one that is still cooling down.
+TRAY_SLOT_ACTIVE_BORDER = (255, 235, 140)
+TRAY_COOLDOWN_SHADE = (60, 60, 60, 170)
+
+
+def skill_tray_layout(screen):
+    """Geometry for the skill tray.
+
+    Returns ``(panel, slots)`` where *slots* is TRAY_ROWS x TRAY_COLS rects in
+    row-major order. Drawing and hit-testing both go through this so their
+    geometry can never diverge. The tray anchors to the window's bottom right
+    corner, not to the letterboxed map area the rest of the HUD uses.
+
+    The panel is a quarter of the window wide, but only as tall as the grid it
+    holds. Ten columns and four rows means width is what limits the slot size,
+    so a panel a fixed quarter of the window tall would be mostly dead space.
+    """
+    sw, sh = screen.get_size()
+    panel_w = max(1, sw // 4)
+    # A quarter of the window height is the ceiling, not the target: it only
+    # binds on a window wide enough that four rows would otherwise overflow it.
+    max_h = max(1, sh // 4)
+
+    # Square slots, as large as fit both ways.
+    size = max(1, min(
+        (panel_w - TRAY_INNER_PAD * 2 - (TRAY_COLS - 1) * TRAY_GAP) // TRAY_COLS,
+        (max_h - TRAY_INNER_PAD * 2 - (TRAY_ROWS - 1) * TRAY_GAP) // TRAY_ROWS))
+    grid_w = TRAY_COLS * size + (TRAY_COLS - 1) * TRAY_GAP
+    grid_h = TRAY_ROWS * size + (TRAY_ROWS - 1) * TRAY_GAP
+
+    panel = pygame.Rect(0, 0, panel_w, grid_h + TRAY_INNER_PAD * 2)
+    panel.bottomright = (sw - TRAY_MARGIN, sh - TRAY_MARGIN)
+    grid_x = panel.x + (panel.w - grid_w) // 2
+    grid_y = panel.y + TRAY_INNER_PAD
+
+    slots = [pygame.Rect(grid_x + col * (size + TRAY_GAP),
+                         grid_y + row * (size + TRAY_GAP), size, size)
+             for row in range(TRAY_ROWS) for col in range(TRAY_COLS)]
+    return panel, slots
+
+
+def draw_skill_tray(screen, dg, font, tile_surfaces):
+    """Draw the skill tray in the bottom right corner of the window."""
+    panel, slots = skill_tray_layout(screen)
+    pygame.draw.rect(screen, TRAY_BG, panel)
+    for rect in slots:
+        pygame.draw.rect(screen, TRAY_SLOT_BG, rect)
+        pygame.draw.rect(screen, TRAY_SLOT_BORDER, rect, 1)
+
+    now = time.time()
+    # Every unlocked skill, filling the grid left to right, top to bottom.
+    for slot, skill in zip(slots, dg.usable_skills()):
+        name = skill['name']
+        _draw_skill_icon(screen, tile_surfaces, skill, slot)
+
+        remaining = dg.skill_cooldown_remaining(name, now)
+        if remaining > 0.0:
+            # Washed gray until the cooldown elapses, counting down in seconds.
+            shade = pygame.Surface(slot.size, pygame.SRCALPHA)
+            shade.fill(TRAY_COOLDOWN_SHADE)
+            screen.blit(shade, slot.topleft)
+            secs = str(int(ceil(remaining)))
+            secs_surf = font.render(secs, True, (255, 255, 255))
+            pos = secs_surf.get_rect(center=slot.center)
+            # Dark outline so the number stays readable over any glyph.
+            outline = font.render(secs, True, (0, 0, 0))
+            for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                screen.blit(outline, (pos.x + dx, pos.y + dy))
+            screen.blit(secs_surf, pos)
+        if name == dg.active_skill_name:
+            pygame.draw.rect(screen, TRAY_SLOT_ACTIVE_BORDER, slot, 3)
+
+
 def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_menu: bool = False, start_level: str | None = None) -> None:
     import os
 
@@ -3323,6 +3787,9 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
     # Same for the crafting dialog; recipe names are drawn bold.
     craft_font = pygame.font.SysFont('consolas', 13)
     craft_bold_font = pygame.font.SysFont('consolas', 13, bold=True)
+    # Same again for the skill menu and the tray's cooldown countdown.
+    skill_font = pygame.font.SysFont('consolas', 12)
+    skill_bold_font = pygame.font.SysFont('consolas', 13, bold=True)
     glyph_cache = {}
     # Keep initial view size in tiles fixed; tile size will change on window resize
     init_view_w = min(20, dg.width)
@@ -3349,6 +3816,12 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
     level_dialog_open = False
     level_dialog_scroll = 0
     level_dialog_drag = None  # grab offset within the scrollbar knob while dragging
+    # Skill menu: toggled with H, closed by H again or by Esc. The tray below it
+    # is always on screen, so it needs no open flag of its own.
+    skill_menu_open = False
+    skill_menu_group = 0  # index into SKILL_GROUPS of the group on show
+    skill_menu_scroll = 0
+    skill_menu_drag = None  # grab offset within the scrollbar knob while dragging
 
     selected_level_idx = None
     if dg.levels:
@@ -3377,6 +3850,7 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
         dg._update_attack_effects(current_time)
         # Update damage popups
         dg._update_damage_popups(current_time)
+        dg._update_skill_cooldowns(current_time)
 
         # Movement updates: use delta-time based movement so speed is tiles/sec independent of tile_size
         # Apply continuous movement from held keys using `update_movement` which uses `player_speed_pixels`.
@@ -3391,6 +3865,9 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
                 dg.update_movement(delta_time, (mdx, mdy))
         else:
             dg.update_movement(delta_time, (0.0, 0.0))
+
+        # Stamina refills between fights; spending it restarts the wait.
+        dg.update_stamina(delta_time)
 
         # Runtime monster spawning: maps generate empty and are populated here. Runs
         # before update_monsters so anything spawned this frame is already indexed and
@@ -3719,7 +4196,7 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
         health_font = pygame.font.SysFont('consolas', 16, bold=True)
 
         # Stamina bar (horizontal, yellow, bottom center)
-        stamina_tiles = max(1, (dg.stamina + 24) // 25)  # Round up
+        stamina_tiles = max(1, int(dg.stamina + 24) // 25)  # Round up
         max_stamina_tiles = max(1, (dg.max_stamina + 24) // 25)
         stamina_bar_x = offset_x + (used_w - (max_stamina_tiles * bar_tile_size)) // 2
         stamina_bar_y = offset_y + used_h - bar_h - 10
@@ -3727,7 +4204,7 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
             tile_x = stamina_bar_x + i * bar_tile_size
             if i < stamina_tiles:
                 pygame.draw.rect(screen, (200, 200, 0), (tile_x, stamina_bar_y, bar_tile_size, bar_h))
-        stamina_text = health_font.render(f'{dg.stamina}', True, (255, 255, 255))
+        stamina_text = health_font.render(f'{int(dg.stamina)}', True, (255, 255, 255))
         stamina_text_rect = stamina_text.get_rect(center=(stamina_bar_x + (max_stamina_tiles * bar_tile_size) // 2, stamina_bar_y + bar_h // 2))
         screen.blit(stamina_text, stamina_text_rect)
 
@@ -3806,6 +4283,11 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
                 screen.blit(outline, (cx + dx, cy + dy))
             screen.blit(count_surf, (cx, cy))
 
+        # Skill tray, always on screen in the bottom-right corner. Drawn above the
+        # HUD but below the dialogs, so an open dialog covers it — which matches
+        # the click order, where the dialogs get first refusal.
+        draw_skill_tray(screen, dg, skill_font, tile_surfaces)
+
         # Level selection dialog, drawn last so it sits on top of the HUD. It is
         # open exactly while the player stands on the exit, so stepping off closes it.
         level_dialog_open = bool(dg.levels) and dg.player_on_exit()
@@ -3831,6 +4313,17 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
             crafting_open = False
             crafting_expanded = None
 
+        # Skill menu, drawn last so it sits above every other panel. Unlike the
+        # other two it is not tied to a place on the map, so only H or Esc closes it.
+        if skill_menu_open and SKILL_GROUPS:
+            skill_menu_scroll = draw_skill_menu(
+                screen, dg, skill_font, skill_bold_font, tile_surfaces,
+                skill_menu_group, skill_menu_scroll)
+        else:
+            skill_menu_open = False
+            skill_menu_scroll = 0
+            skill_menu_drag = None
+
         pygame.display.flip()
         # Update window title with current level
         pygame.display.set_caption(f"RLDungeonGenerator - {dg.get_current_level_name()}")
@@ -3839,20 +4332,37 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-            elif event.type == pygame.MOUSEWHEEL and level_dialog_open:
-                # Scroll the level list (one button per notch); layout clamps it.
-                step = LEVEL_DIALOG_BUTTON_HEIGHT + LEVEL_DIALOG_BUTTON_GAP
-                level_dialog_scroll = level_dialog_layout(
-                    screen, dg, level_dialog_scroll - event.y * step)[3]
+            elif event.type == pygame.MOUSEWHEEL:
+                # The skill menu is on top, so it gets the wheel first.
+                if skill_menu_open:
+                    # Scroll the group list (one button per notch); layout clamps it.
+                    step = SKILL_GROUP_BUTTON_H + SKILL_GROUP_BUTTON_GAP
+                    skill_menu_scroll = skill_menu_layout(
+                        screen, skill_font, skill_menu_group,
+                        skill_menu_scroll - event.y * step)[3]
+                elif level_dialog_open:
+                    # Scroll the level list (one button per notch); layout clamps it.
+                    step = LEVEL_DIALOG_BUTTON_HEIGHT + LEVEL_DIALOG_BUTTON_GAP
+                    level_dialog_scroll = level_dialog_layout(
+                        screen, dg, level_dialog_scroll - event.y * step)[3]
             elif event.type == pygame.MOUSEBUTTONUP:
                 if event.button == 1:
                     level_dialog_drag = None
-            elif event.type == pygame.MOUSEMOTION and level_dialog_drag is not None:
+                    skill_menu_drag = None
+            elif event.type == pygame.MOUSEMOTION and (level_dialog_drag is not None
+                                                       or skill_menu_drag is not None):
                 # Dragging the scrollbar knob maps mouse Y onto the scroll range.
-                _d, _c, _b, _s, max_scroll, track, knob = level_dialog_layout(screen, dg, level_dialog_scroll)
-                if track is not None and knob is not None and track.h > knob.h:
-                    rel = (event.pos[1] - level_dialog_drag - track.y) / (track.h - knob.h)
-                    level_dialog_scroll = int(max(0.0, min(1.0, rel)) * max_scroll)
+                if level_dialog_drag is not None:
+                    _d, _c, _b, _s, max_scroll, track, knob = level_dialog_layout(screen, dg, level_dialog_scroll)
+                    if track is not None and knob is not None and track.h > knob.h:
+                        rel = (event.pos[1] - level_dialog_drag - track.y) / (track.h - knob.h)
+                        level_dialog_scroll = int(max(0.0, min(1.0, rel)) * max_scroll)
+                if skill_menu_drag is not None:
+                    _sd, _sc, _sb, _ss, max_scroll, track, knob = skill_menu_layout(
+                        screen, skill_font, skill_menu_group, skill_menu_scroll)[:7]
+                    if track is not None and knob is not None and track.h > knob.h:
+                        rel = (event.pos[1] - skill_menu_drag - track.y) / (track.h - knob.h)
+                        skill_menu_scroll = int(max(0.0, min(1.0, rel)) * max_scroll)
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 dialog_hit = False
                 if event.button == 3:  # Right click
@@ -3865,7 +4375,35 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
                         if row > 0 and name is not None and rect.collidepoint(event.pos):
                             dg.toggle_equipped_weapon(name)
                             break
-                if level_dialog_open and event.button == 1:
+                if skill_menu_open and event.button == 1:
+                    (sk_dialog, sk_group_content, sk_group_buttons, skill_menu_scroll,
+                     _sk_ms, sk_track, sk_knob, sk_skill_content,
+                     sk_skill_buttons) = skill_menu_layout(
+                        screen, skill_font, skill_menu_group, skill_menu_scroll)
+                    # As with the other dialogs, a click anywhere inside is
+                    # consumed so it never falls through to an attack.
+                    dialog_hit = sk_dialog.collidepoint(event.pos)
+                    if dialog_hit:
+                        if sk_knob is not None and sk_knob.collidepoint(event.pos):
+                            skill_menu_drag = event.pos[1] - sk_knob.y
+                        elif sk_track is not None and sk_track.collidepoint(event.pos):
+                            skill_menu_drag = sk_knob.h // 2 if sk_knob is not None else 0
+                        else:
+                            group_clicked = False
+                            for rect, i in sk_group_buttons:
+                                if rect.collidepoint(event.pos) and sk_group_content.collidepoint(event.pos):
+                                    skill_menu_group = i
+                                    group_clicked = True
+                                    break
+                            # Spending a point is gated on having one and on the
+                            # skill's level requirement, both checked by
+                            # spend_skill_point, so a locked row just does nothing.
+                            if not group_clicked:
+                                for rect, _icon, name in sk_skill_buttons:
+                                    if rect.collidepoint(event.pos) and sk_skill_content.collidepoint(event.pos):
+                                        dg.spend_skill_point(name)
+                                        break
+                if level_dialog_open and not dialog_hit and event.button == 1:
                     dialog, content, buttons, level_dialog_scroll, _ms, track, knob = level_dialog_layout(
                         screen, dg, level_dialog_scroll)
                     # A click anywhere inside the dialog is consumed, so it never
@@ -3903,6 +4441,23 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
                                     # Clicking the expanded recipe collapses it.
                                     crafting_expanded = None if crafting_expanded == i else i
                                     break
+                if not dialog_hit and event.button == 1:
+                    tray_panel, tray_slots = skill_tray_layout(screen)
+                    # The tray absorbs clicks too, so clicking it never attacks
+                    # the tiles behind it.
+                    dialog_hit = tray_panel.collidepoint(event.pos)
+                    if dialog_hit:
+                        for slot, skill in zip(tray_slots, dg.usable_skills()):
+                            if not slot.collidepoint(event.pos):
+                                continue
+                            name = skill['name']
+                            # A skill still cooling down cannot be armed.
+                            if dg.skill_cooldown_remaining(name) > 0.0:
+                                break
+                            # Only one skill is armed at a time, and clicking the
+                            # armed one puts it away.
+                            dg.active_skill_name = None if dg.active_skill_name == name else name
+                            break
                 if not dialog_hit and event.button == 1:  # Left click
                     target = dg.screen_to_tile(event.pos[0], event.pos[1], cam_tx, cam_ty, offset_x - ox, offset_y - oy, view_w + 1, view_h + 1)
                     if target is not None and dg.is_workbench_in_reach(*target):
@@ -3939,12 +4494,15 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
                         except Exception:
                             pass
 
-                        dg.perform_attack(tr, tc)
+                        dg.perform_player_attack(tr, tc)
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
-                    # Esc closes the crafting menu first, and only quits the
-                    # game when there is no menu to dismiss.
-                    if crafting_open:
+                    # Esc dismisses one menu at a time, topmost first, and only
+                    # quits the game when there is no menu left to dismiss.
+                    if skill_menu_open:
+                        skill_menu_open = False
+                        skill_menu_drag = None
+                    elif crafting_open:
                         crafting_open = False
                         crafting_expanded = None
                     else:
@@ -3954,6 +4512,10 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
                     dg.player_speed_pixels = 7.0 * dg.tile_size
                 elif event.key == pygame.K_TAB:
                     inventory_open = not inventory_open
+                elif event.key == pygame.K_h:
+                    skill_menu_open = not skill_menu_open
+                    if not skill_menu_open:
+                        skill_menu_drag = None
                 else:
                     direction = movement_key_map.get(event.key)
                     if direction is not None and direction not in held_directions:
