@@ -34,13 +34,24 @@
 #   time; 1.2 -> 1 most of the time, 2 twenty percent of the time). Each entry is
 #   rolled independently, even if the same item name appears more than once.
 
+
+# Altered values for debugging
+# increased xp of all monsters by 900%
+# increased aggro distance by 900%
+# increased movement speed by 4
+# spawn interval decreased
+    # boar 12
+    # greyling 16/8
+    # neck, skeleton, and draugr 14
+# increased max count by 900%
+
 MONSTER_TYPES = [
     {
         'name': 'Boar',
         'glyph_index': 3 * 32 + 1,  # Row 3, Column 1
         'health': 10,
         'size': 1,  # occupies a 1x1 block of tiles
-        'xp_value': 18,
+        'xp_value': 180,
         'levels': [
             # One boar roughly every 15s (12s interval, then ~1 retry at 60%), so the
             # map reaches its 12 in about three minutes.
@@ -61,7 +72,7 @@ MONSTER_TYPES = [
         'glyph_index': 3 * 32 + 2,  # Row 3, Column 2
         'health': 20,
         'size': 1,  # occupies a 1x1 block of tiles
-        'xp_value': 18,
+        'xp_value': 180,
         'levels': [
             {'name': 'Meadows', 'max_count': 80, 'spawn_interval': 4.0, 'spawn_chance': 0.5},
             # Their home biome: arrive faster and pack in three times as thick.
@@ -86,7 +97,7 @@ MONSTER_TYPES = [
         'glyph_index': 3 * 32 + 4,  # Row 3, Column 4 (art TBD)
         'health': 15,
         'size': 1,  # occupies a 1x1 block of tiles
-        'xp_value': 15,
+        'xp_value': 150,
         'levels': [
             {'name': 'Meadows', 'max_count': 100, 'spawn_interval': 4.0, 'spawn_chance': 0.6},
         ],
@@ -106,7 +117,7 @@ MONSTER_TYPES = [
         'glyph_index': 3 * 32 + 5,  # Row 3, Column 5 (art TBD)
         'health': 40,
         'size': 1,  # occupies a 1x1 block of tiles
-        'xp_value': 45,
+        'xp_value': 450,
         'levels': [
             {'name': 'Black Forest', 'max_count': 100, 'spawn_interval': 4.0, 'spawn_chance': 0.6},
         ],
@@ -125,7 +136,7 @@ MONSTER_TYPES = [
         'glyph_index': 3 * 32 + 6,  # Row 3, Column 6 (art TBD)
         'health': 80,
         'size': 1,  # occupies a 1x1 block of tiles
-        'xp_value': 90,
+        'xp_value': 900,
         'levels': [
             {'name': 'Swamps', 'max_count': 100, 'spawn_interval': 4.0, 'spawn_chance': 0.6},
         ],
@@ -143,7 +154,7 @@ MONSTER_TYPES = [
         'glyph_index': 3 * 32 + 3,  # Row 3, Column 3
         'health': 500,
         'size': 4,  # occupies a 4x4 block of tiles
-        'xp_value': 240,
+        'xp_value': 2400,
         'respawns': False,  # killed for good; the arena does not refill
         'levels': [
             # Interval 0 and a certain roll put him on the map on the very first spawn
@@ -153,7 +164,7 @@ MONSTER_TYPES = [
         'aggro_distance': 500.0,  # tiles
         'aggro_time': 16.0,  # seconds monster stays aggroed after losing sight of player
         'damage_aggro_time': 40.0,  # seconds monster stays aggroed after taking damage
-        'movement_speed': 1.5,
+        'movement_speed': 5.5,
         'knockback_resistance': 0.99,  # 0-1; higher = less knockback
         'drops': [
         ],

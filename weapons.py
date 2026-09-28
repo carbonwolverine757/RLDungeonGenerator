@@ -24,12 +24,12 @@ AXE_GLYPH = 11 * 32 + 2    # Row 11, Column 2
 WEAPONS = [
     {
         'name': 'Unarmed',
-        'damage': 20.0,
+        'damage': 50.0,
         'stamina_cost': 0,
         'range': 99.5,
         'area': 3.0,
         'angle': 360.0,
-        'knockback': 1.0,  # tiles of knockback
+        'knockback': 0.0,  # tiles of knockback
         'glyph': None,
     },
     # Spears: a long, narrow cone.
