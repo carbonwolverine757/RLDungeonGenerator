@@ -9,6 +9,10 @@
 #   object appears on all levels, using 'default_spawn_count'.
 # - default_spawn_count: count used for levels not listed individually (only
 #   consulted when 'levels' is empty)
+# - drops: list of items yielded when the object is destroyed, in the same format
+#   as monster drops (see monsters.py). Each entry is a dict with 'name' (a drop
+#   defined in Drops.py) and 'drop_chance' (integer part always drops; fractional
+#   part is the probability of one extra).
 
 OBJECT_TYPES = [
     {
@@ -20,6 +24,10 @@ OBJECT_TYPES = [
             {'name': 'Black Forest', 'spawn_count': 625},
         ],
         'display_size': 2,  # renders as 2×2 tiles, centered on anchor tile
+        'drops': [
+            {'name': 'Wood', 'drop_chance': 4.0},
+            {'name': 'Resin', 'drop_chance': 0.5},
+        ],
     },
     {
         'name': 'Rock',
@@ -34,6 +42,10 @@ OBJECT_TYPES = [
             {'name': 'Ashlands', 'spawn_count': 10},
             {'name': 'Ashlands (Inland)', 'spawn_count': 10},
             {'name': 'Ashlands Coast', 'spawn_count': 10},
+        ],
+        'drops': [
+            {'name': 'Stone', 'drop_chance': 3.0},
+            {'name': 'Flint', 'drop_chance': 0.3},
         ],
     },
     {
@@ -59,6 +71,9 @@ OBJECT_TYPES = [
             {'name': 'First Mysterious Location', 'spawn_count': 5},
             {'name': 'Second Mysterious Location', 'spawn_count': 5},
             {'name': 'Tomb of Lord Reto', 'spawn_count': 5},
+        ],
+        'drops': [
+            {'name': 'Stone', 'drop_chance': 3.0},
         ],
     },
 ]

@@ -1103,14 +1103,26 @@ class RLDungeonGenerator:
         except Exception:
             pass
 
-        # Deal damage to objects in the attack area and remove destroyed ones
+        # Deal damage to objects in the attack area, then remove destroyed ones and
+        # roll their drops
         try:
             damage = float(weapon.get('damage', 0))
             if damage > 0:
+                destroyed = []
                 for obj in self.objects:
                     if (obj['row'], obj['col']) in tiles:
                         obj['health'] -= damage
-                self.objects = [o for o in self.objects if o['health'] > 0]
+                        if obj['health'] <= 0:
+                            destroyed.append(obj)
+                if destroyed:
+                    for obj in destroyed:
+                        print(f"You destroyed a {obj['type']['name']}.")
+                        self._roll_drops(obj['type'])
+                    self.objects = [o for o in self.objects if o['health'] > 0]
+                    # _begin_monster_frame normally rebuilds this index, but it doesn't
+                    # run while the map has no monsters; refresh it here so the
+                    # destroyed objects' tiles free up right away.
+                    self._object_tiles = {(o['row'], o['col']) for o in self.objects}
         except Exception:
             pass
 
@@ -1227,16 +1239,16 @@ class RLDungeonGenerator:
             # Drop the dead from the occupancy index so their tiles free up now.
             self._begin_monster_frame()
 
-    def _roll_drops(self, monster_type):
-        """Roll each entry in a monster type's 'drops' list and add the results
-        to the player's inventory.
+    def _roll_drops(self, entity_type):
+        """Roll each entry in a monster or object type's 'drops' list and add the
+        results to the player's inventory.
 
         A drop_chance's integer part always drops; its fractional part is the
         probability of dropping one additional item. Examples: 0.5 -> one item
         50% of the time; 1.2 -> one item 80% of the time and two 20% of the time.
         Every entry is rolled independently, so repeated item names stack.
         """
-        for item in monster_type.get('drops', []):
+        for item in entity_type.get('drops', []):
             name = item.get('name')
             chance = item.get('drop_chance', 0)
             if not name or chance <= 0:
@@ -3260,6 +3272,33 @@ def inventory_layout(dg, offset_x, offset_y, inventory_open):
     return slots
 
 
+INV_TOOLTIP_BG = (20, 20, 20)
+INV_TOOLTIP_BORDER = (180, 180, 180)
+INV_TOOLTIP_PAD = 4
+# Tooltip offset from the cursor, so the pointer doesn't sit on the text.
+INV_TOOLTIP_OFFSET = (14, 16)
+
+
+def inventory_item_at(dg, offset_x, offset_y, inventory_open, pos):
+    """Name of the item in the inventory slot under *pos*, or None."""
+    for rect, name, _row, _col in inventory_layout(dg, offset_x, offset_y, inventory_open):
+        if rect.collidepoint(pos):
+            return name
+    return None
+
+
+def draw_inventory_tooltip(screen, font, name, pos):
+    """Draw *name* in a small box beside the cursor at *pos*, kept on screen."""
+    text = font.render(name, True, (255, 255, 255))
+    box = pygame.Rect(0, 0, text.get_width() + 2 * INV_TOOLTIP_PAD,
+                      text.get_height() + 2 * INV_TOOLTIP_PAD)
+    box.topleft = (pos[0] + INV_TOOLTIP_OFFSET[0], pos[1] + INV_TOOLTIP_OFFSET[1])
+    box.clamp_ip(screen.get_rect())
+    pygame.draw.rect(screen, INV_TOOLTIP_BG, box)
+    pygame.draw.rect(screen, INV_TOOLTIP_BORDER, box, 1)
+    screen.blit(text, (box.x + INV_TOOLTIP_PAD, box.y + INV_TOOLTIP_PAD))
+
+
 CRAFT_DIALOG_PAD = 12
 CRAFT_DIALOG_BUTTON_HEIGHT = 30
 CRAFT_DIALOG_BUTTON_GAP = 6
@@ -4324,6 +4363,22 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
             skill_menu_scroll = 0
             skill_menu_drag = None
 
+        # Inventory tooltip, drawn after everything so it is never hidden. A dialog
+        # sitting over the slot hides the slot, so it suppresses the tooltip too.
+        mouse_pos = pygame.mouse.get_pos()
+        hovered_item = inventory_item_at(dg, offset_x, offset_y, inventory_open, mouse_pos)
+        if hovered_item is not None:
+            covering = []
+            if skill_menu_open:
+                covering.append(skill_menu_layout(
+                    screen, skill_font, skill_menu_group, skill_menu_scroll)[0])
+            if level_dialog_open:
+                covering.append(level_dialog_layout(screen, dg, level_dialog_scroll)[0])
+            if crafting_open:
+                covering.append(crafting_dialog_layout(screen, craft_font, crafting_expanded)[0])
+            if not any(d.collidepoint(mouse_pos) for d in covering):
+                draw_inventory_tooltip(screen, craft_font, hovered_item, mouse_pos)
+
         pygame.display.flip()
         # Update window title with current level
         pygame.display.set_caption(f"RLDungeonGenerator - {dg.get_current_level_name()}")
@@ -4441,6 +4496,13 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
                                     # Clicking the expanded recipe collapses it.
                                     crafting_expanded = None if crafting_expanded == i else i
                                     break
+                if not dialog_hit and event.button == 1:
+                    # Inventory slots absorb clicks, so clicking one never attacks
+                    # the tiles behind it.
+                    dialog_hit = any(
+                        rect.collidepoint(event.pos)
+                        for rect, _name, _row, _col in inventory_layout(
+                            dg, offset_x, offset_y, inventory_open))
                 if not dialog_hit and event.button == 1:
                     tray_panel, tray_slots = skill_tray_layout(screen)
                     # The tray absorbs clicks too, so clicking it never attacks

@@ -18,6 +18,12 @@
             Add art to tilesheet
 
 
+            **MAP DECLARATIONS**
+                *Openspace?*
+            *Creatures*
+            **GLYPHS**
+
+
 
     * Damage :
         Slash
