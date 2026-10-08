@@ -1,7 +1,7 @@
 # Monster type definitions for RLDungeonGenerator
 # Each monster type is a dict with:
 # - name: monster name
-# - glyph_index: index in the tileset (row * 32 + col)
+# - glyph_index: tileset index, declared by row and column in Glyph_Grimoire.py
 # - health: health points
 # - size: side length N of the N×N block of tiles the monster occupies (default 1).
 #   Movement, collision, pathfinding, and rendering all operate on this footprint.
@@ -45,10 +45,29 @@
     # neck, skeleton, and draugr 14
 # increased max count by 900%
 
+try:
+    from .Glyph_Grimoire import (
+        MONSTER_BOAR,
+        MONSTER_DRAUGR,
+        MONSTER_EIKTHYR,
+        MONSTER_GREYLING,
+        MONSTER_NECK,
+        MONSTER_SKELETON,
+    )
+except ImportError:
+    from Glyph_Grimoire import (
+        MONSTER_BOAR,
+        MONSTER_DRAUGR,
+        MONSTER_EIKTHYR,
+        MONSTER_GREYLING,
+        MONSTER_NECK,
+        MONSTER_SKELETON,
+    )
+
 MONSTER_TYPES = [
     {
         'name': 'Boar',
-        'glyph_index': 3 * 32 + 1,  # Row 3, Column 1
+        'glyph_index': MONSTER_BOAR,
         'health': 10,
         'size': 1,  # occupies a 1x1 block of tiles
         'xp_value': 180,
@@ -69,7 +88,7 @@ MONSTER_TYPES = [
     },
     {
         'name': 'Greyling',
-        'glyph_index': 3 * 32 + 2,  # Row 3, Column 2
+        'glyph_index': MONSTER_GREYLING,
         'health': 20,
         'size': 1,  # occupies a 1x1 block of tiles
         'xp_value': 180,
@@ -94,7 +113,7 @@ MONSTER_TYPES = [
         # Carries the two Meadows-tier crafting materials, so the Flint Spear is
         # reachable without leaving the first level.
         'name': 'Neck',
-        'glyph_index': 3 * 32 + 4,  # Row 3, Column 4 (art TBD)
+        'glyph_index': MONSTER_NECK,
         'health': 15,
         'size': 1,  # occupies a 1x1 block of tiles
         'xp_value': 150,
@@ -114,7 +133,7 @@ MONSTER_TYPES = [
     {
         # Sole source of Bronze, gating the bronze weapons behind the Black Forest.
         'name': 'Skeleton',
-        'glyph_index': 3 * 32 + 5,  # Row 3, Column 5 (art TBD)
+        'glyph_index': MONSTER_SKELETON,
         'health': 40,
         'size': 1,  # occupies a 1x1 block of tiles
         'xp_value': 450,
@@ -133,7 +152,7 @@ MONSTER_TYPES = [
     {
         # Sole source of Iron, gating the iron weapons behind the Swamps.
         'name': 'Draugr',
-        'glyph_index': 3 * 32 + 6,  # Row 3, Column 6 (art TBD)
+        'glyph_index': MONSTER_DRAUGR,
         'health': 80,
         'size': 1,  # occupies a 1x1 block of tiles
         'xp_value': 900,
@@ -151,7 +170,7 @@ MONSTER_TYPES = [
     },
     {
         'name': 'Eikthyr',
-        'glyph_index': 3 * 32 + 3,  # Row 3, Column 3
+        'glyph_index': MONSTER_EIKTHYR,
         'health': 500,
         'size': 4,  # occupies a 4x4 block of tiles
         'xp_value': 2400,

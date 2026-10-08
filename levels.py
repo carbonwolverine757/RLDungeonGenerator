@@ -1,20 +1,41 @@
 # Level definitions for RLDungeonGenerator
 # Each level is a dict with:
 # - name: level name
-# - floor_glyph: character used for floor tiles
-# - wall_glyph: character used for wall tiles
+# - floor_glyph: tileset index for floor tiles (a TERRAIN_* name from Glyph_Grimoire.py)
+# - wall_glyph: tileset index for wall tiles (a TERRAIN_* name from Glyph_Grimoire.py)
 # - fog_glyph: character used when showing unexplored tiles (optional)
 # - floor_bg: RGB tuple for floor background color
 # - wall_bg: RGB tuple for wall background color
 # - fog_bg: RGB tuple for fog background color
-# - floor_fg, wall_fg, fog_fg: optional foreground colors     B7     88
+# - floor_fg, wall_fg, fog_fg: optional foreground colors
+
+try:
+    from .Glyph_Grimoire import (
+        TERRAIN_7_21,
+        TERRAIN_7_22,
+        TERRAIN_DIRT,
+        TERRAIN_GRASS,
+        TERRAIN_SNOW,
+        TERRAIN_STONE,
+        TERRAIN_WATER,
+    )
+except ImportError:
+    from Glyph_Grimoire import (
+        TERRAIN_7_21,
+        TERRAIN_7_22,
+        TERRAIN_DIRT,
+        TERRAIN_GRASS,
+        TERRAIN_SNOW,
+        TERRAIN_STONE,
+        TERRAIN_WATER,
+    )
 
 LEVELS = [
     {
         'name': 'Meadows',
         'openspace': True,
-        'floor_glyph': 240,
-        'wall_glyph': 240,
+        'floor_glyph': TERRAIN_GRASS,
+        'wall_glyph': TERRAIN_GRASS,
         'fog_glyph': ' ',
         'floor_bg': (101, 164, 34),
         'wall_bg': (50, 82, 17),
@@ -26,8 +47,8 @@ LEVELS = [
     {
         'name': 'Eikthyr Bossfight',
         'openspace': True,
-        'floor_glyph': 240,
-        'wall_glyph': 240,
+        'floor_glyph': TERRAIN_GRASS,
+        'wall_glyph': TERRAIN_GRASS,
         'fog_glyph': ' ',
         'floor_bg': (100, 100, 100),
         'wall_bg': (50, 50, 50),
@@ -39,8 +60,8 @@ LEVELS = [
     {
         'name': 'Black Forest',
         'openspace': True,
-        'floor_glyph': 240,
-        'wall_glyph': 240,
+        'floor_glyph': TERRAIN_GRASS,
+        'wall_glyph': TERRAIN_GRASS,
         'fog_glyph': ' ',
         'floor_bg': (90, 80, 50),
         'wall_bg': (50, 82, 17),
@@ -51,8 +72,8 @@ LEVELS = [
     },
     {
         'name': 'Burial Chambers',
-        'floor_glyph': 244,
-        'wall_glyph': 243,
+        'floor_glyph': TERRAIN_DIRT,
+        'wall_glyph': TERRAIN_STONE,
         'fog_glyph': ' ',
         'floor_bg': (120, 120, 120),
         'wall_bg': (70, 70, 70),
@@ -63,8 +84,8 @@ LEVELS = [
     },
     {
         'name': 'Troll Cave',
-        'floor_glyph': 244,
-        'wall_glyph': 243,
+        'floor_glyph': TERRAIN_DIRT,
+        'wall_glyph': TERRAIN_STONE,
         'fog_glyph': ' ',
         'floor_bg': (110, 100, 80),
         'wall_bg': (60, 50, 30),
@@ -75,8 +96,8 @@ LEVELS = [
     },
     {
         'name': 'Smoldering Tomb',
-        'floor_glyph': 244,
-        'wall_glyph': 243,
+        'floor_glyph': TERRAIN_DIRT,
+        'wall_glyph': TERRAIN_STONE,
         'fog_glyph': ' ',
         'floor_bg': (140, 60, 40),
         'wall_bg': (80, 30, 20),
@@ -88,8 +109,8 @@ LEVELS = [
     {
         'name': 'The Elder Bossfight',
         'openspace': True,
-        'floor_glyph': 240,
-        'wall_glyph': 243,
+        'floor_glyph': TERRAIN_GRASS,
+        'wall_glyph': TERRAIN_STONE,
         'fog_glyph': ' ',
         'floor_bg': (100, 100, 100),
         'wall_bg': (50, 50, 50),
@@ -101,8 +122,8 @@ LEVELS = [
     {
         'name': 'Ocean',
         'openspace': True,
-        'floor_glyph': 241,
-        'wall_glyph': 241,
+        'floor_glyph': TERRAIN_WATER,
+        'wall_glyph': TERRAIN_WATER,
         'fog_glyph': ' ',
         'floor_bg': (20, 100, 150),
         'wall_bg': (10, 60, 100),
@@ -114,8 +135,8 @@ LEVELS = [
     {
         'name': 'Swamps',
         'openspace': True,
-        'floor_glyph': 244,
-        'wall_glyph': 240,
+        'floor_glyph': TERRAIN_DIRT,
+        'wall_glyph': TERRAIN_GRASS,
         'fog_glyph': ' ',
         'floor_bg': (80, 90, 50),
         'wall_bg': (50, 60, 30),
@@ -126,8 +147,8 @@ LEVELS = [
     },
     {
         'name': 'Sunken Crypts',
-        'floor_glyph': 244,
-        'wall_glyph': 246,
+        'floor_glyph': TERRAIN_DIRT,
+        'wall_glyph': TERRAIN_7_22,
         'fog_glyph': ' ',
         'floor_bg': (90, 110, 120),
         'wall_bg': (50, 70, 80),
@@ -139,8 +160,8 @@ LEVELS = [
     {
         'name': 'Bonemass Bossfight',
         'openspace': True,
-        'floor_glyph': 244,
-        'wall_glyph': 241,
+        'floor_glyph': TERRAIN_DIRT,
+        'wall_glyph': TERRAIN_WATER,
         'fog_glyph': ' ',
         'floor_bg': (100, 100, 100),
         'wall_bg': (50, 50, 50),
@@ -152,8 +173,8 @@ LEVELS = [
     {
         'name': 'Ocean 2',
         'openspace': True,
-        'floor_glyph': 241,
-        'wall_glyph': 241,
+        'floor_glyph': TERRAIN_WATER,
+        'wall_glyph': TERRAIN_WATER,
         'fog_glyph': ' ',
         'floor_bg': (20, 100, 150),
         'wall_bg': (10, 60, 100),
@@ -164,8 +185,8 @@ LEVELS = [
     },
     {
         'name': 'Mountains',
-        'floor_glyph': 242,
-        'wall_glyph': 243,
+        'floor_glyph': TERRAIN_SNOW,
+        'wall_glyph': TERRAIN_STONE,
         'fog_glyph': ' ',
         'floor_bg': (130, 130, 130),
         'wall_bg': (80, 80, 80),
@@ -176,8 +197,8 @@ LEVELS = [
     },
     {
         'name': 'Ice Caves',
-        'floor_glyph': 243,
-        'wall_glyph': 243,
+        'floor_glyph': TERRAIN_STONE,
+        'wall_glyph': TERRAIN_STONE,
         'fog_glyph': ' ',
         'floor_bg': (150, 200, 220),
         'wall_bg': (100, 150, 180),
@@ -188,8 +209,8 @@ LEVELS = [
     },
     {
         'name': 'Howling Caverns',
-        'floor_glyph': 242,
-        'wall_glyph': 242,
+        'floor_glyph': TERRAIN_SNOW,
+        'wall_glyph': TERRAIN_SNOW,
         'fog_glyph': ' ',
         'floor_bg': (200, 220, 230),
         'wall_bg': (150, 170, 180),
@@ -200,8 +221,8 @@ LEVELS = [
     },
     {
         'name': 'Moder Bossfight',
-        'floor_glyph': 242,
-        'wall_glyph': 243,
+        'floor_glyph': TERRAIN_SNOW,
+        'wall_glyph': TERRAIN_STONE,
         'fog_glyph': ' ',
         'floor_bg': (100, 100, 100),
         'wall_bg': (50, 50, 50),
@@ -213,8 +234,8 @@ LEVELS = [
     {
         'name': 'Ocean 3',
         'openspace': True,
-        'floor_glyph': 241,
-        'wall_glyph': 241,
+        'floor_glyph': TERRAIN_WATER,
+        'wall_glyph': TERRAIN_WATER,
         'fog_glyph': ' ',
         'floor_bg': (20, 100, 150),
         'wall_bg': (10, 60, 100),
@@ -225,8 +246,8 @@ LEVELS = [
     },
     {
         'name': 'Plains',
-        'floor_glyph': 245,
-        'wall_glyph': 245,
+        'floor_glyph': TERRAIN_7_21,
+        'wall_glyph': TERRAIN_7_21,
         'fog_glyph': ' ',
         'floor_bg': (140, 150, 100),
         'wall_bg': (100, 110, 70),
@@ -237,8 +258,8 @@ LEVELS = [
     },
     {
         'name': 'Fuling Village',
-        'floor_glyph': 245,
-        'wall_glyph': 245,
+        'floor_glyph': TERRAIN_7_21,
+        'wall_glyph': TERRAIN_7_21,
         'fog_glyph': ' ',
         'floor_bg': (180, 140, 100),
         'wall_bg': (140, 100, 60),
@@ -249,8 +270,8 @@ LEVELS = [
     },
     {
         'name': 'Sealed Tower',
-        'floor_glyph': 245,
-        'wall_glyph': 246,
+        'floor_glyph': TERRAIN_7_21,
+        'wall_glyph': TERRAIN_7_22,
         'fog_glyph': ' ',
         'floor_bg': (120, 80, 140),
         'wall_bg': (70, 40, 90),
@@ -261,8 +282,8 @@ LEVELS = [
     },
     {
         'name': 'Yagluth Bossfight',
-        'floor_glyph': 245,
-        'wall_glyph': 243,
+        'floor_glyph': TERRAIN_7_21,
+        'wall_glyph': TERRAIN_STONE,
         'fog_glyph': ' ',
         'floor_bg': (100, 100, 100),
         'wall_bg': (50, 50, 50),
@@ -274,8 +295,8 @@ LEVELS = [
     {
         'name': 'Ocean 4',
         'openspace': True,
-        'floor_glyph': 241,
-        'wall_glyph': 241,
+        'floor_glyph': TERRAIN_WATER,
+        'wall_glyph': TERRAIN_WATER,
         'fog_glyph': ' ',
         'floor_bg': (20, 100, 150),
         'wall_bg': (10, 60, 100),
@@ -286,8 +307,8 @@ LEVELS = [
     },
     {
         'name': 'Mistlands Coast',
-        'floor_glyph': 243,
-        'wall_glyph': 241,
+        'floor_glyph': TERRAIN_STONE,
+        'wall_glyph': TERRAIN_WATER,
         'fog_glyph': ' ',
         'floor_bg': (140, 100, 160),
         'wall_bg': (90, 50, 110),
@@ -298,8 +319,8 @@ LEVELS = [
     },
     {
         'name': 'Mistlands',
-        'floor_glyph': 243,
-        'wall_glyph': 243,
+        'floor_glyph': TERRAIN_STONE,
+        'wall_glyph': TERRAIN_STONE,
         'fog_glyph': ' ',
         'floor_bg': (130, 90, 150),
         'wall_bg': (80, 40, 100),
@@ -310,8 +331,8 @@ LEVELS = [
     },
     {
         'name': 'Dvergr Outpost',
-        'floor_glyph': 183,
-        'wall_glyph': 9608,
+        'floor_glyph': TERRAIN_DIRT,
+        'wall_glyph': TERRAIN_STONE,
         'fog_glyph': ' ',
         'floor_bg': (120, 120, 120),
         'wall_bg': (70, 70, 70),
@@ -322,8 +343,8 @@ LEVELS = [
     },
     {
         'name': 'Giant Remains',
-        'floor_glyph': 183,
-        'wall_glyph': 9608,
+        'floor_glyph': TERRAIN_DIRT,
+        'wall_glyph': TERRAIN_STONE,
         'fog_glyph': ' ',
         'floor_bg': (110, 110, 110),
         'wall_bg': (60, 60, 60),
@@ -334,8 +355,8 @@ LEVELS = [
     },
     {
         'name': 'Infested Mines',
-        'floor_glyph': 183,
-        'wall_glyph': 9608,
+        'floor_glyph': TERRAIN_DIRT,
+        'wall_glyph': TERRAIN_STONE,
         'fog_glyph': ' ',
         'floor_bg': (80, 40, 100),
         'wall_bg': (40, 20, 60),
@@ -346,8 +367,8 @@ LEVELS = [
     },
     {
         'name': 'The Queen Bossfight',
-        'floor_glyph': 183,
-        'wall_glyph': 9608,
+        'floor_glyph': TERRAIN_DIRT,
+        'wall_glyph': TERRAIN_STONE,
         'fog_glyph': ' ',
         'floor_bg': (100, 100, 100),
         'wall_bg': (50, 50, 50),
@@ -359,8 +380,8 @@ LEVELS = [
     {
         'name': 'Ocean 5',
         'openspace': True,
-        'floor_glyph': 8767,
-        'wall_glyph': 9608,
+        'floor_glyph': TERRAIN_WATER,
+        'wall_glyph': TERRAIN_STONE,
         'fog_glyph': ' ',
         'floor_bg': (20, 100, 150),
         'wall_bg': (10, 60, 100),
@@ -371,8 +392,8 @@ LEVELS = [
     },
     {
         'name': 'Ashlands Waters',
-        'floor_glyph': 8767,
-        'wall_glyph': 9608,
+        'floor_glyph': TERRAIN_WATER,
+        'wall_glyph': TERRAIN_STONE,
         'fog_glyph': ' ',
         'floor_bg': (160, 80, 40),
         'wall_bg': (100, 50, 20),
@@ -383,8 +404,8 @@ LEVELS = [
     },
     {
         'name': 'Ashlands Coast',
-        'floor_glyph': 183,
-        'wall_glyph': 9608,
+        'floor_glyph': TERRAIN_DIRT,
+        'wall_glyph': TERRAIN_STONE,
         'fog_glyph': ' ',
         'floor_bg': (170, 90, 50),
         'wall_bg': (110, 60, 30),
@@ -395,8 +416,8 @@ LEVELS = [
     },
     {
         'name': 'Ashlands',
-        'floor_glyph': 183,
-        'wall_glyph': 9608,
+        'floor_glyph': TERRAIN_DIRT,
+        'wall_glyph': TERRAIN_STONE,
         'fog_glyph': ' ',
         'floor_bg': (180, 100, 60),
         'wall_bg': (120, 70, 40),
@@ -407,8 +428,8 @@ LEVELS = [
     },
     {
         'name': 'Putrid Hole',
-        'floor_glyph': 183,
-        'wall_glyph': 9608,
+        'floor_glyph': TERRAIN_DIRT,
+        'wall_glyph': TERRAIN_STONE,
         'fog_glyph': ' ',
         'floor_bg': (100, 120, 60),
         'wall_bg': (60, 80, 30),
@@ -419,8 +440,8 @@ LEVELS = [
     },
     {
         'name': 'Ashlands (Inland)',
-        'floor_glyph': 183,
-        'wall_glyph': 9608,
+        'floor_glyph': TERRAIN_DIRT,
+        'wall_glyph': TERRAIN_STONE,
         'fog_glyph': ' ',
         'floor_bg': (190, 110, 70),
         'wall_bg': (130, 80, 50),
@@ -431,8 +452,8 @@ LEVELS = [
     },
     {
         'name': 'Charred Fortress',
-        'floor_glyph': 183,
-        'wall_glyph': 9608,
+        'floor_glyph': TERRAIN_DIRT,
+        'wall_glyph': TERRAIN_STONE,
         'fog_glyph': ' ',
         'floor_bg': (140, 40, 30),
         'wall_bg': (80, 20, 10),
@@ -443,8 +464,8 @@ LEVELS = [
     },
     {
         'name': 'First Mysterious Location',
-        'floor_glyph': 183,
-        'wall_glyph': 9608,
+        'floor_glyph': TERRAIN_DIRT,
+        'wall_glyph': TERRAIN_STONE,
         'fog_glyph': ' ',
         'floor_bg': (100, 60, 140),
         'wall_bg': (50, 30, 80),
@@ -455,8 +476,8 @@ LEVELS = [
     },
     {
         'name': 'Second Mysterious Location',
-        'floor_glyph': 183,
-        'wall_glyph': 9608,
+        'floor_glyph': TERRAIN_DIRT,
+        'wall_glyph': TERRAIN_STONE,
         'fog_glyph': ' ',
         'floor_bg': (110, 70, 150),
         'wall_bg': (60, 40, 90),
@@ -467,8 +488,8 @@ LEVELS = [
     },
     {
         'name': 'Tomb of Lord Reto',
-        'floor_glyph': 183,
-        'wall_glyph': 9608,
+        'floor_glyph': TERRAIN_DIRT,
+        'wall_glyph': TERRAIN_STONE,
         'fog_glyph': ' ',
         'floor_bg': (90, 50, 120),
         'wall_bg': (50, 30, 70),
@@ -479,8 +500,8 @@ LEVELS = [
     },
     {
         'name': 'Fader Bossfight',
-        'floor_glyph': 183,
-        'wall_glyph': 9608,
+        'floor_glyph': TERRAIN_DIRT,
+        'wall_glyph': TERRAIN_STONE,
         'fog_glyph': ' ',
         'floor_bg': (70, 70, 70),
         'wall_bg': (40, 40, 40),

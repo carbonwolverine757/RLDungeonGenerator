@@ -2,7 +2,7 @@
 # Each object type is a dict with:
 # - name: object name
 # - health: health points (same system as monsters)
-# - glyph_index: index in the tileset (row * 32 + col)
+# - glyph_index: tileset index, declared by row and column in Glyph_Grimoire.py
 # - levels: list of the levels where this object appears. Each entry is a dict with
 #   'name' (the level name) and 'spawn_count' (how many of this object to place on
 #   that level), so the amount can be tuned per level. An empty list means the
@@ -14,11 +14,24 @@
 #   defined in Drops.py) and 'drop_chance' (integer part always drops; fractional
 #   part is the probability of one extra).
 
+try:
+    from .Glyph_Grimoire import (
+        OBJECT_BEECH_TREE,
+        OBJECT_CAVE_ROCK,
+        OBJECT_ROCK,
+    )
+except ImportError:
+    from Glyph_Grimoire import (
+        OBJECT_BEECH_TREE,
+        OBJECT_CAVE_ROCK,
+        OBJECT_ROCK,
+    )
+
 OBJECT_TYPES = [
     {
         'name': 'Beech Tree',
         'health': 20,
-        'glyph_index': 7 * 32 + 14,  # Row 7, Column 14
+        'glyph_index': OBJECT_BEECH_TREE,
         'levels': [
             {'name': 'Meadows', 'spawn_count': 20},
             {'name': 'Black Forest', 'spawn_count': 625},
@@ -32,7 +45,7 @@ OBJECT_TYPES = [
     {
         'name': 'Rock',
         'health': 30,
-        'glyph_index': 4 * 32 + 1,  # Row 4, Column 1
+        'glyph_index': OBJECT_ROCK,
         'levels': [
             {'name': 'Meadows', 'spawn_count': 10},
             {'name': 'Black Forest', 'spawn_count': 10},
@@ -51,7 +64,7 @@ OBJECT_TYPES = [
     {
         'name': 'Cave Rock',
         'health': 30,
-        'glyph_index': 4 * 32 + 2,  # Row 4, Column 2 — adjust once tileset glyph confirmed
+        'glyph_index': OBJECT_CAVE_ROCK,
         'levels': [
             {'name': 'Burial Chambers', 'spawn_count': 5},
             {'name': 'Troll Cave', 'spawn_count': 5},

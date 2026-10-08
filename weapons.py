@@ -8,18 +8,24 @@
 #   so the attack lands wherever the player clicked, at any distance.
 # - area: radius (in tiles) around the attack centroid that can be affected
 # - angle: cone angle in degrees (centered on attack direction)
-# - glyph: tileset index (row * 32 + col), drawn in the crafting menu and the
-#   inventory. None means the weapon has no icon.
+# - glyph: tileset index (declared by row and column in Glyph_Grimoire.py),
+#   drawn in the crafting menu and the inventory. None means the weapon has no
+#   icon.
 #
 # Weapons are crafted at the Workbench; see Recipes.py for what each one costs.
 # 'Unarmed' must stay first: RLDungeonGenerator equips WEAPONS[0] on startup.
 
+try:
+    from .Glyph_Grimoire import WEAPON_SPEAR, WEAPON_SWORD, WEAPON_AXE
+except ImportError:
+    from Glyph_Grimoire import WEAPON_SPEAR, WEAPON_SWORD, WEAPON_AXE
+
 # Weapon art is shared per weapon type; material is not yet distinguished, so
 # every spear looks alike, as does every sword and axe. Row 11 is unused (row 10
 # holds drop/item art). Art TBD — these cells currently show the placeholder glyph.
-SPEAR_GLYPH = 11 * 32 + 0  # Row 11, Column 0
-SWORD_GLYPH = 11 * 32 + 1  # Row 11, Column 1
-AXE_GLYPH = 11 * 32 + 2    # Row 11, Column 2
+SPEAR_GLYPH = WEAPON_SPEAR
+SWORD_GLYPH = WEAPON_SWORD
+AXE_GLYPH = WEAPON_AXE
 
 WEAPONS = [
     {

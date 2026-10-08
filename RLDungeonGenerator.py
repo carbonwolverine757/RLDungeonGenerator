@@ -11,30 +11,33 @@ import traceback
 import logging
 from collections import deque
 
-# Glyph index for walls & floors in the generated Unicode tilesheet.
-# The tilesheet is built by `generate_unicode_tileset.py` with `cols=32`,
-# so each row has 32 tiles. We want the glyph at:
-#   - row = 7 (0-based, i.e. 8th row from top)
-#   - col = 16 (0-based, i.e. 17th column from left)
-# Index = row * cols + col = 7 * 32 + 16 = 240.
-WALL_FLOOR_GLYPH_INDEX = 7 * 32 + 16
-# Glyph index for doors in the generated Unicode tilesheet.
-# Use tile at row = 7, col = 15 (0-based). Index = 7 * 32 + 15 = 239.
-DOOR_GLYPH_INDEX = 7 * 32 + 15
-# Glyph index for exits in the generated Unicode tilesheet.
-# Use tile at row = 9, col = 23 (0-based). Index = 9 * 32 + 23 = 303.
-EXIT_GLYPH_INDEX = 9 * 32 + 23
-# Glyphs for the fixed "base" structure placed at the center of openspace maps.
-# Base Floor: row 7, col 15 -> 239 (walkable interior)
-BASE_FLOOR_GLYPH_INDEX = 7 * 32 + 15
-# Base Wall: row 7, col 14 -> 238 (solid border, not walkable)
-BASE_WALL_GLYPH_INDEX = 7 * 32 + 14
-# Base Door: row 7, col 13 -> 237 (walkable for the player, blocked for monsters)
-BASE_DOOR_GLYPH_INDEX = 7 * 32 + 13
-# Workbench: row 7, col 12 -> 236. Sits in the top-right interior corner of the
-# base structure; clicking it from within 2 tiles opens the crafting menu.
-# Blocks movement like a wall. (Art TBD: this cell shows the placeholder glyph.)
-WORKBENCH_GLYPH_INDEX = 7 * 32 + 12
+# Tileset geometry and every glyph's row/column live in `Glyph_Grimoire.py`.
+try:
+    from .Glyph_Grimoire import (
+        TILESET_PATH, TILESET_COLUMNS, GLYPH_SIZE,
+        TERRAIN_WALL_FLOOR, TERRAIN_DIRT, TERRAIN_STONE,
+        STRUCTURE_DOOR, STRUCTURE_EXIT, STRUCTURE_BASE_FLOOR,
+        STRUCTURE_BASE_WALL, STRUCTURE_BASE_DOOR, STRUCTURE_WORKBENCH,
+    )
+except ImportError:
+    from Glyph_Grimoire import (
+        TILESET_PATH, TILESET_COLUMNS, GLYPH_SIZE,
+        TERRAIN_WALL_FLOOR, TERRAIN_DIRT, TERRAIN_STONE,
+        STRUCTURE_DOOR, STRUCTURE_EXIT, STRUCTURE_BASE_FLOOR,
+        STRUCTURE_BASE_WALL, STRUCTURE_BASE_DOOR, STRUCTURE_WORKBENCH,
+    )
+
+WALL_FLOOR_GLYPH_INDEX = TERRAIN_WALL_FLOOR
+DOOR_GLYPH_INDEX = STRUCTURE_DOOR
+EXIT_GLYPH_INDEX = STRUCTURE_EXIT
+# The fixed "base" structure placed at the center of openspace maps.
+BASE_FLOOR_GLYPH_INDEX = STRUCTURE_BASE_FLOOR  # walkable interior
+BASE_WALL_GLYPH_INDEX = STRUCTURE_BASE_WALL    # solid border, not walkable
+BASE_DOOR_GLYPH_INDEX = STRUCTURE_BASE_DOOR    # walkable for the player, blocked for monsters
+# Workbench: sits in the top-right interior corner of the base structure;
+# clicking it from within 2 tiles opens the crafting menu. Blocks movement like
+# a wall.
+WORKBENCH_GLYPH_INDEX = STRUCTURE_WORKBENCH
 
 # Log every spawn tick's outcome (see update_spawning). The per-type failure reason is
 # what distinguishes a quiet map that is merely tuned sparse from one that is broken.
@@ -268,7 +271,7 @@ class RLDungeonGenerator:
         self.rooms = []
         self.player_row = 0
         self.player_col = 0
-        self.tile_size = 64
+        self.tile_size = GLYPH_SIZE
         self.player_x = 0.0
         self.player_y = 0.0
         # Movement speed expressed as tiles per second; converted to pixels/sec below
@@ -2152,11 +2155,11 @@ class RLDungeonGenerator:
     def apply_level(self, index: int) -> None:
         """Apply level settings by index from self.levels."""
         if not self.levels:
-            # defaults (match original constants); stored as codepoints
+            # defaults; glyphs are tileset indices
             level = {
                 'name': 'default',
-                'floor_glyph': 0x00B7,  # middle dot
-                'wall_glyph': 0x2588,   # full block
+                'floor_glyph': TERRAIN_DIRT,
+                'wall_glyph': TERRAIN_STONE,
                 'fog_glyph': ord(' '),
                 'floor_bg': COLOR_FLOOR_BG,
                 'wall_bg': COLOR_WALL_BG,
@@ -2170,8 +2173,8 @@ class RLDungeonGenerator:
             level = self.levels[index % len(self.levels)]
 
         # allow glyphs to be stored as either codepoints (int) or chars
-        self.floor_glyph = level.get('floor_glyph', 0x00B7)
-        self.wall_glyph = level.get('wall_glyph', 0x2588)
+        self.floor_glyph = level.get('floor_glyph', TERRAIN_DIRT)
+        self.wall_glyph = level.get('wall_glyph', TERRAIN_STONE)
         self.fog_glyph = level.get('fog_glyph', ord(' '))
         self.exit_glyph = level.get('exit_glyph', EXIT_GLYPH_INDEX)
         # convert ints to characters for internal comparisons
@@ -3790,13 +3793,13 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
     # Attempt to load a PNG tilesheet first (same path as tcod renderer)
     tile_surfaces_orig = None
     tile_surfaces = None
-    png_tileset_path = os.path.join(os.path.dirname(__file__), 'assets', 'tilesets', 'unicode_tileset_64.png')
+    png_tileset_path = TILESET_PATH
     if os.path.exists(png_tileset_path):
         try:
             sheet = pygame.image.load(png_tileset_path).convert_alpha()
-            sheet_w, sheet_h = sheet.get_size()
-            native_tile_px = sheet_w // 32  # sheet is always 32 columns wide
-            cols = 32
+            sheet_h = sheet.get_height()
+            native_tile_px = GLYPH_SIZE
+            cols = TILESET_COLUMNS
             rows = sheet_h // native_tile_px
             tile_surfaces_orig = []
             for ty in range(rows):

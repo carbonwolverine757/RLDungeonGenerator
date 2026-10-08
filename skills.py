@@ -15,7 +15,8 @@
 # - angle: cone angle in degrees (centered on attack direction). 360 or more
 #   short-circuits to a full disc, ignoring direction.
 # - knockback: tiles of knockback, before the target's knockback resistance
-# - glyph: tileset index (row * 32 + col), drawn in the skill menu and the tray
+# - glyph: tileset index (declared by row and column in Glyph_Grimoire.py),
+#   drawn in the skill menu and the tray
 #
 # Plus three fields weapons do not have:
 # - background: RGB fill drawn behind the glyph, so a skill's tree reads at a
@@ -27,15 +28,20 @@
 # proficiency by 1; proficiency 1 unlocks the skill and each point past the
 # first adds 10% damage. See skill groups.py for how these are grouped.
 
+try:
+    from .Glyph_Grimoire import SKILL_BOLT, SKILL_LANCE, SKILL_BALL, SKILL_BURST, SKILL_CONE, SKILL_SPEAR, SKILL_ARC
+except ImportError:
+    from Glyph_Grimoire import SKILL_BOLT, SKILL_LANCE, SKILL_BALL, SKILL_BURST, SKILL_CONE, SKILL_SPEAR, SKILL_ARC
+
 # Skill art lives on row 23 of the tileset. Art is shared across trees — the
 # background color is what distinguishes a fire bolt from a frost one.
-BOLT_GLYPH = 23 * 32 + 0   # Row 23, Column 0
-LANCE_GLYPH = 23 * 32 + 1  # Row 23, Column 1
-BALL_GLYPH = 23 * 32 + 2   # Row 23, Column 2
-BURST_GLYPH = 23 * 32 + 3  # Row 23, Column 3
-CONE_GLYPH = 23 * 32 + 4   # Row 23, Column 4
-SPEAR_GLYPH = 23 * 32 + 5  # Row 23, Column 5
-ARC_GLYPH = 23 * 32 + 6    # Row 23, Column 6
+BOLT_GLYPH = SKILL_BOLT
+LANCE_GLYPH = SKILL_LANCE
+BALL_GLYPH = SKILL_BALL
+BURST_GLYPH = SKILL_BURST
+CONE_GLYPH = SKILL_CONE
+SPEAR_GLYPH = SKILL_SPEAR
+ARC_GLYPH = SKILL_ARC
 
 # One background per tree. RGB tuples, like every other color in the codebase.
 FIRE_BG = (255, 141, 10)    # #ff8d0a
