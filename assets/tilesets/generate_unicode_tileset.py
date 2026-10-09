@@ -45,26 +45,23 @@ def generate_tilesheet(out_path, font_path, tile_size=16, cols=16, codepoints=No
     img.save(out_path, 'PNG')
     print(f"Saved tilesheet: {out_path} ({cols}×{rows} tiles = {cols*rows})")
 
-if __name__ == '__main__':
-    # Example usage:
-    # - tile_size GLYPH_SIZE, TILESET_COLUMNS columns (see Glyph_Grimoire.py)
-    # - To get more tiles increase cols or include more codepoints (rows increase automatically)
-    font_candidates = [
-        r"C:\Windows\Fonts\consola.ttf",
-        r"/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
-        r"/usr/share/fonts/truetype/noto/NotoSansMono-Regular.ttf",
-        r"/System/Library/Fonts/Monaco.ttf",
-    ]
-    font_path = None
-    tile_size = GLYPH_SIZE
-    for p in font_candidates:
+FONT_CANDIDATES = [
+    r"C:\Windows\Fonts\consola.ttf",
+    r"/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+    r"/usr/share/fonts/truetype/noto/NotoSansMono-Regular.ttf",
+    r"/System/Library/Fonts/Monaco.ttf",
+]
+
+def find_font():
+    """Return the first installed font from FONT_CANDIDATES."""
+    for p in FONT_CANDIDATES:
         if os.path.exists(p):
-            font_path = p
-            break
-    if font_path is None:
-        raise SystemExit("No font found - install DejaVu/Noto or update font path in script.")
-    out = os.path.join('assets', 'tilesets', TILESET_FILENAME)
-    # Example: create tilesheet for Unicode block U+2500..U+257F plus ASCII and extended characters.
+            return p
+    raise SystemExit("No font found - install DejaVu/Noto or update font path in script.")
+
+def tileset_codepoints():
+    """Codepoints in tileset order; index i lands at row i // TILESET_COLUMNS, col i % TILESET_COLUMNS."""
+    # Unicode block U+2500..U+257F plus ASCII and extended characters.
     codepoints = list(range(32, 127))  # printable ASCII
     codepoints += list(range(0x2500, 0x2580))  # box drawing block (128 chars)
     # Additional Unicode blocks:
@@ -74,4 +71,11 @@ if __name__ == '__main__':
     codepoints += list(range(0x2700, 0x27BF))  # dingbats
     # You can append any other codepoints you need:
     codepoints += [0x2588, 0x00B7, 0x2193]  # '█', '·', '↓' (duplicates okay, they'll just appear twice)
-    generate_tilesheet(out, font_path, tile_size=tile_size, cols=TILESET_COLUMNS, codepoints=codepoints)
+    return codepoints
+
+if __name__ == '__main__':
+    # Example usage:
+    # - tile_size GLYPH_SIZE, TILESET_COLUMNS columns (see Glyph_Grimoire.py)
+    # - To get more tiles increase cols or include more codepoints (rows increase automatically)
+    out = os.path.join('assets', 'tilesets', TILESET_FILENAME)
+    generate_tilesheet(out, find_font(), tile_size=GLYPH_SIZE, cols=TILESET_COLUMNS, codepoints=tileset_codepoints())
