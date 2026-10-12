@@ -8,9 +8,12 @@
 #   python compose_raw_glyphs.py                 # every image in Raw
 #   python compose_raw_glyphs.py r07_c16.png ... # only the named Raw images
 #
-# The previous tileset is saved next to it as <name>.bak.png before writing.
+# Before writing, the previous tileset is copied to
+# Backups/<name>.<timestamp>.png, so every run keeps its own backup and never
+# overwrites an earlier one.
 
 from PIL import Image
+from datetime import datetime
 import os
 import re
 import shutil
@@ -59,9 +62,19 @@ def compose_raw_glyphs(raw_dir, tileset_path, tile_size=16, filenames=None):
     if placed == 0:
         print("Nothing to place; tileset unchanged.")
         return
-    backup = os.path.splitext(tileset_path)[0] + '.bak.png'
-    shutil.copyfile(tileset_path, backup)
-    sheet.save(tileset_path, 'PNG')
+    backup_dir = os.path.join(os.path.dirname(tileset_path), 'Backups')
+    stem = os.path.splitext(os.path.basename(tileset_path))[0]
+    backup = os.path.join(backup_dir, f"{stem}.{datetime.now():%Y%m%d-%H%M%S}.png")
+    try:
+        os.makedirs(backup_dir, exist_ok=True)
+        shutil.copyfile(tileset_path, backup)
+    except OSError as e:
+        raise SystemExit(f"Could not back up the tileset to {backup} ({e}); tileset unchanged.")
+    try:
+        sheet.save(tileset_path, 'PNG')
+    except OSError as e:
+        # Windows refuses to write a file another program (image viewer, editor preview) has open.
+        raise SystemExit(f"Could not write {tileset_path} ({e}). Close any program showing it and rerun.")
     print(f"Placed {placed} glyphs into {tileset_path} (previous version: {backup})")
 
 if __name__ == '__main__':
