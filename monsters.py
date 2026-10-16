@@ -107,6 +107,9 @@ MONSTER_TYPES = [
             {'name': 'Wood', 'drop_chance': 10.5},
             {'name': 'Flint', 'drop_chance': 10.0},
             {'name': 'Stone', 'drop_chance': 10.0},
+            {'name': 'Bronze', 'drop_chance': 10.0},
+            {'name': 'Iron', 'drop_chance': 10.0},
+            {'name': 'Leather Scraps', 'drop_chance': 10.0}
         ],
     },
     {

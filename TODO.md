@@ -23,6 +23,8 @@
             *Creatures*
             **GLYPHS**
 
+            ***WEAPONS DON'T ACTUALLY WORK CORRECTLY***
+
 
 
     * Damage :

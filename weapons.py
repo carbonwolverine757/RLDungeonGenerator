@@ -43,7 +43,7 @@ WEAPONS = [
         'name': 'Flint Spear',
         'damage': 10.0,
         'stamina_cost': 6,
-        'range': 0,
+        'range': 0.1,
         'area': 3.0,
         'angle': 10.0,
         'knockback': 0.5,  # tiles of knockback
@@ -53,7 +53,7 @@ WEAPONS = [
         'name': 'Bronze Spear',
         'damage': 15.0,
         'stamina_cost': 6,
-        'range': 0,
+        'range': 0.1,
         'area': 3.0,
         'angle': 10.0,
         'knockback': 0.5,  # tiles of knockback
@@ -63,7 +63,7 @@ WEAPONS = [
         'name': 'Iron Spear',
         'damage': 20.0,
         'stamina_cost': 6,
-        'range': 0,
+        'range': 0.1,
         'area': 3.0,
         'angle': 10.0,
         'knockback': 0.5,  # tiles of knockback
@@ -74,7 +74,7 @@ WEAPONS = [
         'name': 'Bronze Sword',
         'damage': 15.0,
         'stamina_cost': 7,
-        'range': 0,
+        'range': 0.1,
         'area': 2.0,
         'angle': 60.0,
         'knockback': 0.75,  # tiles of knockback
@@ -84,7 +84,7 @@ WEAPONS = [
         'name': 'Iron Sword',
         'damage': 20.0,
         'stamina_cost': 7,
-        'range': 0,
+        'range': 0.1,
         'area': 2.0,
         'angle': 60.0,
         'knockback': 0.75,  # tiles of knockback
@@ -95,7 +95,7 @@ WEAPONS = [
         'name': 'Bronze Axe',
         'damage': 17.0,
         'stamina_cost': 8,
-        'range': 0,
+        'range': 0.1,
         'area': 2.0,
         'angle': 90.0,
         'knockback': 1.0,  # tiles of knockback
@@ -105,7 +105,7 @@ WEAPONS = [
         'name': 'Iron Axe',
         'damage': 22.0,
         'stamina_cost': 8,
-        'range': 0,
+        'range': 0.1,
         'area': 2.0,
         'angle': 90.0,
         'knockback': 1.0,  # tiles of knockback

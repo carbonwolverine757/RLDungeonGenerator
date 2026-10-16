@@ -51,7 +51,7 @@ OBJECT_CAVE_ROCK = glyph(4, 2)  # adjust once tileset glyph confirmed
 STRUCTURE_WORKBENCH = glyph(7, 12)
 # The fixed "base" structure placed at the center of openspace maps.
 STRUCTURE_BASE_DOOR = glyph(7, 13)   # walkable for the player, blocked for monsters
-STRUCTURE_BASE_WALL = glyph(7, 14)   # solid border, not walkable
+STRUCTURE_BASE_WALL = glyph(7, 11)   # solid border, not walkable
 STRUCTURE_BASE_FLOOR = glyph(7, 15)  # walkable interior
 # Corridor doors in room-and-corridor dungeons.
 STRUCTURE_DOOR = glyph(7, 15)
