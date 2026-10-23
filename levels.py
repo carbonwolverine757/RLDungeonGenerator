@@ -18,6 +18,9 @@ try:
         TERRAIN_SNOW,
         TERRAIN_STONE,
         TERRAIN_WATER,
+        TERRAIN_SUNKEN_CRYPT_BRICKS,
+        TERRAIN_FROST_CAVE_FLOOR,
+        TERRAIN_HOWLING_CAVERN_ICE,
     )
 except ImportError:
     from Glyph_Grimoire import (
@@ -28,6 +31,9 @@ except ImportError:
         TERRAIN_SNOW,
         TERRAIN_STONE,
         TERRAIN_WATER,
+        TERRAIN_SUNKEN_CRYPT_BRICKS,
+        TERRAIN_FROST_CAVE_FLOOR,
+        TERRAIN_HOWLING_CAVERN_ICE,
     )
 
 LEVELS = [
@@ -148,7 +154,7 @@ LEVELS = [
     {
         'name': 'Sunken Crypts',
         'floor_glyph': TERRAIN_DIRT,
-        'wall_glyph': TERRAIN_7_22,
+        'wall_glyph': TERRAIN_SUNKEN_CRYPT_BRICKS,
         'fog_glyph': ' ',
         'floor_bg': (90, 110, 120),
         'wall_bg': (50, 70, 80),
@@ -197,7 +203,7 @@ LEVELS = [
     },
     {
         'name': 'Ice Caves',
-        'floor_glyph': TERRAIN_STONE,
+        'floor_glyph': TERRAIN_FROST_CAVE_FLOOR,
         'wall_glyph': TERRAIN_STONE,
         'fog_glyph': ' ',
         'floor_bg': (150, 200, 220),
@@ -209,7 +215,7 @@ LEVELS = [
     },
     {
         'name': 'Howling Caverns',
-        'floor_glyph': TERRAIN_SNOW,
+        'floor_glyph': TERRAIN_HOWLING_CAVERN_ICE,
         'wall_glyph': TERRAIN_SNOW,
         'fog_glyph': ' ',
         'floor_bg': (200, 220, 230),
