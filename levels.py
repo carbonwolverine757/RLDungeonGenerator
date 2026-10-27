@@ -21,6 +21,9 @@ try:
         TERRAIN_SUNKEN_CRYPT_BRICKS,
         TERRAIN_FROST_CAVE_FLOOR,
         TERRAIN_HOWLING_CAVERN_ICE,
+        TERRAIN_PLAINS_GRASS,
+        TERRAIN_WOOD_FLOOR,
+        TERRAIN_BLACK_MARBLE,
     )
 except ImportError:
     from Glyph_Grimoire import (
@@ -34,6 +37,9 @@ except ImportError:
         TERRAIN_SUNKEN_CRYPT_BRICKS,
         TERRAIN_FROST_CAVE_FLOOR,
         TERRAIN_HOWLING_CAVERN_ICE,
+        TERRAIN_PLAINS_GRASS,
+        TERRAIN_WOOD_FLOOR,
+        TERRAIN_BLACK_MARBLE,
     )
 
 LEVELS = [
@@ -252,8 +258,9 @@ LEVELS = [
     },
     {
         'name': 'Plains',
-        'floor_glyph': TERRAIN_7_21,
-        'wall_glyph': TERRAIN_7_21,
+        'openspace': True,
+        'floor_glyph': TERRAIN_PLAINS_GRASS,
+        'wall_glyph': TERRAIN_PLAINS_GRASS,
         'fog_glyph': ' ',
         'floor_bg': (140, 150, 100),
         'wall_bg': (100, 110, 70),
@@ -264,8 +271,8 @@ LEVELS = [
     },
     {
         'name': 'Fuling Village',
-        'floor_glyph': TERRAIN_7_21,
-        'wall_glyph': TERRAIN_7_21,
+        'floor_glyph': TERRAIN_PLAINS_GRASS,
+        'wall_glyph': TERRAIN_PLAINS_GRASS,
         'fog_glyph': ' ',
         'floor_bg': (180, 140, 100),
         'wall_bg': (140, 100, 60),
@@ -276,8 +283,8 @@ LEVELS = [
     },
     {
         'name': 'Sealed Tower',
-        'floor_glyph': TERRAIN_7_21,
-        'wall_glyph': TERRAIN_7_22,
+        'floor_glyph': TERRAIN_WOOD_FLOOR,
+        'wall_glyph': TERRAIN_SUNKEN_CRYPT_BRICKS,
         'fog_glyph': ' ',
         'floor_bg': (120, 80, 140),
         'wall_bg': (70, 40, 90),
@@ -288,7 +295,7 @@ LEVELS = [
     },
     {
         'name': 'Yagluth Bossfight',
-        'floor_glyph': TERRAIN_7_21,
+        'floor_glyph': TERRAIN_PLAINS_GRASS,
         'wall_glyph': TERRAIN_STONE,
         'fog_glyph': ' ',
         'floor_bg': (100, 100, 100),
@@ -337,8 +344,8 @@ LEVELS = [
     },
     {
         'name': 'Dvergr Outpost',
-        'floor_glyph': TERRAIN_DIRT,
-        'wall_glyph': TERRAIN_STONE,
+        'floor_glyph': TERRAIN_BLACK_MARBLE,
+        'wall_glyph': TERRAIN_BLACK_MARBLE,
         'fog_glyph': ' ',
         'floor_bg': (120, 120, 120),
         'wall_bg': (70, 70, 70),
@@ -362,7 +369,7 @@ LEVELS = [
     {
         'name': 'Infested Mines',
         'floor_glyph': TERRAIN_DIRT,
-        'wall_glyph': TERRAIN_STONE,
+        'wall_glyph': TERRAIN_BLACK_MARBLE,
         'fog_glyph': ' ',
         'floor_bg': (80, 40, 100),
         'wall_bg': (40, 20, 60),

@@ -69,6 +69,12 @@ TERRAIN_7_22 = glyph(7, 22)  # art TBD
 TERRAIN_SUNKEN_CRYPT_BRICKS = glyph(7, 23)
 TERRAIN_FROST_CAVE_FLOOR = glyph(7, 24)
 TERRAIN_HOWLING_CAVERN_ICE = glyph(7, 25)
+TERRAIN_PLAINS_GRASS = glyph(7, 26)
+TERRAIN_WOOD_FLOOR = glyph(7, 27)
+TERRAIN_BLACK_MARBLE = glyph(7, 28)
+TERRAIN_PLAINS_GRASS = glyph(7, 26)
+TERRAIN_WOOD_FLOOR = glyph(7, 27)
+TERRAIN_BLACK_MARBLE = glyph(7, 28)
 # Shared wall/floor glyph used before levels chose their own.
 TERRAIN_WALL_FLOOR = TERRAIN_GRASS
 
