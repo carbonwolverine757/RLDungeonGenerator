@@ -44,7 +44,7 @@ WEAPONS = [
         'damage': 10.0,
         'stamina_cost': 6,
         'range': 0.1,
-        'area': 3.0,
+        'area': 4.0,
         'angle': 10.0,
         'knockback': 0.5,  # tiles of knockback
         'glyph': SPEAR_GLYPH,
@@ -54,7 +54,7 @@ WEAPONS = [
         'damage': 15.0,
         'stamina_cost': 6,
         'range': 0.1,
-        'area': 3.0,
+        'area': 4.0,
         'angle': 10.0,
         'knockback': 0.5,  # tiles of knockback
         'glyph': SPEAR_GLYPH,
@@ -64,7 +64,7 @@ WEAPONS = [
         'damage': 20.0,
         'stamina_cost': 6,
         'range': 0.1,
-        'area': 3.0,
+        'area': 4.0,
         'angle': 10.0,
         'knockback': 0.5,  # tiles of knockback
         'glyph': SPEAR_GLYPH,
@@ -75,7 +75,7 @@ WEAPONS = [
         'damage': 15.0,
         'stamina_cost': 7,
         'range': 0.1,
-        'area': 2.0,
+        'area': 4.0,
         'angle': 60.0,
         'knockback': 0.75,  # tiles of knockback
         'glyph': SWORD_GLYPH,
@@ -85,7 +85,7 @@ WEAPONS = [
         'damage': 20.0,
         'stamina_cost': 7,
         'range': 0.1,
-        'area': 2.0,
+        'area': 4.0,
         'angle': 60.0,
         'knockback': 0.75,  # tiles of knockback
         'glyph': SWORD_GLYPH,
@@ -96,7 +96,7 @@ WEAPONS = [
         'damage': 17.0,
         'stamina_cost': 8,
         'range': 0.1,
-        'area': 2.0,
+        'area': 4.0,
         'angle': 90.0,
         'knockback': 1.0,  # tiles of knockback
         'glyph': AXE_GLYPH,
@@ -106,7 +106,7 @@ WEAPONS = [
         'damage': 22.0,
         'stamina_cost': 8,
         'range': 0.1,
-        'area': 2.0,
+        'area': 4.0,
         'angle': 90.0,
         'knockback': 1.0,  # tiles of knockback
         'glyph': AXE_GLYPH,
