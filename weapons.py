@@ -6,8 +6,9 @@
 # - range: maximum distance (in tiles) from the player to the attack centroid.
 #   NOTE: a range of 0 disables clamping entirely (see _resolve_attack_target),
 #   so the attack lands wherever the player clicked, at any distance.
-# - area: radius (in tiles) around the attack centroid that can be affected
-# - angle: cone angle in degrees (centered on attack direction)
+# - area: radius (in tiles) of the attack arc drawn from the centroid. Any
+#   monster whose hitbox the arc touches, even partly, is hit.
+# - angle: arc spread in degrees (centered on attack direction)
 # - glyph: tileset index (declared by row and column in Glyph_Grimoire.py),
 #   drawn in the crafting menu and the inventory. None means the weapon has no
 #   icon.
@@ -16,9 +17,9 @@
 # 'Unarmed' must stay first: RLDungeonGenerator equips WEAPONS[0] on startup.
 
 try:
-    from .Glyph_Grimoire import WEAPON_SPEAR, WEAPON_SWORD, WEAPON_AXE
+    from .Glyph_Grimoire import WEAPON_SPEAR, WEAPON_SWORD, WEAPON_AXE, WEAPON_BOW
 except ImportError:
-    from Glyph_Grimoire import WEAPON_SPEAR, WEAPON_SWORD, WEAPON_AXE
+    from Glyph_Grimoire import WEAPON_SPEAR, WEAPON_SWORD, WEAPON_AXE, WEAPON_BOW
 
 # Weapon art is shared per weapon type; material is not yet distinguished, so
 # every spear looks alike, as does every sword and axe. Row 11 is unused (row 10
@@ -26,6 +27,7 @@ except ImportError:
 SPEAR_GLYPH = WEAPON_SPEAR
 SWORD_GLYPH = WEAPON_SWORD
 AXE_GLYPH = WEAPON_AXE
+BOW_GLYPH = WEAPON_BOW
 
 WEAPONS = [
     {
@@ -111,4 +113,24 @@ WEAPONS = [
         'knockback': 1.0,  # tiles of knockback
         'glyph': AXE_GLYPH,
     },
+    {
+        'name': 'Crude Bow',
+        'damage': 22.0,
+        'stamina_cost': 6,
+        'range': 80.0,
+        'area': 0.5,
+        'angle': 2.0,
+        'knockback': 0.3,  # tiles of knockback
+        'glyph': BOW_GLYPH,
+    },
+    {
+        'name': 'Finewood Bow',
+        'damage': 42.0,
+        'stamina_cost': 6,
+        'range': 80.0,
+        'area': 0.5,
+        'angle': 2.0,
+        'knockback': 0.3,  # tiles of knockback
+        'glyph': BOW_GLYPH,
+    }
 ]

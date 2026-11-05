@@ -99,6 +99,7 @@ ITEM_IRON = glyph(10, 7)    # art TBD
 WEAPON_SPEAR = glyph(11, 0)
 WEAPON_SWORD = glyph(11, 1)
 WEAPON_AXE = glyph(11, 2)
+WEAPON_BOW = glyph(11, 3)
 
 # --- Row 23: skills ----------------------------------------------------------
 

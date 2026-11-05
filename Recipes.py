@@ -94,4 +94,24 @@ RECIPES = [
             {'Name': 'Iron Axe', 'Count': 1},
         ],
     },
+    {
+        'Name': 'Crude Bow',
+        'Crafting Cost': [
+            {'Name': 'Wood', 'Count': 12},
+            {'Name': 'Leather Scraps', 'Count': 8},
+        ],
+        'Crafted Item': [
+            {'Name': 'Crude Bow', 'Count': 1},
+        ],
+    },
+    {
+        'Name': 'Finewood Bow',
+        'Crafting Cost': [
+            {'Name': 'Wood', 'Count': 12},
+            {'Name': 'Leather Scraps', 'Count': 20},
+        ],
+        'Crafted Item': [
+            {'Name': 'Finewood Bow', 'Count': 1},
+        ],
+    }
 ]

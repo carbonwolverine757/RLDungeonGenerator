@@ -10,9 +10,10 @@
 #   NOTE: a range of 0 disables clamping entirely (see _resolve_attack_target),
 #   so the attack lands wherever the player clicked, at any distance. No skill
 #   uses 0. The 0.1 on Frigid Blast and Ice Bolt pins the centroid to the
-#   player's own tile, which is what makes those two self-centered cones.
-# - area: radius (in tiles) around the attack centroid that can be affected
-# - angle: cone angle in degrees (centered on attack direction). 360 or more
+#   player's own position, which is what makes those two self-centered cones.
+# - area: radius (in tiles) of the attack arc drawn from the centroid. Any
+#   monster whose hitbox the arc touches, even partly, is hit.
+# - angle: arc spread in degrees (centered on attack direction). 360 or more
 #   short-circuits to a full disc, ignoring direction.
 # - knockback: tiles of knockback, before the target's knockback resistance
 # - glyph: tileset index (declared by row and column in Glyph_Grimoire.py),

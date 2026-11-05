@@ -67,13 +67,6 @@
             **Inflicted Effect** : Spirit
                 Duration : 3s
             **Damage Modifier Notes** : Players are Immune to Spirit damage.
-        Energy
-            **Elemental**
-            Deals immediate damage.
-        Negative Energy
-            **Elemental**
-            Deals immediate damage.
-        Psychic
         Chop
             **Terrain**
             Deals immediate damage. Only damages certain objects and a few creatures. Most creatures are immune to Chop damage.
@@ -87,7 +80,6 @@
             Deals immediate damage. Pure damage ignores armor, blocking, and damage resistance. Specific items can reduce Pure damage from certain sources (lava, falling, etc.).
             **Damage Modifier Notes** : Nothing is resistant to Pure damage!
             **Damage Modifier Notes** : Some creatures can be resistant to certain sources of Pure damage.
-    **NOTE** : Maybe damage should all just be immediate damage, and additional effects can come with it.
 
 * **Combat Mechancics : Skills**
     **Fire Blast**
@@ -225,22 +217,6 @@
             Background: #5e6df0
             Level Requirement: 15
             Cooldown: 12
-    **Energy Blast**
-    **Psychic Blast**
-    **Water Blast**
-    **Dark Blast**
-    **Storm Summoning**
-    **Fire Manipulation**
-    **Energy Manipulation**
-    **Gravity Manipulation**
-    **Earth Manipulation**
-    **Invulnerability**
-    **Regeneration**
-    **Ice Armor**
-    **Stone Armor**
-    **Psychic Armor**
-    **Fiery Aura**
-
 
 
 **Combat Mechanics : Basic List**
@@ -250,8 +226,7 @@
         Basic Resistance
     Defense
         Blocking
-        Armor Abilities
-        Natural Armor
+        Dodging
 
 
 
@@ -339,7 +314,6 @@
             * Flint Knife                        Slash:6 Pierce:6  	          Use Stamina:3
             * Flint Spear                        Pierce:20			          Use Stamina:6
             * Crude Bow                          Pierce:22 				      Use Stamina:4/s
-            * ***Antler Spear***                 Pierce:20 Pickaxe:10         Use Stamina:8
         * Black Forest :
             * Stagbreaker                        Blunt:20 Pierce:5            Use Stamina:20
             * Finewood Bow                       Pierce:32                    Use Stamina:6/s
@@ -350,9 +324,6 @@
             * Bronze Mace                        Blunt:35			          Use Stamina:8
             * Bronze Atgeir                      Pierce:45                    Use Stamina:8
             * Claws of the Bear                  Slash:25                     Use Stamina:6
-            * **Rancid Mace**                    
-            * **Troll Log**                      
-            * **Surtling Bomb**                  
         * Ocean :
             * Abyssal Razor                     Slash:20 Pierce:20            Use Stamina:7
             * Abyssal Harpoon                   Pierce:10                     Use Stamina:10
@@ -361,16 +332,11 @@
             * Iron Mace                         Blunt:55                      Use Stamina:10
             * Ancient Bark Spear                Pierce:55                     Use Stamina:10
             * Iron Atgeir                       Pierce:65                     Use Stamina:10
-            * Iron Knife                        Slash:20 Pierce:20            Use Stamina:7
             * Iron Axe                          Slash:60                      Use Stamina:10
             * Battleaxe                         Slash:70                      Use Stamina:15
             * Huntsman Bow                      Pierce:42                     Use Stamina:8/s
             * Iron Sledge                       Blunt:55                      Use Stamina:27
             * Ooze Bomb                         Poison:20                     Use Stamina:3
-            * **Poison Dagger**                 
-            * **Flail**                         
-            * **Abomination Arm**               
-            * ***Bonemass Blade***              
         * Mountains :
             * Silver Sword                      Slash:75 Spirit:30            Use Stamina:10
             * Silver Knife                      Slash:25 Pierce:25            Use Stamina:7
@@ -379,10 +345,6 @@
             * Crystal Battleaxe                 Slash:90 Spirit:30            Use Stamina:18
             * Flesh Rippers                     Slash:60                      Use Stamina:8
             * Draugr Fang                       Pierce:50 Poison:10           Use Stamina:10/s
-            * **Stone Golem Arm**               
-            * **Ice Bomb**                      
-            * ***Moder Claw***                  
-            * ***Frost Blade***                 
         * Plains :
             * Black Metal Sword                 Slash:95                      Use Stamina:12
             * Black Metal Atgeir                Pierce:105                    Use Stamina:12
@@ -391,10 +353,6 @@
             * Porcupine                         Blunt:40 Pierce:55	          Use Stamina:12
             * Vilebone Maulclaws                Slash:25 Pierce:50            Use Stamina:10
             * Black Metal Battleaxe             Slash:110                     Use Stamina:24
-            * **Fuling Berserker Club**         Blunt:120                     Use Stamina:30
-            * **Tar Sword**                     
-            * **Tar Bomb**                      
-            * ***Spirit Hammer***               
         * Mistlands :
             * Skol and Hati                     Slash:40 Pierce:40            Use Stamina:8
             * Krom                              Slash:150                     Use Stamina:20
@@ -409,13 +367,6 @@
             * Staff of Embers                   Blunt:120 Fire:120            Use Eitr:35
             * Dead Raiser                       Summons Skellett              Use Eitr:100 Use Health:40%
             * Staff of Protection               Damage Absorption:200-700     Use Eitr:60 Use Health:40%
-            * **Extractor Spear**               Pierce:95
-            * **Staff of the Gjall**            
-            * **Eitr Blade**                    
-            * **Eitr Grenade**                  
-            * **Staff of Eitr**                 
-            * ***Staff of The Queen***          
-            * ***Queen's Arm Greatsword***      Slash:200 Terrain:100        Use Stamina:
         * Ashlands :
             * Nidhogg                           Slash:135                    Use Stamina:14
             * Splitnir                          Pierce:135                   Use Stamina:14
@@ -428,16 +379,6 @@
             * Staff of Wilds                    Blunt:20 Poison:20           Use Eitr:50
             * Trollstav                         Fire:300 Blunt:100 Summon    Use Eitr:120 Use Health:60%
             * Dundr                             Lightning:18(total:216)      Use Eitr:28
-            * **Celestial Staff**               
-            * **Staff of Snapping Jaws**        
-            * **Explosive Grenade**             
-            * **Staff of Caltrops**             
-            * **Lava Blade**                    
-            * **Staff of the Charred**          
-            * **Staff of Brimstone**            
-            * ***Blade of Lord Reto***          
-            * ***Fader Claw***                  
-            * ***Staff of The Emerald Flame***  
 * Add armor mechanic
 * Add armor
     * Armor as follows :

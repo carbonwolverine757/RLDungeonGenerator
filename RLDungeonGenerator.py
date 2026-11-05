@@ -1,5 +1,5 @@
 # This code is released into the Public Domain.
-from math import sqrt, floor, ceil
+from math import sqrt, floor, ceil, cos, sin, radians, atan2
 from random import random
 from random import randrange
 from random import choice
@@ -234,6 +234,100 @@ try:
 except Exception:
     np = None
 
+def _segment_hits_rect(x0, y0, x1, y1, left, top, right, bottom):
+    """True if the segment (x0, y0)-(x1, y1) touches the axis-aligned rect.
+
+    Liang-Barsky clipping: shrink the segment's [0, 1] parameter range against
+    each slab; anything left over lies inside the rect.
+    """
+    t0, t1 = 0.0, 1.0
+    dx = x1 - x0
+    dy = y1 - y0
+    for p, q in ((-dx, x0 - left), (dx, right - x0), (-dy, y0 - top), (dy, bottom - y0)):
+        if p == 0:
+            if q < 0:
+                return False  # parallel to this slab and outside it
+            continue
+        t = q / p
+        if p < 0:
+            t0 = max(t0, t)
+        else:
+            t1 = min(t1, t)
+        if t0 > t1:
+            return False
+    return True
+
+
+def _sector_hits_rect(cx, cy, dx, dy, radius, angle_deg, left, top, right, bottom):
+    """True if an attack sector overlaps an axis-aligned rect at any point.
+
+    The sector has its apex at (cx, cy), reaches `radius`, and spreads
+    `angle_deg` centered on the direction (dx, dy); 360 or more is a full
+    circle. All values share one unit (the game passes tiles, x = col,
+    y = row), so the test is exact at any zoom.
+
+    Two shapes overlap when one holds a point of the other or their outlines
+    cross, so the checks below are complete: the apex inside the rect, a rect
+    corner inside the sector, a straight edge of the sector crossing the rect,
+    or the curved edge crossing a rect side.
+    """
+    r2 = radius * radius
+    # Nothing within reach at all: the closest point of the rect is too far.
+    nx = min(max(cx, left), right)
+    ny = min(max(cy, top), bottom)
+    if (nx - cx) ** 2 + (ny - cy) ** 2 > r2:
+        return False
+    if angle_deg >= 360:
+        return True
+    if left <= cx <= right and top <= cy <= bottom:
+        return True
+
+    length = sqrt(dx * dx + dy * dy)
+    if length == 0:
+        return True  # no direction to aim along: treat as a full circle
+    dx /= length
+    dy /= length
+    half = radians(angle_deg * 0.5)
+    cos_half = cos(half)
+    eps = 1e-9
+
+    def within_angle(px, py):
+        vx = px - cx
+        vy = py - cy
+        dist = sqrt(vx * vx + vy * vy)
+        return dist == 0 or vx * dx + vy * dy >= cos_half * dist - eps
+
+    # A rect corner inside the sector.
+    for px, py in ((left, top), (right, top), (left, bottom), (right, bottom)):
+        if (px - cx) ** 2 + (py - cy) ** 2 <= r2 and within_angle(px, py):
+            return True
+
+    # Either straight edge of the sector crossing the rect.
+    for s in (-1.0, 1.0):
+        ex = dx * cos(half) - dy * sin(half) * s
+        ey = dx * sin(half) * s + dy * cos(half)
+        if _segment_hits_rect(cx, cy, cx + ex * radius, cy + ey * radius, left, top, right, bottom):
+            return True
+
+    # The curved edge crossing a rect side: intersect each side with the circle
+    # and keep the crossings that fall inside the spread.
+    for x in (left, right):
+        off = x - cx
+        if off * off <= r2:
+            h = sqrt(r2 - off * off)
+            for y in (cy - h, cy + h):
+                if top <= y <= bottom and within_angle(x, y):
+                    return True
+    for y in (top, bottom):
+        off = y - cy
+        if off * off <= r2:
+            h = sqrt(r2 - off * off)
+            for x in (cx - h, cx + h):
+                if left <= x <= right and within_angle(x, y):
+                    return True
+    return False
+
+
 class DungeonSqr:
     # Tile types
     WALL = 'wall'
@@ -358,7 +452,7 @@ class RLDungeonGenerator:
         # falls back to Unarmed. Right-clicking an inventory slot toggles this.
         self.equipped_weapon_name = None
         # Active attack effects (visual only)
-        self.attack_effects = []  # each entry: {'tiles': set((r,c)), 'expires_at': float}
+        self.attack_effects = []  # each entry: {'arc': _attack_arc dict, 'expires_at': float}
         # Damage popups (visual feedback for damage dealt)
         self.damage_popups = []  # each entry: {'row': int, 'col': int, 'damage': int, 'expires_at': float}
         # Apply initial level (sets glyphs/colors)
@@ -966,15 +1060,20 @@ class RLDungeonGenerator:
                 self.reveal_current_area()
 
     def _resolve_attack_target(self, target_row, target_col, weapon=None):
-        """Resolve the actual attack center and direction based on a clicked tile."""
+        """Resolve the actual attack center and direction from an aim point.
+
+        The aim point is an exact position in tile units (e.g. row 3.25 is a
+        quarter of the way down tile 3), not a tile index, so attacks aim
+        wherever the cursor is rather than snapping to tile centers.
+        """
         weapon = weapon or self.equipped_weapon
         if weapon is None:
-            return (target_row + 0.5, target_col + 0.5, 1.0, 0.0)
+            return (target_row, target_col, 1.0, 0.0)
 
-        player_center_row = self.player_row + 0.5
-        player_center_col = self.player_col + 0.5
-        target_center_row = target_row + 0.5
-        target_center_col = target_col + 0.5
+        player_center_row = self.player_y / self.tile_size
+        player_center_col = self.player_x / self.tile_size
+        target_center_row = target_row
+        target_center_col = target_col
 
         dr = target_center_row - player_center_row
         dc = target_center_col - player_center_col
@@ -992,54 +1091,48 @@ class RLDungeonGenerator:
 
         return (target_center_row, target_center_col, dir_row, dir_col)
 
-    def _compute_attack_tiles(self, center_row, center_col, dir_row, dir_col, weapon=None):
-        """Compute the set of tiles affected by an attack cone."""
+    def _attack_arc(self, center_row, center_col, dir_row, dir_col, weapon=None):
+        """The sector an attack sweeps, in tile units, or None without a weapon.
+
+        Its apex is the attack center, its radius the weapon's area, and its
+        spread the weapon's angle, centered on (dir_row, dir_col).
+        """
         weapon = weapon or self.equipped_weapon
         if weapon is None:
-            return set()
+            return None
+        return {
+            'row': center_row,
+            'col': center_col,
+            'dir_row': dir_row,
+            'dir_col': dir_col,
+            'radius': float(weapon.get('area', 0)),
+            'angle': float(weapon.get('angle', 360)),
+        }
 
-        import math
+    def _arc_hits_rect(self, arc, top, left, bottom, right):
+        """True if the attack arc overlaps the rect (tile units) at any point."""
+        return _sector_hits_rect(arc['col'], arc['row'], arc['dir_col'], arc['dir_row'],
+                                 arc['radius'], arc['angle'], left, top, right, bottom)
 
-        area = float(weapon.get('area', 0))
-        half_angle_rad = math.radians(float(weapon.get('angle', 360)) * 0.5)
-        include_all = weapon.get('angle', 360) >= 360
+    def _monster_hitbox_tiles(self, monster):
+        """The monster's hitbox (the rect outlined in red) as (top, left, bottom,
+        right) in tile units."""
+        box = self._current_monster_box(monster)
+        if box is None:
+            # No pixel position yet: fall back to the footprint's tile anchor.
+            size = self._monster_size(monster)
+            row, col = monster['row'], monster['col']
+            return row, col, row + size, col + size
+        ts = self.tile_size
+        left, top, right, bottom = box
+        return top / ts, left / ts, bottom / ts, right / ts
 
-        tiles = set()
-        max_dist = int(math.ceil(area))
-
-        for dr in range(-max_dist, max_dist + 1):
-            for dc in range(-max_dist, max_dist + 1):
-                tr = int(center_row) + dr
-                tc = int(center_col) + dc
-                if tr < 0 or tr >= self.height or tc < 0 or tc >= self.width:
-                    continue
-
-                vec_r = (tr + 0.5) - center_row
-                vec_c = (tc + 0.5) - center_col
-                dist = math.hypot(vec_r, vec_c)
-                if dist > area:
-                    continue
-
-                if include_all or (dir_row == 0 and dir_col == 0):
-                    tiles.add((tr, tc))
-                    continue
-
-                dot = dir_row * vec_r + dir_col * vec_c
-                if dist == 0:
-                    tiles.add((tr, tc))
-                    continue
-                cos_theta = max(-1.0, min(1.0, dot / dist))
-                if math.acos(cos_theta) <= half_angle_rad:
-                    tiles.add((tr, tc))
-
-        return tiles
-
-    def _add_attack_effect(self, tiles, duration=0.25):
+    def _add_attack_effect(self, arc, duration=0.25):
         """Add a short-lived visual effect for an attack."""
-        if not tiles:
+        if not arc:
             return
         self.attack_effects.append({
-            'tiles': set(tiles),
+            'arc': arc,
             'expires_at': time.time() + duration,
         })
 
@@ -1060,7 +1153,7 @@ class RLDungeonGenerator:
         self.damage_popups = [p for p in self.damage_popups if p.get('expires_at', 0) > current_time]
 
     def perform_attack(self, target_row, target_col, weapon=None):
-        """Perform an attack aimed at the given tile.
+        """Perform an attack aimed at the given point (tile units, fractional).
 
         Returns True when the attack went through, False when it fizzled for
         want of stamina. perform_player_attack relies on that answer to decide
@@ -1077,8 +1170,8 @@ class RLDungeonGenerator:
             return False
 
         target_center_row, target_center_col, dir_row, dir_col = self._resolve_attack_target(target_row, target_col, weapon)
-        tiles = self._compute_attack_tiles(target_center_row, target_center_col, dir_row, dir_col, weapon)
-        self._add_attack_effect(tiles)
+        arc = self._attack_arc(target_center_row, target_center_col, dir_row, dir_col, weapon)
+        self._add_attack_effect(arc)
 
         # Track which monsters were hit for knockback
         hit_monsters = []
@@ -1088,8 +1181,8 @@ class RLDungeonGenerator:
             damage = float(weapon.get('damage', 0))
             if damage > 0:
                 for monster in self.monsters:
-                    # A hit lands if any tile of the monster's footprint is struck.
-                    if any(t in tiles for t in self._monster_footprint(monster)):
+                    # A hit lands if the arc touches the monster's hitbox anywhere.
+                    if self._arc_hits_rect(arc, *self._monster_hitbox_tiles(monster)):
                         monster['health'] -= damage
                         hit_monsters.append(monster)
                         monster['damage_aggro_timer'] = max(0.0, float(monster['type'].get('damage_aggro_time', 0)))
@@ -1113,7 +1206,8 @@ class RLDungeonGenerator:
             if damage > 0:
                 destroyed = []
                 for obj in self.objects:
-                    if (obj['row'], obj['col']) in tiles:
+                    row, col = obj['row'], obj['col']
+                    if self._arc_hits_rect(arc, row, col, row + 1, col + 1):
                         obj['health'] -= damage
                         if obj['health'] <= 0:
                             destroyed.append(obj)
@@ -4221,16 +4315,32 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
                 popup_rect = popup_surf.get_rect(center=(int(popup_px), int(base_py + y_offset)))
                 screen.blit(popup_surf, popup_rect)
 
-        # Draw attack effects overlay (if any)
-        if dg.attack_effects:
-            overlay = pygame.Surface((dg.tile_size, dg.tile_size), pygame.SRCALPHA)
-            overlay.fill((255, 0, 0, 100))
-            for effect in dg.attack_effects:
-                for (er, ec) in effect['tiles']:
-                    if cam_ty <= er < cam_ty + view_h + 1 and cam_tx <= ec < cam_tx + view_w + 1:
-                        ex = offset_x + ec * dg.tile_size - cam_pixel_x
-                        ey = offset_y + er * dg.tile_size - cam_pixel_y
-                        screen.blit(overlay, (ex, ey))
+        # Draw attack arcs: translucent white sectors at full screen resolution.
+        # Each is drawn on its own bounding-box surface so the alpha applies once
+        # per arc instead of compounding where polygon edges overlap.
+        for effect in dg.attack_effects:
+            arc = effect['arc']
+            r_px = arc['radius'] * dg.tile_size
+            if r_px < 1:
+                continue
+            ax = offset_x + arc['col'] * dg.tile_size - cam_pixel_x
+            ay = offset_y + arc['row'] * dg.tile_size - cam_pixel_y
+            size = int(ceil(r_px)) * 2 + 2
+            arc_surf = pygame.Surface((size, size), pygame.SRCALPHA)
+            mid = size / 2
+            if arc['angle'] >= 360:
+                pygame.draw.circle(arc_surf, (255, 255, 255, 128), (int(mid), int(mid)), int(round(r_px)))
+            else:
+                # Screen x is col and screen y is row, matching the arc's direction.
+                aim = atan2(arc['dir_row'], arc['dir_col'])
+                half = radians(arc['angle'] * 0.5)
+                steps = max(8, int(arc['angle'] / 3))
+                points = [(mid, mid)]
+                for i in range(steps + 1):
+                    a = aim - half + 2 * half * i / steps
+                    points.append((mid + cos(a) * r_px, mid + sin(a) * r_px))
+                pygame.draw.polygon(arc_surf, (255, 255, 255, 128), points)
+            screen.blit(arc_surf, (int(ax - mid), int(ay - mid)))
 
         # Draw health and stamina bars
         bar_tile_size = dg.tile_size
@@ -4531,35 +4641,33 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
                         crafting_expanded = None
                     elif target is not None:
                         tr, tc = target
+                        # Aim at the exact cursor position, in tile units.
+                        aim_row = (event.pos[1] - offset_y + cam_pixel_y) / dg.tile_size
+                        aim_col = (event.pos[0] - offset_x + cam_pixel_x) / dg.tile_size
                         # Trace a line of tiles from player to clicked tile and look
                         # for the first monster on that ray. If found, retarget
-                        # the attack to that monster's tile.
+                        # the attack to that monster's center.
                         line_tiles = dg.bresenham_line(dg.player_row, dg.player_col, tr, tc)
                         chosen = None
                         # skip the first tile because it's the player's tile
                         for (lr, lc) in line_tiles[1:]:
                             for m in dg.monsters:
                                 if m.get('row') == lr and m.get('col') == lc:
-                                    chosen = (lr, lc)
+                                    cx, cy = dg._monster_center(m)
+                                    chosen = (cy / dg.tile_size, cx / dg.tile_size)
                                     break
                             if not chosen:
                                 for obj in dg.objects:
                                     if obj['row'] == lr and obj['col'] == lc:
-                                        chosen = (lr, lc)
+                                        chosen = (lr + 0.5, lc + 0.5)
                                         break
                             if chosen:
                                 break
 
                         if chosen is not None:
-                            tr, tc = chosen
+                            aim_row, aim_col = chosen
 
-                        # Draw the line as a short-lived visual effect
-                        try:
-                            dg._add_attack_effect(set(line_tiles), duration=0.25)
-                        except Exception:
-                            pass
-
-                        dg.perform_player_attack(tr, tc)
+                        dg.perform_player_attack(aim_row, aim_col)
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     # Esc dismisses one menu at a time, topmost first, and only
