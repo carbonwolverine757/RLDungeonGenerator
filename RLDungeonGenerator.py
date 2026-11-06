@@ -175,6 +175,28 @@ except Exception:
     logging.warning("Failed to load skill groups.py; the skill menu will be empty", exc_info=True)
     SKILL_GROUPS = []
 
+# Monster attack shapes live in `monster attacks.py` (space in filename requires importlib)
+try:
+    import importlib.util as _ilu
+    _maspec = _ilu.spec_from_file_location(
+        "monster_attacks",
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "monster attacks.py")
+    )
+    if _maspec is None or _maspec.loader is None:
+        raise ImportError("Could not load monster attacks.py")
+    _mamod = _ilu.module_from_spec(_maspec)
+    _maspec.loader.exec_module(_mamod)
+    MONSTER_ATTACKS = _mamod.MONSTER_ATTACKS
+except Exception:
+    logging.warning("Failed to load monster attacks.py; monsters will not attack", exc_info=True)
+    MONSTER_ATTACKS = []
+# Lookup from attack name -> its shape, for resolving a monster's 'attacks' entries.
+MONSTER_ATTACKS_BY_NAME = {a['name']: a for a in MONSTER_ATTACKS}
+# Monster arcs are drawn fainter than the player's (alpha 128) so the two read apart.
+MONSTER_ATTACK_ALPHA = 51
+# Attack names already reported as missing, so a typo logs once rather than per check.
+_WARNED_MONSTER_ATTACKS = set()
+
 # Prefer tcod for alternative rendering when available (import after pygame to avoid SDL DLL conflicts)
 try:
     import tcod
@@ -404,6 +426,14 @@ class RLDungeonGenerator:
         self.stamina_regen_per_second = 15.0
         self.stamina_regen_delay = 1.0
         self.stamina_regen_timer = 0.0  # counts down to 0, then stamina climbs
+        # While below max health the player heals health_regen_amount every
+        # health_regen_interval seconds (see update_health_regen).
+        self.health_regen_amount = 5
+        self.health_regen_interval = 10.0
+        self.health_regen_timer = 0.0  # counts up to the interval, then heals
+        # Tile the player was placed on when the map was generated; where they
+        # respawn after dying.
+        self.player_spawn_pos = None
         # Player level / XP
         self.player_level = 1
         self.player_pips = 0           # filled pips (0–9)
@@ -766,6 +796,7 @@ class RLDungeonGenerator:
         self.place_exit()
         # Place the player and reveal nearby area
         self.spawn_player()
+        self.player_spawn_pos = (self.player_row, self.player_col)
         # No monsters are placed here: the map starts empty and is populated over time
         # by update_spawning(), which the render loop ticks every frame.
         # Place static objects across the map
@@ -1059,19 +1090,25 @@ class RLDungeonGenerator:
                 self.last_revealed_tile = (new_row, new_col)
                 self.reveal_current_area()
 
-    def _resolve_attack_target(self, target_row, target_col, weapon=None):
+    def _resolve_attack_target(self, target_row, target_col, weapon=None, origin=None):
         """Resolve the actual attack center and direction from an aim point.
 
         The aim point is an exact position in tile units (e.g. row 3.25 is a
         quarter of the way down tile 3), not a tile index, so attacks aim
         wherever the cursor is rather than snapping to tile centers.
+
+        *origin* is the (row, col), in tile units, the attack is made from. It
+        defaults to the player's center; monster attacks pass their own.
         """
         weapon = weapon or self.equipped_weapon
         if weapon is None:
             return (target_row, target_col, 1.0, 0.0)
 
-        player_center_row = self.player_y / self.tile_size
-        player_center_col = self.player_x / self.tile_size
+        if origin is None:
+            player_center_row = self.player_y / self.tile_size
+            player_center_col = self.player_x / self.tile_size
+        else:
+            player_center_row, player_center_col = origin
         target_center_row = target_row
         target_center_col = target_col
 
@@ -1127,13 +1164,18 @@ class RLDungeonGenerator:
         left, top, right, bottom = box
         return top / ts, left / ts, bottom / ts, right / ts
 
-    def _add_attack_effect(self, arc, duration=0.25):
-        """Add a short-lived visual effect for an attack."""
+    def _add_attack_effect(self, arc, duration=0.25, alpha=128):
+        """Add a short-lived visual effect for an attack.
+
+        *alpha* (0-255) is the arc's opacity: 128 for the player's attacks,
+        MONSTER_ATTACK_ALPHA for monsters'.
+        """
         if not arc:
             return
         self.attack_effects.append({
             'arc': arc,
             'expires_at': time.time() + duration,
+            'alpha': alpha,
         })
 
     def _update_attack_effects(self, current_time=None):
@@ -1320,6 +1362,125 @@ class RLDungeonGenerator:
         self.skill_cooldowns[name] = time.time() + float(skill.get('cooldown', 0))
         self.active_skill_name = None
         return True
+
+    # --- Monster attacks and player damage ---
+
+    def _player_hitbox_tiles(self):
+        """The player's hitbox as (top, left, bottom, right) in tile units: a
+        one-tile box centered on the player, matching player_radius."""
+        ts = self.tile_size
+        cx = self.player_x / ts
+        cy = self.player_y / ts
+        return cy - 0.5, cx - 0.5, cy + 0.5, cx + 0.5
+
+    def _monster_attack_arc(self, monster, attack_def):
+        """The arc *attack_def* sweeps when *monster* aims it at the player.
+
+        Resolved exactly like a player attack, but from the monster's footprint
+        center toward the player's center.
+        """
+        ts = self.tile_size
+        cx, cy = self._monster_center(monster)
+        origin = (cy / ts, cx / ts)
+        target_row = self.player_y / ts
+        target_col = self.player_x / ts
+        center_row, center_col, dir_row, dir_col = self._resolve_attack_target(
+            target_row, target_col, attack_def, origin=origin)
+        return self._attack_arc(center_row, center_col, dir_row, dir_col, attack_def)
+
+    def _monster_try_attack(self, monster, mt, delta_time, now=None):
+        """Every attack_rate seconds, use the monster's first available attack.
+
+        An attack is available when it is off cooldown for this monster and its
+        arc, aimed at the player, would touch the player's hitbox (so out-of-range
+        attacks are skipped). That is the same test that decides a hit, so an
+        attack that is used always lands. Returns True if an attack was used.
+        """
+        attacks = mt.get('attacks') or ()
+        if not attacks:
+            return False
+        monster['_attack_check_timer'] = monster.get('_attack_check_timer', 0.0) - delta_time
+        if monster['_attack_check_timer'] > 0.0:
+            return False
+        monster['_attack_check_timer'] = max(0.0, float(mt.get('attack_rate', 1.0)))
+
+        if now is None:
+            now = time.time()
+        ready_at = monster.setdefault('_attack_ready_at', {})
+        player_box = self._player_hitbox_tiles()
+        for entry in attacks:
+            name = entry.get('name')
+            attack_def = MONSTER_ATTACKS_BY_NAME.get(name)
+            if attack_def is None:
+                if name not in _WARNED_MONSTER_ATTACKS:
+                    _WARNED_MONSTER_ATTACKS.add(name)
+                    logging.warning("Monster %r uses unknown attack %r (not in monster attacks.py)",
+                                    mt.get('name'), name)
+                continue
+            if now < ready_at.get(name, 0.0):
+                continue  # still cooling down
+            arc = self._monster_attack_arc(monster, attack_def)
+            if not self._arc_hits_rect(arc, *player_box):
+                continue  # player out of range
+            ready_at[name] = now + float(entry.get('cooldown', 0))
+            self._add_attack_effect(arc, alpha=MONSTER_ATTACK_ALPHA)
+            self.damage_player(entry.get('damage', 0))
+            return True
+        return False
+
+    def damage_player(self, amount):
+        """Take *amount* health off the player, showing a popup over them as
+        monsters get. At 0 health the player dies and respawns."""
+        damage = float(amount or 0)
+        if damage <= 0:
+            return
+        self.health = max(0, self.health - damage)
+        created = time.time()
+        self.damage_popups.append({
+            'row': self.player_row,
+            'col': self.player_col,
+            'damage': int(damage),
+            'created_at': created,
+            'expires_at': created + 2.0,  # Show for 2 seconds
+        })
+        if self.health <= 0:
+            self._respawn_player()
+
+    def _respawn_player(self):
+        """Send a dead player back to the map's spawn point at full health and
+        stamina. Inventory, XP, and skills are kept."""
+        print("You died.")
+        self.health = self.max_health
+        self.stamina = self.max_stamina
+        self.stamina_regen_timer = 0.0
+        self.health_regen_timer = 0.0
+        if self.player_spawn_pos is not None:
+            self.set_player_position(*self.player_spawn_pos)
+        else:
+            self.spawn_player()
+        # Let the pack lose interest; anything still within aggro distance of
+        # the spawn point picks the player up again normally.
+        for monster in self.monsters:
+            monster['aggro_timer'] = 0.0
+            monster['damage_aggro_timer'] = 0.0
+            monster['alerted'] = False
+
+    def update_health_regen(self, delta_time):
+        """Heal health_regen_amount every health_regen_interval seconds while
+        below max health, never past it.
+
+        Driven by the frame's delta like update_stamina, so a stall doesn't bank
+        healing.
+        """
+        if self.health >= self.max_health:
+            self.health_regen_timer = 0.0
+            return
+        self.health_regen_timer += delta_time
+        while self.health_regen_timer >= self.health_regen_interval and self.health < self.max_health:
+            self.health_regen_timer -= self.health_regen_interval
+            self.health = min(self.max_health, self.health + self.health_regen_amount)
+        if self.health >= self.max_health:
+            self.health_regen_timer = 0.0
 
     def _cleanup_dead_monsters(self):
         """Remove monsters with health <= 0 from the monsters list, awarding XP and drops."""
@@ -1583,6 +1744,7 @@ class RLDungeonGenerator:
                 xp_needed = PLAYER_LEVELS[level_idx]['xp_needed']
                 self.max_health = PLAYER_LEVELS[level_idx]['health']
                 self.health = self.max_health
+                self.health_regen_timer = 0.0
                 print(f"You need {xp_needed} xp")
 
     def screen_to_tile(self, pixel_x, pixel_y, cam_tx, cam_ty, offset_x, offset_y, view_w, view_h):
@@ -2171,6 +2333,14 @@ class RLDungeonGenerator:
             monster['alerted'] = alerted
 
             if alerted:
+                # Attack before moving, so even a monster that cannot move fights.
+                self._monster_try_attack(monster, mt, delta_time)
+                if monster.get('alerted') is False:
+                    # The attack killed the player, who respawned and dropped
+                    # every monster's aggro; don't chase this frame.
+                    continue
+
+                # Movement towards player in pixels/sec
                 # Movement towards player in pixels/sec
                 speed_tiles = float(mt.get('movement_speed', 0))
                 if speed_tiles <= 0:
@@ -2306,6 +2476,7 @@ class RLDungeonGenerator:
         self.health = self.max_health
         self.stamina = self.max_stamina
         self.stamina_regen_timer = 0.0
+        self.health_regen_timer = 0.0
         self.generate_map()
 
     def player_on_exit(self) -> bool:
@@ -4004,6 +4175,8 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
 
         # Stamina refills between fights; spending it restarts the wait.
         dg.update_stamina(delta_time)
+        # Health trickles back while below max.
+        dg.update_health_regen(delta_time)
 
         # Runtime monster spawning: maps generate empty and are populated here. Runs
         # before update_monsters so anything spawned this frame is already indexed and
@@ -4328,8 +4501,10 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
             size = int(ceil(r_px)) * 2 + 2
             arc_surf = pygame.Surface((size, size), pygame.SRCALPHA)
             mid = size / 2
+            # Player arcs are 50% opaque; monster arcs carry their own, fainter alpha.
+            arc_color = (255, 255, 255, int(effect.get('alpha', 128)))
             if arc['angle'] >= 360:
-                pygame.draw.circle(arc_surf, (255, 255, 255, 128), (int(mid), int(mid)), int(round(r_px)))
+                pygame.draw.circle(arc_surf, arc_color, (int(mid), int(mid)), int(round(r_px)))
             else:
                 # Screen x is col and screen y is row, matching the arc's direction.
                 aim = atan2(arc['dir_row'], arc['dir_col'])
@@ -4339,7 +4514,7 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
                 for i in range(steps + 1):
                     a = aim - half + 2 * half * i / steps
                     points.append((mid + cos(a) * r_px, mid + sin(a) * r_px))
-                pygame.draw.polygon(arc_surf, (255, 255, 255, 128), points)
+                pygame.draw.polygon(arc_surf, arc_color, points)
             screen.blit(arc_surf, (int(ax - mid), int(ay - mid)))
 
         # Draw health and stamina bars
@@ -4366,10 +4541,13 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
         health_bar_x = offset_x + (used_w - health_bar_w) // 2
         health_bar_y = stamina_bar_y - bar_h - 4
         pygame.draw.rect(screen, (80, 0, 0), (health_bar_x, health_bar_y, health_bar_w, bar_h))
-        health_fill_w = int(health_bar_w * max(0.0, dg.health / dg.max_health))
+        # The red fill is (current / max) of the bar's full length, recomputed
+        # every frame so it tracks damage, healing, and max-health changes.
+        health_frac = (dg.health / dg.max_health) if dg.max_health > 0 else 0.0
+        health_fill_w = int(health_bar_w * min(1.0, max(0.0, health_frac)))
         if health_fill_w > 0:
             pygame.draw.rect(screen, (255, 0, 0), (health_bar_x, health_bar_y, health_fill_w, bar_h))
-        health_text = health_font.render(f'{dg.health}', True, (255, 255, 255))
+        health_text = health_font.render(f'{int(dg.health)}', True, (255, 255, 255))
         health_text_rect = health_text.get_rect(center=(health_bar_x + health_bar_w // 2, health_bar_y + bar_h // 2))
         screen.blit(health_text, health_text_rect)
 

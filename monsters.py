@@ -33,6 +33,17 @@
 #   fractional part is the probability of dropping one extra (e.g. 0.5 -> 1 half the
 #   time; 1.2 -> 1 most of the time, 2 twenty percent of the time). Each entry is
 #   rolled independently, even if the same item name appears more than once.
+# - attack_rate: seconds between checks for an available attack while the monster
+#   is aggroed. Lower = more aggressive.
+# - attacks: ordered list of attacks the monster can use. Each entry is a dict with
+#   'name'      the name of an attack defined in `monster attacks.py`, which
+#               supplies its range, area, and angle,
+#   'damage'    the health the player loses when hit, and
+#   'cooldown'  seconds that must pass after this attack is used before this
+#               monster may use it again.
+#   On each check the monster uses the *first* available attack: one that is off
+#   cooldown and whose arc, aimed at the player, would reach them. Order the list
+#   from best to worst, so a big hit with a long cooldown comes before the filler.
 
 
 # Altered values for debugging
@@ -81,6 +92,10 @@ MONSTER_TYPES = [
         'damage_aggro_time': 10.0,  # seconds monster stays aggroed after taking damage
         'movement_speed': 5.0,  # tiles per second
         'knockback_resistance': 0.7,  # 0-1; higher = less knockback
+        'attack_rate': 0.5,  # seconds between attack checks
+        'attacks': [
+            {'name': 'Gore', 'damage': 5, 'cooldown': 2.0},
+        ],
         'drops': [
             {'name': 'Boar Meat', 'drop_chance': 1.5},
             {'name': 'Leather Scraps', 'drop_chance': 1.2},
@@ -102,6 +117,11 @@ MONSTER_TYPES = [
         'damage_aggro_time': 10.0,  # seconds monster stays aggroed after taking damage
         'movement_speed': 5.5,
         'knockback_resistance': 0.5,  # 0-1; higher = less knockback
+        'attack_rate': 0.5,  # seconds between attack checks
+        'attacks': [
+            {'name': 'Claw', 'damage': 4, 'cooldown': 1.5},
+            {'name': 'Rock Throw', 'damage': 3, 'cooldown': 4.0},
+        ],
         'drops': [
             {'name': 'Resin', 'drop_chance': 1.0},
             {'name': 'Wood', 'drop_chance': 10.5},
@@ -128,6 +148,10 @@ MONSTER_TYPES = [
         'damage_aggro_time': 10.0,  # seconds monster stays aggroed after taking damage
         'movement_speed': 6.0,  # skittish: the fastest thing in the Meadows
         'knockback_resistance': 0.3,  # 0-1; higher = less knockback
+        'attack_rate': 0.4,  # seconds between attack checks
+        'attacks': [
+            {'name': 'Bite', 'damage': 3, 'cooldown': 1.2},
+        ],
         'drops': [
             {'name': 'Flint', 'drop_chance': 1.0},
             {'name': 'Stone', 'drop_chance': 1.5},
@@ -148,6 +172,10 @@ MONSTER_TYPES = [
         'damage_aggro_time': 10.0,  # seconds monster stays aggroed after taking damage
         'movement_speed': 5.2,
         'knockback_resistance': 0.4,  # 0-1; higher = less knockback
+        'attack_rate': 0.5,  # seconds between attack checks
+        'attacks': [
+            {'name': 'Bone Slash', 'damage': 10, 'cooldown': 2.0},
+        ],
         'drops': [
             {'name': 'Bronze', 'drop_chance': 0.8},
         ],
@@ -167,6 +195,11 @@ MONSTER_TYPES = [
         'damage_aggro_time': 10.0,  # seconds monster stays aggroed after taking damage
         'movement_speed': 5.3,
         'knockback_resistance': 0.6,  # 0-1; higher = less knockback
+        'attack_rate': 0.5,  # seconds between attack checks
+        'attacks': [
+            {'name': 'Heavy Slash', 'damage': 18, 'cooldown': 5.0},
+            {'name': 'Slash', 'damage': 10, 'cooldown': 2.0},
+        ],
         'drops': [
             {'name': 'Iron', 'drop_chance': 0.8},
         ],
@@ -188,6 +221,12 @@ MONSTER_TYPES = [
         'damage_aggro_time': 40.0,  # seconds monster stays aggroed after taking damage
         'movement_speed': 5.5,
         'knockback_resistance': 0.99,  # 0-1; higher = less knockback
+        'attack_rate': 0.5,  # seconds between attack checks
+        'attacks': [
+            {'name': 'Lightning Stomp', 'damage': 25, 'cooldown': 10.0},
+            {'name': 'Antler Sweep', 'damage': 20, 'cooldown': 3.0},
+            {'name': 'Lightning Bolt', 'damage': 12, 'cooldown': 4.0},
+        ],
         'drops': [
         ],
     }
