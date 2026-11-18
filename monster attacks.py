@@ -19,9 +19,15 @@
 #   player is hit if the arc touches their hitbox, even partly.
 # - angle: arc spread in degrees (centered on the direction to the player).
 #   360 or more is a full disc, ignoring direction.
+# - attack_type, attack_delay, swing_speed, projectile_speed, effect_speed:
+#   when and how the attack travels; documented in weapons.py. The attack is
+#   aimed at where the player stood when the monster started it, and the
+#   monster stands still until it goes off, so the player can step out of the
+#   outline drawn during attack_delay.
 #
-# A monster only uses an attack whose arc would actually reach the player (see
-# RLDungeonGenerator._monster_try_attack), so range + area is the real reach.
+# A monster only starts an attack whose arc would reach the player where they
+# stand (see RLDungeonGenerator._monster_try_attack), so range + area is the
+# real reach. Whether it lands depends on where the player is when it arrives.
 # Areas are measured from the monster's *center*: a 1x1 monster's center is half
 # a tile from its edge, a 4x4 monster's is two tiles.
 
@@ -32,18 +38,27 @@ MONSTER_ATTACKS = [
         'range': 0.1,
         'area': 1.5,
         'angle': 60.0,
+        'attack_type': 'Melee Swing',
+        'attack_delay': 0.5,
+        'swing_speed': 300.0,
     },
     {
         'name': 'Bite',
         'range': 0.1,
         'area': 1.2,
         'angle': 45.0,
+        'attack_type': 'Melee AOE',
+        'attack_delay': 0.35,
+        'effect_speed': 10.0,
     },
     {
         'name': 'Claw',
         'range': 0.1,
         'area': 1.5,
         'angle': 90.0,
+        'attack_type': 'Melee Swing',
+        'attack_delay': 0.4,
+        'swing_speed': 360.0,
     },
     {
         # A thrown stone: lands on the player from up to 8 tiles away.
@@ -51,6 +66,10 @@ MONSTER_ATTACKS = [
         'range': 8.0,
         'area': 0.5,
         'angle': 360.0,
+        'attack_type': 'Ranged AOE',
+        'attack_delay': 0.5,
+        'projectile_speed': 10.0,
+        'effect_speed': 8.0,
     },
     # Black Forest
     {
@@ -58,6 +77,9 @@ MONSTER_ATTACKS = [
         'range': 0.1,
         'area': 1.8,
         'angle': 90.0,
+        'attack_type': 'Melee Swing',
+        'attack_delay': 0.5,
+        'swing_speed': 300.0,
     },
     # Swamps
     {
@@ -65,12 +87,18 @@ MONSTER_ATTACKS = [
         'range': 0.1,
         'area': 2.0,
         'angle': 120.0,
+        'attack_type': 'Melee Swing',
+        'attack_delay': 0.8,
+        'swing_speed': 240.0,
     },
     {
         'name': 'Slash',
         'range': 0.1,
         'area': 1.8,
         'angle': 90.0,
+        'attack_type': 'Melee Swing',
+        'attack_delay': 0.5,
+        'swing_speed': 300.0,
     },
     # Eikthyr (4x4: his center is 2 tiles from his edge)
     {
@@ -78,17 +106,27 @@ MONSTER_ATTACKS = [
         'range': 0.1,
         'area': 5.0,
         'angle': 360.0,
+        'attack_type': 'Melee AOE',
+        'attack_delay': 1.0,
+        'effect_speed': 8.0,
     },
     {
         'name': 'Antler Sweep',
         'range': 0.1,
         'area': 4.0,
         'angle': 120.0,
+        'attack_type': 'Melee Swing',
+        'attack_delay': 0.8,
+        'swing_speed': 240.0,
     },
     {
         'name': 'Lightning Bolt',
         'range': 15.0,
         'area': 1.5,
         'angle': 360.0,
+        'attack_type': 'Ranged AOE',
+        'attack_delay': 0.7,
+        'projectile_speed': 18.0,
+        'effect_speed': 8.0,
     },
 ]

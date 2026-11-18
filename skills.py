@@ -18,6 +18,8 @@
 # - knockback: tiles of knockback, before the target's knockback resistance
 # - glyph: tileset index (declared by row and column in Glyph_Grimoire.py),
 #   drawn in the skill menu and the tray
+# - attack_type, attack_delay, swing_speed, projectile_speed, effect_speed:
+#   when and how the attack travels; documented in weapons.py
 #
 # Plus three fields weapons do not have:
 # - background: RGB fill drawn behind the glyph, so a skill's tree reads at a
@@ -58,6 +60,10 @@ SKILLS = [
         'range': 12.0,
         'area': 0.5,
         'angle': 360.0,
+        'attack_type': 'Ranged Arrow',
+        'attack_delay': 0.2,
+        'projectile_speed': 20.0,
+        'effect_speed': 10.0,
         'knockback': 0.5,  # tiles of knockback
         'glyph': BOLT_GLYPH,
         'background': FIRE_BG,
@@ -71,6 +77,10 @@ SKILLS = [
         'range': 18.0,
         'area': 0.5,
         'angle': 360.0,
+        'attack_type': 'Ranged Arrow',
+        'attack_delay': 0.2,
+        'projectile_speed': 20.0,
+        'effect_speed': 10.0,
         'knockback': 1.0,  # tiles of knockback
         'glyph': LANCE_GLYPH,
         'background': FIRE_BG,
@@ -84,6 +94,10 @@ SKILLS = [
         'range': 15.0,
         'area': 3.0,
         'angle': 360.0,
+        'attack_type': 'Ranged AOE',
+        'attack_delay': 0.3,
+        'projectile_speed': 15.0,
+        'effect_speed': 12.0,
         'knockback': 0.5,  # tiles of knockback
         'glyph': BALL_GLYPH,
         'background': FIRE_BG,
@@ -97,6 +111,9 @@ SKILLS = [
         'range': 15.0,
         'area': 0.5,
         'angle': 360.0,
+        'attack_type': 'Melee AOE',
+        'attack_delay': 0.3,
+        'effect_speed': 20.0,
         'knockback': 0.2,  # tiles of knockback
         'glyph': BURST_GLYPH,
         'background': FIRE_BG,
@@ -111,6 +128,10 @@ SKILLS = [
         'range': 12.0,
         'area': 0.5,
         'angle': 360.0,
+        'attack_type': 'Ranged Arrow',
+        'attack_delay': 0.2,
+        'projectile_speed': 20.0,
+        'effect_speed': 10.0,
         'knockback': 0.5,  # tiles of knockback
         'glyph': BOLT_GLYPH,
         'background': ICE_BG,
@@ -124,6 +145,10 @@ SKILLS = [
         'range': 18.0,
         'area': 0.5,
         'angle': 360.0,
+        'attack_type': 'Ranged Arrow',
+        'attack_delay': 0.2,
+        'projectile_speed': 20.0,
+        'effect_speed': 10.0,
         'knockback': 1.0,  # tiles of knockback
         'glyph': LANCE_GLYPH,
         'background': ICE_BG,
@@ -137,6 +162,9 @@ SKILLS = [
         'range': 0.1,
         'area': 9.0,
         'angle': 50.0,
+        'attack_type': 'Melee AOE',
+        'attack_delay': 0.3,
+        'effect_speed': 20.0,
         'knockback': 0.5,  # tiles of knockback
         'glyph': CONE_GLYPH,
         'background': ICE_BG,
@@ -150,6 +178,9 @@ SKILLS = [
         'range': 0.1,
         'area': 12.0,
         'angle': 30.0,
+        'attack_type': 'Melee AOE',
+        'attack_delay': 0.3,
+        'effect_speed': 20.0,
         'knockback': 2.0,  # tiles of knockback
         'glyph': SPEAR_GLYPH,
         'background': ICE_BG,
@@ -164,6 +195,10 @@ SKILLS = [
         'range': 12.0,
         'area': 0.5,
         'angle': 360.0,
+        'attack_type': 'Ranged Arrow',
+        'attack_delay': 0.2,
+        'projectile_speed': 20.0,
+        'effect_speed': 10.0,
         'knockback': 0.2,  # tiles of knockback
         'glyph': BOLT_GLYPH,
         'background': SHOCK_BG,
@@ -177,6 +212,10 @@ SKILLS = [
         'range': 18.0,
         'area': 0.5,
         'angle': 360.0,
+        'attack_type': 'Ranged Arrow',
+        'attack_delay': 0.2,
+        'projectile_speed': 20.0,
+        'effect_speed': 10.0,
         'knockback': 0.2,  # tiles of knockback
         'glyph': LANCE_GLYPH,
         'background': SHOCK_BG,
@@ -190,6 +229,9 @@ SKILLS = [
         'range': 12.0,
         'area': 30.0,
         'angle': 30.0,
+        'attack_type': 'Melee AOE',
+        'attack_delay': 0.3,
+        'effect_speed': 40.0,
         'knockback': 0.2,  # tiles of knockback
         'glyph': CONE_GLYPH,
         'background': SHOCK_BG,
@@ -203,6 +245,10 @@ SKILLS = [
         'range': 45.0,
         'area': 1.5,
         'angle': 360.0,
+        'attack_type': 'Ranged AOE',
+        'attack_delay': 0.3,
+        'projectile_speed': 30.0,
+        'effect_speed': 12.0,
         'knockback': 0.5,  # tiles of knockback
         'glyph': ARC_GLYPH,
         'background': SHOCK_BG,

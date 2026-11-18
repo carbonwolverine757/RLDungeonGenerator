@@ -1,5 +1,5 @@
 # This code is released into the Public Domain.
-from math import sqrt, floor, ceil, cos, sin, radians, atan2
+from math import sqrt, floor, ceil, cos, sin, radians, atan2, hypot
 from random import random
 from random import randrange
 from random import choice
@@ -194,6 +194,27 @@ except Exception:
 MONSTER_ATTACKS_BY_NAME = {a['name']: a for a in MONSTER_ATTACKS}
 # Monster arcs are drawn fainter than the player's (alpha 128) so the two read apart.
 MONSTER_ATTACK_ALPHA = 51
+
+# Attack types (the 'attack_type' key on weapons, skills and monster attacks).
+# They decide how an attack travels once its attack_delay has passed; see
+# RLDungeonGenerator.update_attacks.
+MELEE_SWING = 'Melee Swing'
+MELEE_AOE = 'Melee AOE'
+RANGED_ARROW = 'Ranged Arrow'
+RANGED_AOE = 'Ranged AOE'
+ATTACK_TYPES = (MELEE_SWING, MELEE_AOE, RANGED_ARROW, RANGED_AOE)
+# Attack types already reported as unknown, so a typo logs once.
+_WARNED_ATTACK_TYPES = set()
+# Seconds each part of an attack's effect takes to fade after the swing or
+# outward wave passes it. Visual only: a fading trail deals no damage.
+ATTACK_FADE_TIME = 0.25
+# Opacity of the outline drawn during attack_delay (the dodge warning), and of
+# a projectile in flight. Brighter than MONSTER_ATTACK_ALPHA so incoming
+# monster attacks are easy to see and step away from.
+ATTACK_TELEGRAPH_ALPHA = 110
+PROJECTILE_ALPHA = 200
+# Length, in tiles, of the streak drawn for a projectile in flight.
+PROJECTILE_STREAK_TILES = 0.6
 # Attack names already reported as missing, so a typo logs once rather than per check.
 _WARNED_MONSTER_ATTACKS = set()
 
@@ -256,11 +277,13 @@ try:
 except Exception:
     np = None
 
-def _segment_hits_rect(x0, y0, x1, y1, left, top, right, bottom):
-    """True if the segment (x0, y0)-(x1, y1) touches the axis-aligned rect.
+def _segment_rect_entry(x0, y0, x1, y1, left, top, right, bottom):
+    """Where the segment (x0, y0)-(x1, y1) first touches the axis-aligned rect,
+    as a fraction t in [0, 1] of the way along it, or None if it never does.
 
     Liang-Barsky clipping: shrink the segment's [0, 1] parameter range against
-    each slab; anything left over lies inside the rect.
+    each slab; anything left over lies inside the rect, and the low end of that
+    range is the entry point (0 when the segment starts inside).
     """
     t0, t1 = 0.0, 1.0
     dx = x1 - x0
@@ -268,7 +291,7 @@ def _segment_hits_rect(x0, y0, x1, y1, left, top, right, bottom):
     for p, q in ((-dx, x0 - left), (dx, right - x0), (-dy, y0 - top), (dy, bottom - y0)):
         if p == 0:
             if q < 0:
-                return False  # parallel to this slab and outside it
+                return None  # parallel to this slab and outside it
             continue
         t = q / p
         if p < 0:
@@ -276,8 +299,13 @@ def _segment_hits_rect(x0, y0, x1, y1, left, top, right, bottom):
         else:
             t1 = min(t1, t)
         if t0 > t1:
-            return False
-    return True
+            return None
+    return t0
+
+
+def _segment_hits_rect(x0, y0, x1, y1, left, top, right, bottom):
+    """True if the segment (x0, y0)-(x1, y1) touches the axis-aligned rect."""
+    return _segment_rect_entry(x0, y0, x1, y1, left, top, right, bottom) is not None
 
 
 def _sector_hits_rect(cx, cy, dx, dy, radius, angle_deg, left, top, right, bottom):
@@ -446,7 +474,7 @@ class RLDungeonGenerator:
         # menu raises that skill's proficiency, and proficiency > 0 is what makes
         # a skill usable. active_skill_name is the skill the tray has armed for
         # the next attack, and skill_cooldowns maps a skill name to the wall-clock
-        # time it becomes usable again (the same shape as attack_effects).
+        # time it becomes usable again.
         self.skill_points = 0
         self.skill_proficiency = {}
         self.active_skill_name = None
@@ -481,8 +509,15 @@ class RLDungeonGenerator:
         # weapon itself is resolved through the `equipped_weapon` property, which
         # falls back to Unarmed. Right-clicking an inventory slot toggles this.
         self.equipped_weapon_name = None
-        # Active attack effects (visual only)
-        self.attack_effects = []  # each entry: {'arc': _attack_arc dict, 'expires_at': float}
+        # Attacks in progress, from the click (or a monster's decision) through
+        # the attack delay, swing / flight / outward wave, to the end of the
+        # fade. Each is a dict built by _start_attack; update_attacks advances
+        # them and the renderer draws them.
+        self.active_attacks = []
+        # Gameplay seconds, advanced by update_attacks. Attack timing runs on
+        # this rather than the wall clock so a stall doesn't skip an attack
+        # straight to its end, and so tests can step it deterministically.
+        self._attack_clock = 0.0
         # Damage popups (visual feedback for damage dealt)
         self.damage_popups = []  # each entry: {'row': int, 'col': int, 'damage': int, 'expires_at': float}
         # Apply initial level (sets glyphs/colors)
@@ -759,6 +794,7 @@ class RLDungeonGenerator:
         self._object_tiles = set()
         self.monsters = []  # Reset monsters list
         self.objects = []   # Reset objects list
+        self.active_attacks = []  # Attacks in progress belong to the old map
         # Reset the runtime spawner. The chunk cache is left unbuilt rather than built
         # here: exit_pos and structure_bounds aren't assigned until place_exit() and
         # generate_openspace_map() run further down, so it has to be built lazily on
@@ -1164,24 +1200,325 @@ class RLDungeonGenerator:
         left, top, right, bottom = box
         return top / ts, left / ts, bottom / ts, right / ts
 
-    def _add_attack_effect(self, arc, duration=0.25, alpha=128):
-        """Add a short-lived visual effect for an attack.
+    # --- Attacks in progress: attack delay, swing, flight, outward wave ---
+    #
+    # An attack is not resolved the moment it is made. _start_attack records it
+    # in the 'windup' phase; after its attack_delay it is released from wherever
+    # its attacker then stands, toward the point aimed at when it started, and
+    # moves on to one of:
+    #   'swing'  (Melee Swing)  the arc sweeps across at swing_speed deg/s,
+    #   'expand' (Melee AOE)    the arc grows outward at effect_speed tiles/s,
+    #   'flight' (Ranged Arrow, Ranged AOE)  a projectile flies at
+    #            projectile_speed tiles/s, then bursts into 'expand' wherever
+    #            it stops.
+    # Damage lands once per target, when the part of the arc swept or grown so
+    # far touches its hitbox. Once the arc is complete the attack is 'fading':
+    # purely visual, and gone ATTACK_FADE_TIME later.
 
-        *alpha* (0-255) is the arc's opacity: 128 for the player's attacks,
-        MONSTER_ATTACK_ALPHA for monsters'.
-        """
-        if not arc:
-            return
-        self.attack_effects.append({
-            'arc': arc,
-            'expires_at': time.time() + duration,
+    def _attack_type_of(self, attack_def):
+        """The attack_type of *attack_def*. Missing or misspelled types fall
+        back to Melee AOE, an arc at the attack centroid, which is closest to
+        how attacks behaved before attack types existed."""
+        attack_type = attack_def.get('attack_type', MELEE_AOE)
+        if attack_type not in ATTACK_TYPES:
+            key = (attack_def.get('name'), attack_type)
+            if key not in _WARNED_ATTACK_TYPES:
+                _WARNED_ATTACK_TYPES.add(key)
+                logging.warning("Attack %r has unknown attack_type %r; using %r",
+                                key[0], attack_type, MELEE_AOE)
+            attack_type = MELEE_AOE
+        return attack_type
+
+    @staticmethod
+    def _attack_number(attack_def, key):
+        """attack_def[key] as a float, or 0 when missing, invalid or negative.
+        For a speed, 0 means that stage of the attack is instant."""
+        try:
+            return max(0.0, float(attack_def.get(key, 0) or 0))
+        except (TypeError, ValueError):
+            return 0.0
+
+    def _attacker_origin(self, owner):
+        """The (row, col), in tile units, an attack by *owner* is made from: the
+        player's center, or a monster's footprint center."""
+        ts = self.tile_size
+        if owner == 'player':
+            return self.player_y / ts, self.player_x / ts
+        cx, cy = self._monster_center(owner)
+        return cy / ts, cx / ts
+
+    def _start_attack(self, owner, attack_def, aim_row, aim_col, damage, alpha):
+        """Begin an attack by *owner* ('player' or a monster dict), aimed at the
+        point (aim_row, aim_col) in tile units. It goes off attack_delay seconds
+        from now; nothing is hit before then. Returns the new attack."""
+        attack = {
+            'owner': owner,
+            'def': attack_def,
+            'type': self._attack_type_of(attack_def),
+            'damage': float(damage or 0),
             'alpha': alpha,
-        })
+            'aim': (aim_row, aim_col),
+            'phase': 'windup',
+            'release_at': self._attack_clock + self._attack_number(attack_def, 'attack_delay'),
+            # Everything this attack has already hit, keyed by id(). The value
+            # keeps a reference, so a dead monster's id can't be handed to a
+            # newly spawned one while this attack is still live.
+            'hit': {},
+        }
+        self.active_attacks.append(attack)
+        return attack
 
-    def _update_attack_effects(self, current_time=None):
-        if current_time is None:
-            current_time = time.time()
-        self.attack_effects = [e for e in self.attack_effects if e['expires_at'] > current_time]
+    def _player_winding_up(self):
+        """True while one of the player's attacks is still in its attack delay."""
+        return any(a['owner'] == 'player' and a['phase'] == 'windup' and not a.get('done')
+                   for a in self.active_attacks)
+
+    def attack_release_geometry(self, attack):
+        """Where *attack* would go if it were released right now.
+
+        Returns (origin, arc, flight). *arc* is the sector it covers, resolved
+        from the attacker's current center toward the aim point exactly as the
+        old instant attacks were; for a ranged attack it is the burst at the
+        point the projectile would stop if nothing were in the way. *flight* is
+        None for melee, else (dir_row, dir_col, max_dist) for the projectile.
+        The renderer uses this for the outline drawn during attack_delay.
+        """
+        attack_def = attack['def']
+        origin = self._attacker_origin(attack['owner'])
+        aim_row, aim_col = attack['aim']
+        center_row, center_col, dir_row, dir_col = self._resolve_attack_target(
+            aim_row, aim_col, attack_def, origin=origin)
+        if attack['type'] in (MELEE_SWING, MELEE_AOE):
+            return origin, self._attack_arc(center_row, center_col, dir_row, dir_col, attack_def), None
+        if attack['type'] == RANGED_ARROW:
+            # An arrow flies past the aim point, out to its full range; a range
+            # of 0 means it flies until it meets something.
+            max_dist = self._attack_number(attack_def, 'range')
+            if max_dist <= 0:
+                max_dist = float(hypot(self.width, self.height))
+        else:
+            # A Ranged AOE lands on the aim point, which _resolve_attack_target
+            # has already clamped to the attack's range.
+            max_dist = hypot(center_row - origin[0], center_col - origin[1])
+        land_row = origin[0] + dir_row * max_dist
+        land_col = origin[1] + dir_col * max_dist
+        arc = self._attack_arc(land_row, land_col, dir_row, dir_col, attack_def)
+        return origin, arc, (dir_row, dir_col, max_dist)
+
+    def _release_attack(self, attack, at):
+        """End *attack*'s windup at attack-clock time *at* and set it moving."""
+        origin, arc, flight = self.attack_release_geometry(attack)
+        if attack['owner'] != 'player':
+            attack['owner'].pop('_winding_up', None)  # the monster may move again
+        if flight is None:
+            shape = 'swing' if attack['type'] == MELEE_SWING else 'expand'
+            self._begin_shape(attack, shape, arc, at)
+            return
+        dir_row, dir_col, max_dist = flight
+        attack['phase'] = 'flight'
+        attack['origin'] = origin
+        attack['dir'] = (dir_row, dir_col)
+        attack['max_dist'] = max_dist
+        attack['travelled'] = 0.0
+        attack['phase_start'] = at
+
+    def _begin_shape(self, attack, shape, arc, at):
+        """Start *attack*'s swing or outward wave over *arc* at time *at*.
+
+        'full' is the extent the shape grows to (degrees for a swing, tiles of
+        radius for a wave) and 'extent' how far it has grown so far.
+        """
+        attack_def = attack['def']
+        attack['phase'] = shape
+        attack['arc'] = arc
+        attack['phase_start'] = at
+        if shape == 'swing':
+            attack['speed'] = self._attack_number(attack_def, 'swing_speed')
+            attack['full'] = min(360.0, arc['angle'])
+        else:
+            attack['speed'] = self._attack_number(attack_def, 'effect_speed')
+            attack['full'] = arc['radius']
+        attack['extent'] = 0.0
+
+    @staticmethod
+    def swing_region(arc, swept):
+        """The part of *arc* a swing has covered after sweeping *swept* degrees
+        from its starting edge, as an arc dict of the same shape."""
+        aim = atan2(arc['dir_row'], arc['dir_col'])
+        mid = aim - radians(arc['angle'] * 0.5) + radians(swept * 0.5)
+        region = dict(arc)
+        region['dir_row'] = sin(mid)
+        region['dir_col'] = cos(mid)
+        region['angle'] = swept
+        return region
+
+    def _advance_shape(self, attack, now):
+        """Grow a swing or outward wave to where it is at *now*, and deal damage
+        to whatever the grown part touches."""
+        speed = attack['speed']
+        full = attack['full']
+        extent = full if speed <= 0 else min(full, speed * (now - attack['phase_start']))
+        attack['extent'] = extent
+        arc = attack['arc']
+        if attack['phase'] == 'swing':
+            region = self.swing_region(arc, extent)
+        else:
+            region = dict(arc, radius=extent)
+        self._apply_attack_hits(attack, region)
+        if extent >= full:
+            attack['fading'] = True
+            attack['finished_at'] = attack['phase_start'] + (full / speed if speed > 0 else 0.0)
+
+    def _advance_flight(self, attack, now):
+        """Move a projectile to where it is at *now*. If it met something on the
+        way, or ran out of distance, it bursts there into an outward wave."""
+        speed = self._attack_number(attack['def'], 'projectile_speed')
+        max_dist = attack['max_dist']
+        target = max_dist if speed <= 0 else min(max_dist, speed * (now - attack['phase_start']))
+        prev = attack['travelled']
+        o_row, o_col = attack['origin']
+        d_row, d_col = attack['dir']
+
+        stop_dist = None
+        if target > prev:
+            t = self._first_projectile_contact(
+                attack,
+                o_col + d_col * prev, o_row + d_row * prev,
+                o_col + d_col * target, o_row + d_row * target)
+            if t is not None:
+                stop_dist = prev + (target - prev) * t
+        if stop_dist is None:
+            attack['travelled'] = target
+            if target < max_dist:
+                return  # still flying
+            stop_dist = max_dist
+
+        attack['travelled'] = stop_dist
+        row = o_row + d_row * stop_dist
+        col = o_col + d_col * stop_dist
+        at = attack['phase_start'] + (stop_dist / speed if speed > 0 else 0.0)
+        self._begin_shape(attack, 'expand', self._attack_arc(row, col, d_row, d_col, attack['def']), at)
+        self._advance_shape(attack, now)
+
+    def _blocks_projectile(self, r, c) -> bool:
+        """True if a projectile stops on entering tile (r, c): walls, the
+        workbench, and anything off the map."""
+        if r < 0 or c < 0 or r >= self.height or c >= self.width:
+            return True
+        return self.dungeon[r][c].tile_type in (DungeonSqr.WALL, DungeonSqr.WORKBENCH)
+
+    def _segment_first_blocked_tile(self, x0, y0, x1, y1):
+        """Fraction t along the segment (x = col, y = row, tile units) where it
+        first enters a tile that stops projectiles, or None.
+
+        Walks the grid cell by cell (Amanatides-Woo), so it is exact and never
+        steps over a corner the way sampling could.
+        """
+        cx, cy = int(floor(x0)), int(floor(y0))
+        if self._blocks_projectile(cy, cx):
+            return 0.0
+        dx = x1 - x0
+        dy = y1 - y0
+        inf = float('inf')
+        if dx > 0:
+            step_x, t_max_x, t_dx = 1, (cx + 1 - x0) / dx, 1.0 / dx
+        elif dx < 0:
+            step_x, t_max_x, t_dx = -1, (cx - x0) / dx, -1.0 / dx
+        else:
+            step_x, t_max_x, t_dx = 0, inf, inf
+        if dy > 0:
+            step_y, t_max_y, t_dy = 1, (cy + 1 - y0) / dy, 1.0 / dy
+        elif dy < 0:
+            step_y, t_max_y, t_dy = -1, (cy - y0) / dy, -1.0 / dy
+        else:
+            step_y, t_max_y, t_dy = 0, inf, inf
+        while True:
+            if t_max_x < t_max_y:
+                t = t_max_x
+                cx += step_x
+                t_max_x += t_dx
+            else:
+                t = t_max_y
+                cy += step_y
+                t_max_y += t_dy
+            if t > 1.0:
+                return None
+            if self._blocks_projectile(cy, cx):
+                return t
+
+    def _first_projectile_contact(self, attack, x0, y0, x1, y1):
+        """Fraction t along the segment (x = col, y = row, tile units) where
+        *attack*'s projectile first meets a wall, an object, or a hitbox it can
+        damage, or None. The player's projectiles stop on monsters; monsters'
+        stop on the player and pass through other monsters."""
+        best = self._segment_first_blocked_tile(x0, y0, x1, y1)
+
+        def consider(top, left, bottom, right):
+            nonlocal best
+            t = _segment_rect_entry(x0, y0, x1, y1, left, top, right, bottom)
+            if t is not None and (best is None or t < best):
+                best = t
+
+        for obj in self.objects:
+            r, c = obj['row'], obj['col']
+            consider(r, c, r + 1, c + 1)
+        if attack['owner'] == 'player':
+            for monster in self.monsters:
+                consider(*self._monster_hitbox_tiles(monster))
+        else:
+            consider(*self._player_hitbox_tiles())
+        return best
+
+    def _apply_attack_hits(self, attack, region):
+        """Deal *attack*'s damage to everything *region* touches that it hasn't
+        hit already."""
+        if attack['owner'] == 'player':
+            self._apply_player_hits(attack, region)
+        elif 'player' not in attack['hit'] and self._arc_hits_rect(region, *self._player_hitbox_tiles()):
+            attack['hit']['player'] = True
+            self.damage_player(attack['damage'])
+
+    def _owner_alive(self, owner) -> bool:
+        return owner == 'player' or any(m is owner for m in self.monsters)
+
+    def update_attacks(self, delta_time):
+        """Advance every attack in progress by *delta_time* gameplay seconds.
+
+        Releases attacks whose attack delay is over, moves swings, waves and
+        projectiles on, deals damage where they touch, and drops attacks whose
+        fade has finished. A windup whose monster died is cancelled; a released
+        attack carries on without its attacker. Called every frame.
+        """
+        self._attack_clock += max(0.0, delta_time)
+        if not self.active_attacks:
+            return
+        now = self._attack_clock
+        for attack in list(self.active_attacks):
+            if attack.get('done'):
+                continue  # e.g. cancelled by a respawn earlier this frame
+            if attack['phase'] == 'windup':
+                if not self._owner_alive(attack['owner']):
+                    attack['done'] = True
+                    continue
+                if now < attack['release_at']:
+                    continue
+                self._release_attack(attack, attack['release_at'])
+            if attack['phase'] == 'flight':
+                self._advance_flight(attack, now)
+            elif not attack.get('fading'):
+                self._advance_shape(attack, now)
+            if attack.get('fading') and now >= attack['finished_at'] + ATTACK_FADE_TIME:
+                attack['done'] = True
+        self.active_attacks = [a for a in self.active_attacks if not a.get('done')]
+
+    def _cancel_monster_windups(self):
+        """Drop every monster attack still in its attack delay, freeing those
+        monsters to move. Attacks already released carry on."""
+        for attack in self.active_attacks:
+            if attack['owner'] != 'player' and attack['phase'] == 'windup':
+                attack['done'] = True
+                attack['owner'].pop('_winding_up', None)
+        self.active_attacks = [a for a in self.active_attacks if not a.get('done')]
 
     def _update_damage_popups(self, current_time=None):
         """Prune expired damage popups.
@@ -1195,14 +1532,24 @@ class RLDungeonGenerator:
         self.damage_popups = [p for p in self.damage_popups if p.get('expires_at', 0) > current_time]
 
     def perform_attack(self, target_row, target_col, weapon=None):
-        """Perform an attack aimed at the given point (tile units, fractional).
+        """Start an attack aimed at the given point (tile units, fractional).
 
-        Returns True when the attack went through, False when it fizzled for
-        want of stamina. perform_player_attack relies on that answer to decide
-        whether an armed skill has actually been spent.
+        This only commits to the attack: it goes off after the weapon's
+        attack_delay and deals damage as its effect reaches each target (see
+        update_attacks). Stamina is spent now.
+
+        Returns True when the attack started, False when it fizzled for want of
+        stamina or because the player's previous attack is still winding up.
+        perform_player_attack relies on that answer to decide whether an armed
+        skill has actually been spent.
         """
         weapon = weapon or self.equipped_weapon
         if weapon is None:
+            return False
+
+        # One attack at a time: a click during the attack delay is ignored, so
+        # clicking fast can't queue up a string of swings.
+        if self._player_winding_up():
             return False
 
         # Too tired to swing: the attack does not happen at all. This is the one
@@ -1211,57 +1558,79 @@ class RLDungeonGenerator:
         if cost > 0 and getattr(self, 'stamina', 0) < cost:
             return False
 
-        target_center_row, target_center_col, dir_row, dir_col = self._resolve_attack_target(target_row, target_col, weapon)
-        arc = self._attack_arc(target_center_row, target_center_col, dir_row, dir_col, weapon)
-        self._add_attack_effect(arc)
+        # A copy, so a scaled skill or later edits can't change an attack in flight.
+        self._start_attack('player', dict(weapon), target_row, target_col,
+                           weapon.get('damage', 0), alpha=128)
+
+        # Deduct stamina. The gate above already proved the player can afford
+        # this, so the subtraction cannot drive the bar negative; it also
+        # restarts the wait before stamina starts refilling.
+        try:
+            if cost > 0 and hasattr(self, 'stamina'):
+                self.stamina = max(0, self.stamina - cost)
+                self.stamina_regen_timer = self.stamina_regen_delay
+        except Exception:
+            pass
+        return True
+
+    def _apply_player_hits(self, attack, region):
+        """Damage and knock back every monster, and damage every object, that
+        *region* (an arc dict) touches and *attack* has not hit yet."""
+        weapon = attack['def']
+        hit = attack['hit']
+        damage = attack['damage']
+        if damage <= 0:
+            return
 
         # Track which monsters were hit for knockback
         hit_monsters = []
 
         # Deal damage to monsters in the attack area
         try:
-            damage = float(weapon.get('damage', 0))
-            if damage > 0:
-                for monster in self.monsters:
-                    # A hit lands if the arc touches the monster's hitbox anywhere.
-                    if self._arc_hits_rect(arc, *self._monster_hitbox_tiles(monster)):
-                        monster['health'] -= damage
-                        hit_monsters.append(monster)
-                        monster['damage_aggro_timer'] = max(0.0, float(monster['type'].get('damage_aggro_time', 0)))
-                        # Add damage popup, centered over the footprint.
-                        size = self._monster_size(monster)
-                        created = time.time()
-                        self.damage_popups.append({
-                            'row': monster['row'] + size // 2,
-                            'col': monster['col'] + size // 2,
-                            'damage': int(damage),
-                            'created_at': created,
-                            'expires_at': created + 2.0,  # Show for 2 seconds
-                        })
+            for monster in self.monsters:
+                if id(monster) in hit:
+                    continue
+                # A hit lands if the arc touches the monster's hitbox anywhere.
+                if self._arc_hits_rect(region, *self._monster_hitbox_tiles(monster)):
+                    hit[id(monster)] = monster
+                    monster['health'] -= damage
+                    hit_monsters.append(monster)
+                    monster['damage_aggro_timer'] = max(0.0, float(monster['type'].get('damage_aggro_time', 0)))
+                    # Add damage popup, centered over the footprint.
+                    size = self._monster_size(monster)
+                    created = time.time()
+                    self.damage_popups.append({
+                        'row': monster['row'] + size // 2,
+                        'col': monster['col'] + size // 2,
+                        'damage': int(damage),
+                        'created_at': created,
+                        'expires_at': created + 2.0,  # Show for 2 seconds
+                    })
         except Exception:
             pass
 
         # Deal damage to objects in the attack area, then remove destroyed ones and
         # roll their drops
         try:
-            damage = float(weapon.get('damage', 0))
-            if damage > 0:
-                destroyed = []
-                for obj in self.objects:
-                    row, col = obj['row'], obj['col']
-                    if self._arc_hits_rect(arc, row, col, row + 1, col + 1):
-                        obj['health'] -= damage
-                        if obj['health'] <= 0:
-                            destroyed.append(obj)
-                if destroyed:
-                    for obj in destroyed:
-                        print(f"You destroyed a {obj['type']['name']}.")
-                        self._roll_drops(obj['type'])
-                    self.objects = [o for o in self.objects if o['health'] > 0]
-                    # _begin_monster_frame normally rebuilds this index, but it doesn't
-                    # run while the map has no monsters; refresh it here so the
-                    # destroyed objects' tiles free up right away.
-                    self._object_tiles = {(o['row'], o['col']) for o in self.objects}
+            destroyed = []
+            for obj in self.objects:
+                if id(obj) in hit:
+                    continue
+                row, col = obj['row'], obj['col']
+                if self._arc_hits_rect(region, row, col, row + 1, col + 1):
+                    hit[id(obj)] = obj
+                    obj['health'] -= damage
+                    if obj['health'] <= 0:
+                        destroyed.append(obj)
+            if destroyed:
+                for obj in destroyed:
+                    print(f"You destroyed a {obj['type']['name']}.")
+                    self._roll_drops(obj['type'])
+                self.objects = [o for o in self.objects if o['health'] > 0]
+                # _begin_monster_frame normally rebuilds this index, but it doesn't
+                # run while the map has no monsters; refresh it here so the
+                # destroyed objects' tiles free up right away.
+                self._object_tiles = {(o['row'], o['col']) for o in self.objects}
         except Exception:
             pass
 
@@ -1323,19 +1692,9 @@ class RLDungeonGenerator:
         except Exception:
             pass
 
-        # Deduct stamina. The gate at the top already proved the player can
-        # afford this, so the subtraction cannot drive the bar negative; it also
-        # restarts the wait before stamina starts refilling.
-        try:
-            if cost > 0 and hasattr(self, 'stamina'):
-                self.stamina = max(0, self.stamina - cost)
-                self.stamina_regen_timer = self.stamina_regen_delay
-        except Exception:
-            pass
-
         # Remove dead monsters
-        self._cleanup_dead_monsters()
-        return True
+        if hit_monsters:
+            self._cleanup_dead_monsters()
 
     def perform_player_attack(self, target_row, target_col):
         """Attack with the armed skill if there is one, else the equipped weapon.
@@ -1389,12 +1748,14 @@ class RLDungeonGenerator:
         return self._attack_arc(center_row, center_col, dir_row, dir_col, attack_def)
 
     def _monster_try_attack(self, monster, mt, delta_time, now=None):
-        """Every attack_rate seconds, use the monster's first available attack.
+        """Every attack_rate seconds, start the monster's first available attack.
 
         An attack is available when it is off cooldown for this monster and its
-        arc, aimed at the player, would touch the player's hitbox (so out-of-range
-        attacks are skipped). That is the same test that decides a hit, so an
-        attack that is used always lands. Returns True if an attack was used.
+        arc, aimed at the player, would touch the player's hitbox where they
+        stand now (so out-of-range attacks are skipped). Starting it begins the
+        cooldown and the attack delay; the monster then stands still, and the
+        attack goes off at the spot the player was on, so stepping out of its
+        outline in time dodges it. Returns True if an attack was started.
         """
         attacks = mt.get('attacks') or ()
         if not attacks:
@@ -1423,8 +1784,12 @@ class RLDungeonGenerator:
             if not self._arc_hits_rect(arc, *player_box):
                 continue  # player out of range
             ready_at[name] = now + float(entry.get('cooldown', 0))
-            self._add_attack_effect(arc, alpha=MONSTER_ATTACK_ALPHA)
-            self.damage_player(entry.get('damage', 0))
+            ts = self.tile_size
+            self._start_attack(monster, attack_def, self.player_y / ts, self.player_x / ts,
+                               entry.get('damage', 0), alpha=MONSTER_ATTACK_ALPHA)
+            # Committed: update_monsters holds the monster still until
+            # _release_attack (or a respawn, or its death) clears this.
+            monster['_winding_up'] = True
             return True
         return False
 
@@ -1458,8 +1823,10 @@ class RLDungeonGenerator:
             self.set_player_position(*self.player_spawn_pos)
         else:
             self.spawn_player()
-        # Let the pack lose interest; anything still within aggro distance of
-        # the spawn point picks the player up again normally.
+        # Attacks still winding up were aimed at where the player died; drop
+        # them. Let the pack lose interest; anything still within aggro distance
+        # of the spawn point picks the player up again normally.
+        self._cancel_monster_windups()
         for monster in self.monsters:
             monster['aggro_timer'] = 0.0
             monster['damage_aggro_timer'] = 0.0
@@ -1671,7 +2038,7 @@ class RLDungeonGenerator:
     def _update_skill_cooldowns(self, current_time=None):
         """Drop cooldowns that have elapsed.
 
-        Called every frame from the renderer, like _update_attack_effects.
+        Called every frame from the renderer, like update_attacks.
         """
         if current_time is None:
             current_time = time.time()
@@ -2331,6 +2698,11 @@ class RLDungeonGenerator:
 
             alerted = within_aggro_distance or monster['aggro_timer'] > 0.0 or monster['damage_aggro_timer'] > 0.0
             monster['alerted'] = alerted
+
+            if monster.get('_winding_up'):
+                # Committed to an attack: stand still, and start no other,
+                # until it goes off (see update_attacks).
+                continue
 
             if alerted:
                 # Attack before moving, so even a monster that cannot move fights.
@@ -3008,6 +3380,9 @@ def render_with_tcod(dg: RLDungeonGenerator) -> None:
             dg.update_spawning(delta_time)
             # Update monster AI/movement after player moves
             dg.update_monsters(delta_time)
+            # Monster attacks only deal damage as update_attacks advances them.
+            # This renderer doesn't draw them.
+            dg.update_attacks(delta_time)
             # Frame-based held-key single-pixel movement: if any directions are held,
             # compute a signed dx/dy and nudge the player by 1 pixel this frame.
             if held_directions:
@@ -3989,6 +4364,177 @@ def draw_skill_tray(screen, dg, font, tile_surfaces):
             pygame.draw.rect(screen, TRAY_SLOT_ACTIVE_BORDER, slot, 3)
 
 
+def _sector_points(cx, cy, r, a0, a1, step_deg=3.0):
+    """Points of a filled sector in pixels: the apex (cx, cy), then the curved
+    edge from angle a0 to a1 (radians, screen space) at radius r."""
+    span = a1 - a0
+    steps = max(1, int(ceil(abs(span) / radians(step_deg))))
+    points = [(cx, cy)]
+    for i in range(steps + 1):
+        a = a0 + span * i / steps
+        points.append((cx + cos(a) * r, cy + sin(a) * r))
+    return points
+
+
+def _attack_draw_ops(dg, attack, to_px):
+    """What to draw for one attack in progress, as a list of
+    ('poly', points, rgba, width) / ('circle', center, radius, rgba, width) /
+    ('line', p0, p1, rgba, width) ops in screen pixels. Width 0 means filled.
+
+    Ops are drawn in order onto one transparent surface, overwriting rather
+    than blending, which is what lets the inner rings of an outward wave
+    replace the middle of the larger ones drawn before them.
+    """
+    ts = dg.tile_size
+    now = dg._attack_clock
+    base_alpha = int(attack.get('alpha', 128))
+    ops = []
+
+    def arc_outline(arc, rgba, width):
+        r_px = arc['radius'] * ts
+        if r_px < 1:
+            return
+        cx, cy = to_px(arc['row'], arc['col'])
+        if arc['angle'] >= 360:
+            ops.append(('circle', (cx, cy), r_px, rgba, width))
+        else:
+            aim = atan2(arc['dir_row'], arc['dir_col'])
+            half = radians(arc['angle'] * 0.5)
+            ops.append(('poly', _sector_points(cx, cy, r_px, aim - half, aim + half), rgba, width))
+
+    phase = attack['phase']
+    if phase == 'windup':
+        # The dodge warning: where the attack will go if nothing changes.
+        rgba = (255, 255, 255, ATTACK_TELEGRAPH_ALPHA)
+        width = max(1, ts // 16)
+        origin, arc, flight = dg.attack_release_geometry(attack)
+        if flight is not None:
+            dir_row, dir_col, dist = flight
+            o_row, o_col = origin
+            # Stop the line at the first wall it would hit.
+            t = dg._segment_first_blocked_tile(o_col, o_row, o_col + dir_col * dist, o_row + dir_row * dist)
+            if t is not None:
+                dist *= t
+            end_row, end_col = o_row + dir_row * dist, o_col + dir_col * dist
+            ops.append(('line', to_px(o_row, o_col), to_px(end_row, end_col), rgba, width))
+            if attack['type'] == RANGED_ARROW:
+                return ops  # where an arrow bursts depends on what it hits
+            arc = dict(arc, row=end_row, col=end_col)
+        arc_outline(arc, rgba, width)
+        return ops
+
+    if phase == 'flight':
+        o_row, o_col = attack['origin']
+        dir_row, dir_col = attack['dir']
+        head = attack['travelled']
+        tail = max(0.0, head - PROJECTILE_STREAK_TILES)
+        ops.append(('line',
+                    to_px(o_row + dir_row * tail, o_col + dir_col * tail),
+                    to_px(o_row + dir_row * head, o_col + dir_col * head),
+                    (255, 255, 255, PROJECTILE_ALPHA), max(2, ts // 10)))
+        return ops
+
+    # A swing or outward wave: each part fades ATTACK_FADE_TIME after the
+    # leading edge passed it, so the newest part is the brightest.
+    arc = attack['arc']
+    extent = attack['extent']
+    speed = attack['speed']
+    start = attack['phase_start']
+
+    def alpha_at(amount):
+        reached = start + (amount / speed if speed > 0 else 0.0)
+        frac = 1.0 - (now - reached) / ATTACK_FADE_TIME
+        return int(base_alpha * min(1.0, max(0.0, frac)))
+
+    cx, cy = to_px(arc['row'], arc['col'])
+    if phase == 'swing':
+        r_px = arc['radius'] * ts
+        if r_px < 1 or extent <= 0:
+            return ops
+        a_start = atan2(arc['dir_row'], arc['dir_col']) - radians(arc['angle'] * 0.5)
+        slices = max(1, min(120, int(ceil(extent / 3.0))))
+        for i in range(slices):
+            d0 = extent * i / slices
+            d1 = extent * (i + 1) / slices
+            alpha = alpha_at((d0 + d1) * 0.5)
+            if alpha > 0:
+                ops.append(('poly', _sector_points(cx, cy, r_px, a_start + radians(d0), a_start + radians(d1)),
+                            (255, 255, 255, alpha), 0))
+        return ops
+
+    # Outward wave: rings drawn largest first, each smaller one overwriting
+    # the middle of the last, so every ring ends up with its own alpha.
+    if extent * ts < 1:
+        return ops
+    thickness = max(0.25, extent / 40.0)
+    rings = max(1, int(ceil(extent / thickness)))
+    full_circle = arc['angle'] >= 360
+    aim = atan2(arc['dir_row'], arc['dir_col'])
+    half = radians(arc['angle'] * 0.5)
+    for k in range(rings - 1, -1, -1):
+        r_out = extent * (k + 1) / rings
+        rgba = (255, 255, 255, alpha_at(extent * (k + 0.5) / rings))
+        r_px = r_out * ts
+        if full_circle:
+            ops.append(('circle', (cx, cy), r_px, rgba, 0))
+        else:
+            ops.append(('poly', _sector_points(cx, cy, r_px, aim - half, aim + half), rgba, 0))
+    return ops
+
+
+def draw_attacks(screen, dg, offset_x, offset_y, cam_pixel_x, cam_pixel_y):
+    """Draw every attack in progress: the outline during its attack delay, a
+    projectile in flight, and swings and outward waves with a fading trail.
+
+    Each attack is drawn on its own surface the size of its on-screen bounding
+    box, so its alpha applies once instead of compounding where shapes overlap.
+    """
+    ts = dg.tile_size
+
+    def to_px(row, col):
+        return (offset_x + col * ts - cam_pixel_x, offset_y + row * ts - cam_pixel_y)
+
+    screen_rect = screen.get_rect()
+    for attack in dg.active_attacks:
+        ops = _attack_draw_ops(dg, attack, to_px)
+        if not ops:
+            continue
+        xs, ys = [], []
+        for op in ops:
+            if op[0] == 'poly':
+                xs.extend(p[0] for p in op[1])
+                ys.extend(p[1] for p in op[1])
+            elif op[0] == 'circle':
+                (x, y), r = op[1], op[2]
+                xs += [x - r, x + r]
+                ys += [y - r, y + r]
+            else:
+                xs += [op[1][0], op[2][0]]
+                ys += [op[1][1], op[2][1]]
+        pad = 4
+        box = pygame.Rect(int(floor(min(xs))) - pad, int(floor(min(ys))) - pad, 0, 0)
+        box.width = int(ceil(max(xs))) + pad - box.x
+        box.height = int(ceil(max(ys))) + pad - box.y
+        box = box.clip(screen_rect)
+        if box.width <= 0 or box.height <= 0:
+            continue
+        surf = pygame.Surface(box.size, pygame.SRCALPHA)
+        bx, by = box.x, box.y
+        for op in ops:
+            kind = op[0]
+            if kind == 'poly':
+                points = [(x - bx, y - by) for x, y in op[1]]
+                pygame.draw.polygon(surf, op[2], points, op[3])
+            elif kind == 'circle':
+                (x, y), r = op[1], op[2]
+                pygame.draw.circle(surf, op[3], (int(round(x - bx)), int(round(y - by))),
+                                   max(1, int(round(r))), op[4])
+            else:
+                pygame.draw.line(surf, op[3], (op[1][0] - bx, op[1][1] - by),
+                                 (op[2][0] - bx, op[2][1] - by), op[4])
+        screen.blit(surf, box.topleft)
+
+
 def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_menu: bool = False, start_level: str | None = None) -> None:
     import os
 
@@ -4153,8 +4699,6 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
         if delta_time > 0.1:
             delta_time = 0.1
 
-        # Update temporary attack effects (visual only)
-        dg._update_attack_effects(current_time)
         # Update damage popups
         dg._update_damage_popups(current_time)
         dg._update_skill_cooldowns(current_time)
@@ -4185,6 +4729,9 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
 
         # Update monsters (aggro & movement)
         dg.update_monsters(delta_time)
+        # Advance attacks in progress (attack delays, swings, projectiles) and
+        # deal their damage, after everyone has moved this frame.
+        dg.update_attacks(delta_time)
 
         # Pips and level snap instantly; only the XP bar fraction animates.
         dg.player_pips_display = dg.player_pips
@@ -4488,34 +5035,9 @@ def render_with_pygame(dg: RLDungeonGenerator, force_gui: bool = False, force_me
                 popup_rect = popup_surf.get_rect(center=(int(popup_px), int(base_py + y_offset)))
                 screen.blit(popup_surf, popup_rect)
 
-        # Draw attack arcs: translucent white sectors at full screen resolution.
-        # Each is drawn on its own bounding-box surface so the alpha applies once
-        # per arc instead of compounding where polygon edges overlap.
-        for effect in dg.attack_effects:
-            arc = effect['arc']
-            r_px = arc['radius'] * dg.tile_size
-            if r_px < 1:
-                continue
-            ax = offset_x + arc['col'] * dg.tile_size - cam_pixel_x
-            ay = offset_y + arc['row'] * dg.tile_size - cam_pixel_y
-            size = int(ceil(r_px)) * 2 + 2
-            arc_surf = pygame.Surface((size, size), pygame.SRCALPHA)
-            mid = size / 2
-            # Player arcs are 50% opaque; monster arcs carry their own, fainter alpha.
-            arc_color = (255, 255, 255, int(effect.get('alpha', 128)))
-            if arc['angle'] >= 360:
-                pygame.draw.circle(arc_surf, arc_color, (int(mid), int(mid)), int(round(r_px)))
-            else:
-                # Screen x is col and screen y is row, matching the arc's direction.
-                aim = atan2(arc['dir_row'], arc['dir_col'])
-                half = radians(arc['angle'] * 0.5)
-                steps = max(8, int(arc['angle'] / 3))
-                points = [(mid, mid)]
-                for i in range(steps + 1):
-                    a = aim - half + 2 * half * i / steps
-                    points.append((mid + cos(a) * r_px, mid + sin(a) * r_px))
-                pygame.draw.polygon(arc_surf, arc_color, points)
-            screen.blit(arc_surf, (int(ax - mid), int(ay - mid)))
+        # Draw attacks in progress: delay outlines, projectiles, and swings and
+        # outward waves with a fading trail.
+        draw_attacks(screen, dg, offset_x, offset_y, cam_pixel_x, cam_pixel_y)
 
         # Draw health and stamina bars
         bar_tile_size = dg.tile_size

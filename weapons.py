@@ -13,6 +13,23 @@
 #   drawn in the crafting menu and the inventory. None means the weapon has no
 #   icon.
 #
+# Timing keys (shared with skills.py and monster attacks.py; see
+# RLDungeonGenerator.update_attacks for the rules):
+# - attack_type: how the attack travels once it goes off. One of
+#   'Melee Swing'  the arc sweeps from one edge to the other,
+#   'Melee AOE'    the arc grows outward from the attack centroid,
+#   'Ranged Arrow' a projectile flies along the aim line until it hits a
+#                  hitbox or wall, or reaches 'range' tiles, then bursts,
+#   'Ranged AOE'   a projectile flies to the aim point (clamped to 'range'),
+#                  bursting early if it hits a hitbox or wall on the way.
+# - attack_delay: seconds between clicking and the attack going off.
+# - swing_speed: degrees per second the arc sweeps (Melee Swing only).
+# - projectile_speed: tiles per second the projectile flies (Ranged types).
+# - effect_speed: tiles per second the arc grows outward (Melee AOE, and the
+#   burst at the end of either Ranged type).
+# A missing or 0 speed makes that stage instant. Damage lands once per target,
+# the moment the moving effect touches its hitbox.
+#
 # Weapons are crafted at the Workbench; see Recipes.py for what each one costs.
 # 'Unarmed' must stay first: RLDungeonGenerator equips WEAPONS[0] on startup.
 
@@ -37,6 +54,9 @@ WEAPONS = [
         'range': 99.5,
         'area': 3.0,
         'angle': 360.0,
+        'attack_type': 'Melee AOE',
+        'attack_delay': 0.1,
+        'effect_speed': 30.0,
         'knockback': 0.0,  # tiles of knockback
         'glyph': None,
     },
@@ -48,6 +68,9 @@ WEAPONS = [
         'range': 0.1,
         'area': 4.0,
         'angle': 10.0,
+        'attack_type': 'Melee AOE',
+        'attack_delay': 0.2,
+        'effect_speed': 20.0,
         'knockback': 0.5,  # tiles of knockback
         'glyph': SPEAR_GLYPH,
     },
@@ -58,6 +81,9 @@ WEAPONS = [
         'range': 0.1,
         'area': 4.0,
         'angle': 10.0,
+        'attack_type': 'Melee AOE',
+        'attack_delay': 0.2,
+        'effect_speed': 20.0,
         'knockback': 0.5,  # tiles of knockback
         'glyph': SPEAR_GLYPH,
     },
@@ -68,6 +94,9 @@ WEAPONS = [
         'range': 0.1,
         'area': 4.0,
         'angle': 10.0,
+        'attack_type': 'Melee AOE',
+        'attack_delay': 0.2,
+        'effect_speed': 20.0,
         'knockback': 0.5,  # tiles of knockback
         'glyph': SPEAR_GLYPH,
     },
@@ -79,6 +108,9 @@ WEAPONS = [
         'range': 0.1,
         'area': 4.0,
         'angle': 60.0,
+        'attack_type': 'Melee Swing',
+        'attack_delay': 0.2,
+        'swing_speed': 480.0,
         'knockback': 0.75,  # tiles of knockback
         'glyph': SWORD_GLYPH,
     },
@@ -89,6 +121,9 @@ WEAPONS = [
         'range': 0.1,
         'area': 4.0,
         'angle': 60.0,
+        'attack_type': 'Melee Swing',
+        'attack_delay': 0.2,
+        'swing_speed': 480.0,
         'knockback': 0.75,  # tiles of knockback
         'glyph': SWORD_GLYPH,
     },
@@ -100,6 +135,9 @@ WEAPONS = [
         'range': 0.1,
         'area': 4.0,
         'angle': 90.0,
+        'attack_type': 'Melee Swing',
+        'attack_delay': 0.3,
+        'swing_speed': 360.0,
         'knockback': 1.0,  # tiles of knockback
         'glyph': AXE_GLYPH,
     },
@@ -110,6 +148,9 @@ WEAPONS = [
         'range': 0.1,
         'area': 4.0,
         'angle': 90.0,
+        'attack_type': 'Melee Swing',
+        'attack_delay': 0.3,
+        'swing_speed': 360.0,
         'knockback': 1.0,  # tiles of knockback
         'glyph': AXE_GLYPH,
     },
@@ -120,6 +161,10 @@ WEAPONS = [
         'range': 80.0,
         'area': 0.5,
         'angle': 2.0,
+        'attack_type': 'Ranged Arrow',
+        'attack_delay': 0.3,
+        'projectile_speed': 25.0,
+        'effect_speed': 10.0,
         'knockback': 0.3,  # tiles of knockback
         'glyph': BOW_GLYPH,
     },
@@ -130,6 +175,10 @@ WEAPONS = [
         'range': 80.0,
         'area': 0.5,
         'angle': 2.0,
+        'attack_type': 'Ranged Arrow',
+        'attack_delay': 0.3,
+        'projectile_speed': 25.0,
+        'effect_speed': 10.0,
         'knockback': 0.3,  # tiles of knockback
         'glyph': BOW_GLYPH,
     }
