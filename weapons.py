@@ -181,5 +181,71 @@ WEAPONS = [
         'effect_speed': 10.0,
         'knockback': 0.3,  # tiles of knockback
         'glyph': BOW_GLYPH,
+    },
+    {
+        'name': 'Skull Splittur',
+        'damage': 130.0,
+        'stamina_cost': 24,
+        'range': 0.1,
+        'area': 4.0,
+        'angle': 200.0,
+        'attack_type': 'Melee Swing',
+        'attack_delay': 1.3,
+        'swing_speed': 360.0,
+        'knockback': 4.0,  # tiles of knockback
+        'glyph': AXE_GLYPH,
+    },
+    {
+        'name': 'Krom',
+        'damage': 150.0,
+        'stamina_cost': 20,
+        'range': 0.1,
+        'area': 4.0,
+        'angle': 120.0,
+        'attack_type': 'Melee Swing',
+        'attack_delay': 0.4,
+        'swing_speed': 360.0,
+        'knockback': 0.8,  # tiles of knockback
+        'glyph': SWORD_GLYPH,
+    },
+    {
+        'name': 'Slayer',
+        'damage': 170.0,
+        'stamina_cost': 20,
+        'range': 0.1,
+        'area': 4.0,
+        'angle': 120.0,
+        'attack_type': 'Melee Swing',
+        'attack_delay': 0.4,
+        'swing_speed': 360.0,
+        'knockback': 0.8,  # tiles of knockback
+        'glyph': SWORD_GLYPH,
+    },
+    {
+        'name': 'Arbalest',
+        'damage': 200.0,
+        'stamina_cost': 12,
+        'range': 500.0,
+        'area': 0.5,
+        'angle': 2.0,
+        'attack_type': 'Ranged Arrow',
+        'attack_delay': 3.5,
+        'projectile_speed': 200.0,
+        'effect_speed': 10.0,
+        'knockback': 5.0,  # tiles of knockback
+        'glyph': BOW_GLYPH,
+    },
+    {
+        'name': 'Nord Sledge',
+        'damage': 215.0,
+        'stamina_cost': 30,
+        'range': 1.1,
+        'area': 6.0,
+        'angle': 360.0,
+        'attack_type': 'Melee AOE',
+        'attack_delay': 1.5,
+        'effect_speed': 12.0,
+        'knockback': 4.0,  # tiles of knockback
+        'glyph': AXE_GLYPH,
     }
 ]

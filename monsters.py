@@ -229,5 +229,107 @@ MONSTER_TYPES = [
         ],
         'drops': [
         ],
+    },
+    {
+        'name': 'Seeker',
+        'glyph_index': MONSTER_EIKTHYR,
+        'health': 200,
+        'size': 2,  # occupies a 2x2 block of tiles
+        'xp_value': 1200,
+        'levels': [
+            {'name': 'Mistlands', 'max_count': 20, 'spawn_interval': 4.0, 'spawn_chance': 0.8},
+        ],
+        'aggro_distance': 50.0,  # tiles
+        'aggro_time': 4.0,  # seconds monster stays aggroed after losing sight of player
+        'damage_aggro_time': 10.0,  # seconds monster stays aggroed after taking damage
+        'movement_speed': 6.0,
+        'knockback_resistance': 0.5,  # 0-1; higher = less knockback
+        'attack_rate': 0.5,  # seconds between attack checks
+        'attacks': [
+            {'name': 'Slash', 'damage': 90, 'cooldown': 2.0},
+        ],
+        'drops': [
+            {'name': 'Refined Eitr', 'drop_chance': 3.8},
+        ],
+    },
+    {
+        'name': 'Charred Warrior',
+        'glyph_index': MONSTER_EIKTHYR,
+        'health': 300,
+        'size': 2,  # occupies a 2x2 block of tiles
+        'xp_value': 1800,
+        'levels': [
+            {'name': 'Ashlands', 'max_count': 20, 'spawn_interval': 4.0, 'spawn_chance': 0.8},
+        ],
+        'aggro_distance': 50.0,  # tiles
+        'aggro_time': 4.0,  # seconds monster stays aggroed after losing sight of player
+        'damage_aggro_time': 10.0,  # seconds monster stays aggroed after taking damage
+        'movement_speed': 5.0,
+        'knockback_resistance': 0.7,  # 0-1; higher = less knockback
+        'attack_rate': 0.5,  # seconds between attack checks
+        'attacks': [
+            {'name': 'Slash', 'damage': 120, 'cooldown': 2.0},
+        ],
+        'drops': [
+            {'name': 'Flametal', 'drop_chance': 2.5},
+        ],
+    },
+    {
+        'name': 'Barka',
+        'glyph_index': MONSTER_EIKTHYR,
+        'health': 1800,
+        'size': 5,  # occupies a 5x5 block of tiles
+        'xp_value': 12000,
+        'levels': [
+            {'name': 'Mistlands', 'max_count': 1, 'spawn_interval': 4.0, 'spawn_chance': 0.05},
+        ],
+        'aggro_distance': 50.0,  # tiles
+        'aggro_time': 4.0,  # seconds monster stays aggroed after losing sight of player
+        'damage_aggro_time': 10.0,  # seconds monster stays aggroed after taking damage
+        'movement_speed': 4.5,
+        'knockback_resistance': 0.8,  # 0-1; higher = less knockback
+        'attack_rate': 0.5,  # seconds between attack checks
+        'attacks': [
+            {'name': 'Antler Sweep', 'damage': 210, 'cooldown': 2.0},
+        ],
+        'drops': [
+            {'name': 'Timberwood', 'drop_chance': 5.5},
+            {'name': 'Timberwood', 'drop_chance': 5.5},
+            {'name': 'Timberwood', 'drop_chance': 5.5},
+            {'name': 'Timberwood', 'drop_chance': 5.5},
+            {'name': 'Timberwood', 'drop_chance': 5.5},
+            {'name': 'Timberwood', 'drop_chance': 5.5},
+            {'name': 'Timberwood', 'drop_chance': 5.5},
+            {'name': 'Timberwood', 'drop_chance': 5.5},
+        ],
+    },
+    {
+        'name': 'Gammeltroll',
+        'glyph_index': MONSTER_EIKTHYR,
+        'health': 3000,
+        'size': 7,  # occupies a 7x7 block of tiles
+        'xp_value': 20000,
+        'levels': [
+            {'name': 'Ashlands', 'max_count': 1, 'spawn_interval': 4.0, 'spawn_chance': 0.05},
+        ],
+        'aggro_distance': 50.0,  # tiles
+        'aggro_time': 4.0,  # seconds monster stays aggroed after losing sight of player
+        'damage_aggro_time': 10.0,  # seconds monster stays aggroed after taking damage
+        'movement_speed': 4.0,
+        'knockback_resistance': 0.9,  # 0-1; higher = less knockback
+        'attack_rate': 0.5,  # seconds between attack checks
+        'attacks': [
+            {'name': 'Antler Sweep', 'damage': 300, 'cooldown': 2.0},
+        ],
+        'drops': [
+            {'name': 'Bloodgold', 'drop_chance': 4.5},
+            {'name': 'Bloodgold', 'drop_chance': 4.5},
+            {'name': 'Bloodgold', 'drop_chance': 4.5},
+            {'name': 'Bloodgold', 'drop_chance': 4.5},
+            {'name': 'Bloodgold', 'drop_chance': 4.5},
+            {'name': 'Bloodgold', 'drop_chance': 4.5},
+            {'name': 'Bloodgold', 'drop_chance': 4.5},
+            {'name': 'Bloodgold', 'drop_chance': 4.5},
+        ],
     }
 ]

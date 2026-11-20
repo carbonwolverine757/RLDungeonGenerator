@@ -44,4 +44,8 @@ DROPS = [
     {'name': 'Flint', 'glyph': ITEM_FLINT},
     {'name': 'Bronze', 'glyph': ITEM_BRONZE},
     {'name': 'Iron', 'glyph': ITEM_IRON},
+    {'name': 'Refined Eitr', 'glyph': ITEM_IRON},  # placeholder glyph until we add a new one
+    {'name': 'Flametal', 'glyph': ITEM_IRON},  # placeholder glyph until we add a new one
+    {'name': 'Timberwood', 'glyph': ITEM_WOOD},  # placeholder glyph until we add a new one
+    {'name': 'Bloodgold', 'glyph': ITEM_IRON},  # placeholder glyph until we add a new one
 ]

@@ -113,5 +113,59 @@ RECIPES = [
         'Crafted Item': [
             {'Name': 'Finewood Bow', 'Count': 1},
         ],
+    },
+    {
+        'Name': 'Skull Splittur',
+        'Crafting Cost': [
+            {'Name': 'Wood', 'Count': 20},
+            {'Name': 'Iron', 'Count': 30},
+            {'Name': 'Refined Eitr', 'Count': 10},
+        ],
+        'Crafted Item': [
+            {'Name': 'Skull Splittur', 'Count': 1},
+        ],
+    },
+    {
+        'Name': 'Krom',
+        'Crafting Cost': [
+            {'Name': 'Bronze', 'Count': 20},
+            {'Name': 'Iron', 'Count': 30},
+            {'Name': 'Refined Eitr', 'Count': 10},
+        ],
+        'Crafted Item': [
+            {'Name': 'Krom', 'Count': 1},
+        ],
+    },
+    {
+        'Name': 'Slayer',
+        'Crafting Cost': [
+            {'Name': 'Iron', 'Count': 20},
+            {'Name': 'Flametal', 'Count': 30},
+            {'Name': 'Refined Eitr', 'Count': 50},
+        ],
+        'Crafted Item': [
+            {'Name': 'Slayer', 'Count': 1},
+        ],
+    },
+    {
+        'Name': 'Arbalest',
+        'Crafting Cost': [
+            {'Name': 'Wood', 'Count': 40},
+            {'Name': 'Iron', 'Count': 20},
+            {'Name': 'Refined Eitr', 'Count': 8},
+        ],
+        'Crafted Item': [
+            {'Name': 'Arbalest', 'Count': 1},
+        ],
+    },
+    {
+        'Name': 'Nord Sledge',
+        'Crafting Cost': [
+            {'Name': 'Timberwood', 'Count': 10},
+            {'Name': 'Bloodgold', 'Count': 20},
+        ],
+        'Crafted Item': [
+            {'Name': 'Nord Sledge', 'Count': 1},
+        ],
     }
 ]
