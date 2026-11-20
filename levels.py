@@ -332,7 +332,8 @@ LEVELS = [
     },
     {
         'name': 'Mistlands',
-        'floor_glyph': TERRAIN_STONE,
+        'openspace': True,
+        'floor_glyph': TERRAIN_BLACK_MARBLE,
         'wall_glyph': TERRAIN_STONE,
         'fog_glyph': ' ',
         'floor_bg': (130, 90, 150),
@@ -429,6 +430,7 @@ LEVELS = [
     },
     {
         'name': 'Ashlands',
+        'openspace': True,
         'floor_glyph': TERRAIN_DIRT,
         'wall_glyph': TERRAIN_STONE,
         'fog_glyph': ' ',
