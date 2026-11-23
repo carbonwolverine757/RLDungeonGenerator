@@ -281,7 +281,7 @@ MONSTER_TYPES = [
         'size': 5,  # occupies a 5x5 block of tiles
         'xp_value': 12000,
         'levels': [
-            {'name': 'Mistlands', 'max_count': 1, 'spawn_interval': 4.0, 'spawn_chance': 0.05},
+            {'name': 'Mistlands', 'max_count': 1, 'spawn_interval': 4.0, 'spawn_chance': 0.1},
         ],
         'aggro_distance': 50.0,  # tiles
         'aggro_time': 4.0,  # seconds monster stays aggroed after losing sight of player
@@ -310,7 +310,7 @@ MONSTER_TYPES = [
         'size': 7,  # occupies a 7x7 block of tiles
         'xp_value': 20000,
         'levels': [
-            {'name': 'Ashlands', 'max_count': 1, 'spawn_interval': 4.0, 'spawn_chance': 0.05},
+            {'name': 'Ashlands', 'max_count': 1, 'spawn_interval': 4.0, 'spawn_chance': 0.1},
         ],
         'aggro_distance': 50.0,  # tiles
         'aggro_time': 4.0,  # seconds monster stays aggroed after losing sight of player
